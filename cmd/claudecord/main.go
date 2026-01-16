@@ -111,8 +111,7 @@ func run() error {
 	// load allowed users config
 	allowedUsers, err := config.LoadAllowedUsers()
 	if err != nil {
-		slog.Error("loading allowed users config", "error", err)
-		os.Exit(1)
+		return errors.Wrap(err, "loading allowed users config")
 	}
 
 	// now create handler with botID and allowed users
