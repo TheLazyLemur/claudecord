@@ -12,24 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockReadWriteCloser simulates CLI stdin/stdout for testing
-type MockReadWriteCloser struct {
-	reader *io.PipeReader
-	writer *io.PipeWriter
-}
-
-func NewMockReadWriteCloser() (*MockReadWriteCloser, *io.PipeWriter, *io.PipeReader) {
-	// stdin: test writes -> process reads
-	stdinReader, stdinWriter := io.Pipe()
-	// stdout: process writes -> test reads
-	stdoutReader, stdoutWriter := io.Pipe()
-
-	return &MockReadWriteCloser{
-		reader: stdinReader,
-		writer: stdoutWriter,
-	}, stdinWriter, stdoutReader
-}
-
 func TestProcess_SendWritesToStdin(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
@@ -47,9 +29,9 @@ func TestProcess_SendWritesToStdin(t *testing.T) {
 
 	// when
 	msg := []byte(`{"type":"user","message":{"role":"user","content":"hello"}}`)
+	sendErr := make(chan error, 1)
 	go func() {
-		err := proc.Send(msg)
-		r.NoError(err)
+		sendErr <- proc.Send(msg)
 	}()
 
 	// then
@@ -57,6 +39,7 @@ func TestProcess_SendWritesToStdin(t *testing.T) {
 	line, err := reader.ReadString('\n')
 	r.NoError(err)
 	a.Equal(string(msg)+"\n", line)
+	r.NoError(<-sendErr)
 
 	stdoutWriter.Close()
 	stdinReader.Close()
@@ -198,24 +181,6 @@ func TestBuildInitializeRequest(t *testing.T) {
 	a.Equal("initialize", req["subtype"])
 }
 
-func TestBuildUserMessage(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// when
-	msg := buildUserMessage("hello world", "sess-456")
-
-	// then
-	var parsed map[string]any
-	err := json.Unmarshal(msg, &parsed)
-	r.NoError(err)
-	a.Equal("user", parsed["type"])
-	a.Equal("sess-456", parsed["session_id"])
-
-	message := parsed["message"].(map[string]any)
-	a.Equal("user", message["role"])
-	a.Equal("hello world", message["content"])
-}
 
 // ProcessSpawner interface for testing
 type MockProcessSpawner struct {

@@ -165,9 +165,7 @@ func (p *Process) initialize(timeout time.Duration) error {
 			p.sessionID = sessionID
 			// Replace stdout with a new reader that includes remaining buffered data
 			p.stdout = &prefixReader{
-				remaining: nil,
-				reader:    p.stdout,
-				scanner:   scanner,
+				scanner: scanner,
 			}
 			return nil
 		}
@@ -179,11 +177,17 @@ func (p *Process) initialize(timeout time.Duration) error {
 // prefixReader allows continuing to read from scanner's buffer then underlying reader
 type prefixReader struct {
 	remaining []byte
-	reader    io.Reader
 	scanner   *bufio.Scanner
 }
 
 func (r *prefixReader) Read(p []byte) (int, error) {
+	// Drain remaining from previous partial read first
+	if len(r.remaining) > 0 {
+		n := copy(p, r.remaining)
+		r.remaining = r.remaining[n:]
+		return n, nil
+	}
+
 	// The scanner may have buffered data, continue using it
 	if r.scanner.Scan() {
 		line := append(r.scanner.Bytes(), '\n')
@@ -304,15 +308,3 @@ func buildInitializeRequest(requestID string) []byte {
 	return data
 }
 
-func buildUserMessage(content, sessionID string) []byte {
-	msg := map[string]any{
-		"type":       "user",
-		"session_id": sessionID,
-		"message": map[string]any{
-			"role":    "user",
-			"content": content,
-		},
-	}
-	data, _ := json.Marshal(msg)
-	return data
-}
