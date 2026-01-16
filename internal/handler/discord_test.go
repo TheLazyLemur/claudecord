@@ -296,7 +296,7 @@ func TestHandler_isUserAllowed_EmptyAllowList(t *testing.T) {
 	result := h.isUserAllowed("user-123")
 
 	// then
-	a.True(result)
+	a.False(result) // empty list denies all
 }
 
 func TestHandler_isUserAllowed_NilAllowList(t *testing.T) {
@@ -310,7 +310,7 @@ func TestHandler_isUserAllowed_NilAllowList(t *testing.T) {
 	result := h.isUserAllowed("user-123")
 
 	// then
-	a.True(result)
+	a.False(result) // nil list denies all
 }
 
 // --- Tests: Handler event handling ---
@@ -321,7 +321,7 @@ func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
 
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{"user-1"})
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -345,7 +345,7 @@ func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
 func TestHandler_OnMessageCreate_IgnoresBotMessages(t *testing.T) {
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{"any-user"})
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -367,7 +367,7 @@ func TestHandler_OnMessageCreate_IgnoresBotMessages(t *testing.T) {
 func TestHandler_OnMessageCreate_IgnoresNoMention(t *testing.T) {
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{"user-1"})
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -436,10 +436,7 @@ func TestHandler_OnMessageCreate_DisallowedUser_Ignored(t *testing.T) {
 	assert.Len(t, bot.handledMessages, 0)
 }
 
-func TestHandler_OnMessageCreate_EmptyAllowList_AllowsAll(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
+func TestHandler_OnMessageCreate_EmptyAllowList_DeniesAll(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	h := NewHandler(bot, "bot-123", []string{})
@@ -458,9 +455,7 @@ func TestHandler_OnMessageCreate_EmptyAllowList_AllowsAll(t *testing.T) {
 	h.OnMessageCreate(nil, msg)
 
 	// then
-	r.Len(bot.handledMessages, 1)
-	a.Equal("chan-1", bot.handledMessages[0].channelID)
-	a.Equal("do something", bot.handledMessages[0].message)
+	assert.Len(t, bot.handledMessages, 0) // empty list denies all
 }
 
 func TestHandler_OnMessageCreate_AllowedUserButNotMentioned_Ignored(t *testing.T) {
@@ -524,7 +519,7 @@ func TestHandler_OnNewSession_CallsBot(t *testing.T) {
 	// given
 	session := &mockSession{}
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{"user-123"})
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -607,7 +602,7 @@ func TestHandler_OnInteractionCreate_NewSession_DisallowedUser(t *testing.T) {
 	a.Equal("You are not authorized to use this command.", session.interactionResponses[0].Data.Content)
 }
 
-func TestHandler_OnInteractionCreate_NewSession_EmptyAllowList_AllowsAll(t *testing.T) {
+func TestHandler_OnInteractionCreate_NewSession_EmptyAllowList_DeniesAll(t *testing.T) {
 	a := assert.New(t)
 
 	// given
@@ -631,9 +626,9 @@ func TestHandler_OnInteractionCreate_NewSession_EmptyAllowList_AllowsAll(t *test
 	h.OnInteractionCreate(session, interaction)
 
 	// then
-	a.Equal(1, bot.newSessionCalls)
+	a.Equal(0, bot.newSessionCalls) // empty list denies all
 	a.Len(session.interactionResponses, 1)
-	a.Equal("Starting new session...", session.interactionResponses[0].Data.Content)
+	a.Equal("You are not authorized to use this command.", session.interactionResponses[0].Data.Content)
 }
 
 func TestHandler_OnInteractionCreate_NewSession_DM_AllowedUser(t *testing.T) {

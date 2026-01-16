@@ -96,12 +96,7 @@ func NewHandler(bot BotInterface, botID string, allowedUsers []string) *Handler 
 }
 
 // isUserAllowed checks if a user is in the allowed users list
-// If allowedUsers is empty or nil, all users are allowed (backward compatibility)
 func (h *Handler) isUserAllowed(userID string) bool {
-	if len(h.allowedUsers) == 0 {
-		return true
-	}
-
 	for _, allowedID := range h.allowedUsers {
 		if allowedID == userID {
 			return true
