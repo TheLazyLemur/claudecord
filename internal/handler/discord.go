@@ -146,6 +146,7 @@ func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.Interaction
 
 	switch data.Name {
 	case "ping":
+		// Unrestricted: ping is a health check that doesn't perform any actions
 		if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{

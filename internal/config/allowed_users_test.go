@@ -42,7 +42,7 @@ func TestLoadAllowedUsers(t *testing.T) {
 				os.Remove("allowed_users.json")
 			},
 			expectError:   true,
-			errorContains: "no such file or directory",
+			errorContains: "config file not found",
 		},
 		{
 			name: "invalid JSON",
@@ -52,7 +52,17 @@ func TestLoadAllowedUsers(t *testing.T) {
 				require.NoError(t, err)
 			},
 			expectError:   true,
-			errorContains: "invalid character",
+			errorContains: "parsing config file",
+		},
+		{
+			name: "non-numeric user ID",
+			setup: func() {
+				data := `["123", "abc"]`
+				err := os.WriteFile("allowed_users.json", []byte(data), 0644)
+				require.NoError(t, err)
+			},
+			expectError:   true,
+			errorContains: "invalid user ID",
 		},
 	}
 
@@ -83,12 +93,12 @@ func TestLoadAllowedUsers(t *testing.T) {
 
 func TestLoadAllowedUsers_CurrentDir(t *testing.T) {
 	// Test that it loads from current working directory
-	data := `["testuser123"]`
+	data := `["123456789"]`
 	err := os.WriteFile("allowed_users.json", []byte(data), 0644)
 	require.NoError(t, err)
 	defer os.Remove("allowed_users.json")
 
 	users, err := LoadAllowedUsers()
 	require.NoError(t, err)
-	require.Equal(t, []string{"testuser123"}, users)
+	require.Equal(t, []string{"123456789"}, users)
 }
