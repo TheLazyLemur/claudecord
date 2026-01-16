@@ -167,9 +167,20 @@ func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.Interaction
 		if i.Interaction.Member != nil {
 			userID = i.Interaction.Member.User.ID
 			username = i.Interaction.Member.User.Username
-		} else {
+		} else if i.Interaction.User != nil {
 			userID = i.Interaction.User.ID
 			username = i.Interaction.User.Username
+		} else {
+			slog.Error("interaction has no member or user", "type", i.Type)
+			if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Error: Unable to identify user.",
+				},
+			}); err != nil {
+				slog.Error("responding to interaction", "error", err)
+			}
+			return
 		}
 
 		if !h.isUserAllowed(userID) {
