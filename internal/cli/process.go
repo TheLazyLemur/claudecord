@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"sync"
 	"time"
@@ -77,8 +78,8 @@ type Process struct {
 	sessionID   string
 	done        chan struct{}
 	closeOnce   sync.Once
-	receiving   bool
-	mu          sync.Mutex
+	recvChan chan []byte // persistent receive channel
+	mu       sync.Mutex
 }
 
 // NewProcess spawns the claude CLI and performs the initialize handshake.
@@ -137,16 +138,21 @@ func newProcessWithSpawnerAndArgs(spawner interface {
 }
 
 func (p *Process) initialize(timeout time.Duration) error {
+	slog.Info("CLI initialize: sending init request")
 	// Send initialize request
 	reqID := fmt.Sprintf("init-%d", time.Now().UnixNano())
 	initMsg := buildInitializeRequest(reqID)
 	if _, err := p.stdin.Write(append(initMsg, '\n')); err != nil {
 		return errors.Wrap(err, "sending initialize request")
 	}
+	slog.Info("CLI initialize: sent, waiting for control_response")
 
-	// Read responses until we get system.init with session_id
+	// Read until we get control_response AND system.init with session_id
 	scanner := bufio.NewScanner(p.stdout)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB buffer for large responses
 	deadline := time.Now().Add(timeout)
+
+	gotControlResponse := false
 
 	for time.Now().Before(deadline) {
 		if !scanner.Scan() {
@@ -157,18 +163,47 @@ func (p *Process) initialize(timeout time.Duration) error {
 		}
 
 		line := scanner.Bytes()
-		sessionID, err := extractSessionID(line)
-		if err != nil {
-			return errors.Wrap(err, "parsing message")
+		slog.Info("CLI initialize: got line", "len", len(line))
+
+		// Check if it's control_response (init ack) or system.init
+		var msg map[string]any
+		if err := json.Unmarshal(line, &msg); err != nil {
+			continue
 		}
-		if sessionID != "" {
-			p.sessionID = sessionID
-			// Replace stdout with a new reader that includes remaining buffered data
-			p.stdout = &prefixReader{
-				scanner: scanner,
+
+		msgType, _ := msg["type"].(string)
+
+		// If we get control_response for our init, mark it
+		if msgType == "control_response" {
+			slog.Info("CLI initialize: got control_response")
+			gotControlResponse = true
+		}
+
+		// Also check for system.init which has session_id
+		if msgType == "system" {
+			if subtype, _ := msg["subtype"].(string); subtype == "init" {
+				if sid, _ := msg["session_id"].(string); sid != "" {
+					slog.Info("CLI initialize: got session", "sessionID", sid)
+					p.sessionID = sid
+					p.stdout = &prefixReader{scanner: scanner}
+					return nil
+				}
 			}
-			return nil
 		}
+
+		// If we got control_response but no session_id yet, keep reading
+		// But if we've only got control_response and no system.init coming, we're done
+		if gotControlResponse && p.sessionID == "" {
+			// Continue reading for system.init
+			continue
+		}
+	}
+
+	// If we got control_response but no session_id, that's still valid (new session)
+	if gotControlResponse {
+		slog.Info("CLI initialize: got control_response, ready (no session_id)")
+		p.stdout = &prefixReader{scanner: scanner}
+		return nil
 	}
 
 	return errors.New("timeout waiting for session initialization")
@@ -218,14 +253,13 @@ func (p *Process) Receive() (<-chan []byte, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.receiving {
+	if p.recvChan != nil {
 		return nil, errors.New("already receiving")
 	}
-	p.receiving = true
 
-	ch := make(chan []byte)
-	go p.readLoop(ch)
-	return ch, nil
+	p.recvChan = make(chan []byte, 100) // buffered to avoid blocking
+	go p.readLoop(p.recvChan)
+	return p.recvChan, nil
 }
 
 func (p *Process) readLoop(ch chan<- []byte) {
