@@ -151,15 +151,16 @@ func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any) error {
 
 	allow, reason := b.perms.Check(toolName, input)
 
-	return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason)
+	return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)
 }
 
-func (b *Bot) sendPermissionResponse(proc CLIProcess, requestID, toolUseID string, allow bool, reason string) error {
+func (b *Bot) sendPermissionResponse(proc CLIProcess, requestID, toolUseID string, allow bool, reason string, input map[string]any) error {
 	var innerResp map[string]any
 	if allow {
 		innerResp = map[string]any{
-			"behavior":  "allow",
-			"toolUseID": toolUseID,
+			"behavior":     "allow",
+			"toolUseID":    toolUseID,
+			"updatedInput": input,
 		}
 	} else {
 		innerResp = map[string]any{

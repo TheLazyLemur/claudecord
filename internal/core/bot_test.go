@@ -263,6 +263,9 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Allow(t *testing.T) {
 	inner := response["response"].(map[string]any)
 	a.Equal("allow", inner["behavior"])
 	a.Equal("toolu_123", inner["toolUseID"])
+	// updatedInput is required per protocol spec
+	updatedInput := inner["updatedInput"].(map[string]any)
+	a.Equal("/tmp/test.txt", updatedInput["file_path"])
 }
 
 func TestBot_HandleMessage_HandlesPermissionRequest_Deny(t *testing.T) {
