@@ -1,3 +1,4 @@
 .env
 /claudecord
 CLAUDE.local.md
+allowed_users.json

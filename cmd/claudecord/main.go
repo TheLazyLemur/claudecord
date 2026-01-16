@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/cli"
+	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/bwmarrin/discordgo"
@@ -107,8 +108,15 @@ func run() error {
 
 	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
 
-	// now create handler with botID
-	h := handler.NewHandler(bot, dg.State.User.ID)
+	// load allowed users config
+	allowedUsers, err := config.LoadAllowedUsers()
+	if err != nil {
+		slog.Error("loading allowed users config", "error", err)
+		os.Exit(1)
+	}
+
+	// now create handler with botID and allowed users
+	h := handler.NewHandler(bot, dg.State.User.ID, allowedUsers)
 	dg.AddHandler(h.OnMessageCreate)
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		h.OnInteractionCreate(s, i)

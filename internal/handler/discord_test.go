@@ -253,6 +253,66 @@ func TestExtractClaudeMention_ValidMention(t *testing.T) {
 	}
 }
 
+// --- Tests: Handler authorization ---
+
+func TestHandler_isUserAllowed_AllowedUser(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123", "user-456"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	// when
+	result := h.isUserAllowed("user-123")
+
+	// then
+	a.True(result)
+}
+
+func TestHandler_isUserAllowed_DisallowedUser(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123", "user-456"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	// when
+	result := h.isUserAllowed("user-789")
+
+	// then
+	a.False(result)
+}
+
+func TestHandler_isUserAllowed_EmptyAllowList(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	h := NewHandler(bot, "bot-123", []string{})
+
+	// when
+	result := h.isUserAllowed("user-123")
+
+	// then
+	a.True(result)
+}
+
+func TestHandler_isUserAllowed_NilAllowList(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	h := NewHandler(bot, "bot-123", nil)
+
+	// when
+	result := h.isUserAllowed("user-123")
+
+	// then
+	a.True(result)
+}
+
 // --- Tests: Handler event handling ---
 
 func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
@@ -261,7 +321,7 @@ func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
 
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123")
+	h := NewHandler(bot, "bot-123", []string{})
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -285,7 +345,7 @@ func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
 func TestHandler_OnMessageCreate_IgnoresBotMessages(t *testing.T) {
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123")
+	h := NewHandler(bot, "bot-123", []string{})
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -307,7 +367,7 @@ func TestHandler_OnMessageCreate_IgnoresBotMessages(t *testing.T) {
 func TestHandler_OnMessageCreate_IgnoresNoMention(t *testing.T) {
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123")
+	h := NewHandler(bot, "bot-123", []string{})
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -325,19 +385,155 @@ func TestHandler_OnMessageCreate_IgnoresNoMention(t *testing.T) {
 	assert.Len(t, bot.handledMessages, 0)
 }
 
+func TestHandler_OnMessageCreate_AllowedUser_Processes(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123", "user-456"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "<@bot-123> do something",
+			Author:    &discordgo.User{ID: "user-123", Username: "allowed_user"},
+			Mentions:  []*discordgo.User{{ID: "bot-123"}},
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then
+	r.Len(bot.handledMessages, 1)
+	a.Equal("chan-1", bot.handledMessages[0].channelID)
+	a.Equal("do something", bot.handledMessages[0].message)
+}
+
+func TestHandler_OnMessageCreate_DisallowedUser_Ignored(t *testing.T) {
+	// given
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123", "user-456"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "<@bot-123> do something",
+			Author:    &discordgo.User{ID: "user-789", Username: "disallowed_user"},
+			Mentions:  []*discordgo.User{{ID: "bot-123"}},
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then
+	assert.Len(t, bot.handledMessages, 0)
+}
+
+func TestHandler_OnMessageCreate_EmptyAllowList_AllowsAll(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	bot := &mockBot{}
+	h := NewHandler(bot, "bot-123", []string{})
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "<@bot-123> do something",
+			Author:    &discordgo.User{ID: "user-999", Username: "any_user"},
+			Mentions:  []*discordgo.User{{ID: "bot-123"}},
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then
+	r.Len(bot.handledMessages, 1)
+	a.Equal("chan-1", bot.handledMessages[0].channelID)
+	a.Equal("do something", bot.handledMessages[0].message)
+}
+
+func TestHandler_OnMessageCreate_AllowedUserButNotMentioned_Ignored(t *testing.T) {
+	r := require.New(t)
+
+	// given
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123", "user-456"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "do something",
+			Author:    &discordgo.User{ID: "user-123", Username: "allowed_user"},
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then
+	r.Len(bot.handledMessages, 0)
+}
+
+func TestHandler_NewHandler_WithAllowedUsers(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123", "user-456"}
+
+	// when
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	// then
+	a.Equal(bot, h.bot)
+	a.Equal("bot-123", h.botID)
+	a.Equal(allowedUsers, h.allowedUsers)
+}
+
+func TestHandler_NewHandler_WithoutAllowedUsers(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+
+	// when
+	h := NewHandler(bot, "bot-123", []string{})
+
+	// then
+	a.Equal(bot, h.bot)
+	a.Equal("bot-123", h.botID)
+	a.Empty(h.allowedUsers)
+}
+
 func TestHandler_OnNewSession_CallsBot(t *testing.T) {
 	a := assert.New(t)
 
 	// given
 	session := &mockSession{}
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123")
+	h := NewHandler(bot, "bot-123", []string{})
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
 			Type: discordgo.InteractionApplicationCommand,
 			Data: discordgo.ApplicationCommandInteractionData{
 				Name: "new-session",
+			},
+			Member: &discordgo.Member{
+				User: &discordgo.User{ID: "user-123", Username: "test_user"},
 			},
 		},
 	}
@@ -348,4 +544,219 @@ func TestHandler_OnNewSession_CallsBot(t *testing.T) {
 	// then
 	a.Equal(1, bot.newSessionCalls)
 	a.Len(session.interactionResponses, 1)
+}
+
+func TestHandler_OnInteractionCreate_NewSession_AllowedUser(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "new-session",
+			},
+			Member: &discordgo.Member{
+				User: &discordgo.User{ID: "user-123", Username: "allowed_user"},
+			},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(1, bot.newSessionCalls)
+	a.Equal("", bot.lastNewSessionDir)
+	a.Len(session.interactionResponses, 1)
+	a.Equal("Starting new session...", session.interactionResponses[0].Data.Content)
+}
+
+func TestHandler_OnInteractionCreate_NewSession_DisallowedUser(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	allowedUsers := []string{"user-456"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "new-session",
+			},
+			Member: &discordgo.Member{
+				User: &discordgo.User{ID: "user-123", Username: "disallowed_user"},
+			},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(0, bot.newSessionCalls)
+	a.Len(session.interactionResponses, 1)
+	a.Equal("You are not authorized to use this command.", session.interactionResponses[0].Data.Content)
+}
+
+func TestHandler_OnInteractionCreate_NewSession_EmptyAllowList_AllowsAll(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	h := NewHandler(bot, "bot-123", []string{})
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "new-session",
+			},
+			Member: &discordgo.Member{
+				User: &discordgo.User{ID: "user-999", Username: "any_user"},
+			},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(1, bot.newSessionCalls)
+	a.Len(session.interactionResponses, 1)
+	a.Equal("Starting new session...", session.interactionResponses[0].Data.Content)
+}
+
+func TestHandler_OnInteractionCreate_NewSession_DM_AllowedUser(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "new-session",
+			},
+			User: &discordgo.User{ID: "user-123", Username: "allowed_user_dm"},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(1, bot.newSessionCalls)
+	a.Equal("", bot.lastNewSessionDir)
+	a.Len(session.interactionResponses, 1)
+	a.Equal("Starting new session...", session.interactionResponses[0].Data.Content)
+}
+
+func TestHandler_OnInteractionCreate_NewSession_DM_DisallowedUser(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	allowedUsers := []string{"user-456"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "new-session",
+			},
+			User: &discordgo.User{ID: "user-123", Username: "disallowed_user_dm"},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(0, bot.newSessionCalls)
+	a.Len(session.interactionResponses, 1)
+	a.Equal("You are not authorized to use this command.", session.interactionResponses[0].Data.Content)
+}
+
+func TestHandler_OnInteractionCreate_NewSession_WithDirectory_AllowedUser(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "new-session",
+				Options: []*discordgo.ApplicationCommandInteractionDataOption{
+					{
+						Name:  "directory",
+						Type:  discordgo.ApplicationCommandOptionString,
+						Value: "/some/directory",
+					},
+				},
+			},
+			Member: &discordgo.Member{
+				User: &discordgo.User{ID: "user-123", Username: "allowed_user"},
+			},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(1, bot.newSessionCalls)
+	a.Equal("/some/directory", bot.lastNewSessionDir)
+	a.Len(session.interactionResponses, 1)
+	a.Equal("Starting new session in /some/directory...", session.interactionResponses[0].Data.Content)
+}
+
+func TestHandler_OnInteractionCreate_Ping_Unrestricted(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	allowedUsers := []string{"user-123"}
+	h := NewHandler(bot, "bot-123", allowedUsers)
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "ping",
+			},
+			Member: &discordgo.Member{
+				User: &discordgo.User{ID: "user-999", Username: "disallowed_user"},
+			},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(0, bot.newSessionCalls)
+	a.Len(session.interactionResponses, 1)
+	a.Equal("pong!", session.interactionResponses[0].Data.Content)
 }

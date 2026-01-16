@@ -81,13 +81,33 @@ type BotInterface interface {
 
 // Handler handles Discord events
 type Handler struct {
-	bot   BotInterface
-	botID string
+	bot         BotInterface
+	botID       string
+	allowedUsers []string
 }
 
 // NewHandler creates a new Handler
-func NewHandler(bot BotInterface, botID string) *Handler {
-	return &Handler{bot: bot, botID: botID}
+func NewHandler(bot BotInterface, botID string, allowedUsers []string) *Handler {
+	return &Handler{
+		bot:         bot,
+		botID:       botID,
+		allowedUsers: allowedUsers,
+	}
+}
+
+// isUserAllowed checks if a user is in the allowed users list
+// If allowedUsers is empty or nil, all users are allowed (backward compatibility)
+func (h *Handler) isUserAllowed(userID string) bool {
+	if len(h.allowedUsers) == 0 {
+		return true
+	}
+
+	for _, allowedID := range h.allowedUsers {
+		if allowedID == userID {
+			return true
+		}
+	}
+	return false
 }
 
 // OnMessageCreate handles incoming messages
@@ -95,6 +115,11 @@ func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 	slog.Info("message received", "content", m.Content, "author", m.Author.Username, "mentions", len(m.Mentions), "botID", h.botID)
 
 	if m.Author == nil || m.Author.Bot {
+		return
+	}
+
+	if !h.isUserAllowed(m.Author.ID) {
+		slog.Info("unauthorized user attempt", "user_id", m.Author.ID, "username", m.Author.Username)
 		return
 	}
 
@@ -136,6 +161,30 @@ func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.Interaction
 		}
 
 	case "new-session":
+		// Get user ID - check guild command first, then DM
+		userID := ""
+		username := ""
+		if i.Interaction.Member != nil {
+			userID = i.Interaction.Member.User.ID
+			username = i.Interaction.Member.User.Username
+		} else {
+			userID = i.Interaction.User.ID
+			username = i.Interaction.User.Username
+		}
+
+		if !h.isUserAllowed(userID) {
+			slog.Info("unauthorized user attempt", "user_id", userID, "username", username)
+			if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You are not authorized to use this command.",
+				},
+			}); err != nil {
+				slog.Error("responding to unauthorized interaction", "error", err)
+			}
+			return
+		}
+
 		var dir string
 		for _, opt := range data.Options {
 			if opt.Name == "directory" {
