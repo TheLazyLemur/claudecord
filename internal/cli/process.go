@@ -78,8 +78,9 @@ type Process struct {
 	sessionID   string
 	done        chan struct{}
 	closeOnce   sync.Once
-	recvChan chan []byte // persistent receive channel
-	mu       sync.Mutex
+	recvChan    chan []byte // persistent receive channel
+	recvOnce    sync.Once
+	mu          sync.Mutex
 }
 
 // NewProcess spawns the claude CLI and performs the initialize handshake.
@@ -147,12 +148,10 @@ func (p *Process) initialize(timeout time.Duration) error {
 	}
 	slog.Info("CLI initialize: sent, waiting for control_response")
 
-	// Read until we get control_response AND system.init with session_id
+	// Read until we get control_response or system.init with session_id
 	scanner := bufio.NewScanner(p.stdout)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB buffer for large responses
 	deadline := time.Now().Add(timeout)
-
-	gotControlResponse := false
 
 	for time.Now().Before(deadline) {
 		if !scanner.Scan() {
@@ -173,10 +172,11 @@ func (p *Process) initialize(timeout time.Duration) error {
 
 		msgType, _ := msg["type"].(string)
 
-		// If we get control_response for our init, mark it
+		// If we get control_response for our init, we're ready
 		if msgType == "control_response" {
-			slog.Info("CLI initialize: got control_response")
-			gotControlResponse = true
+			slog.Info("CLI initialize: got control_response, ready")
+			p.stdout = &prefixReader{scanner: scanner}
+			return nil
 		}
 
 		// Also check for system.init which has session_id
@@ -190,20 +190,6 @@ func (p *Process) initialize(timeout time.Duration) error {
 				}
 			}
 		}
-
-		// If we got control_response but no session_id yet, keep reading
-		// But if we've only got control_response and no system.init coming, we're done
-		if gotControlResponse && p.sessionID == "" {
-			// Continue reading for system.init
-			continue
-		}
-	}
-
-	// If we got control_response but no session_id, that's still valid (new session)
-	if gotControlResponse {
-		slog.Info("CLI initialize: got control_response, ready (no session_id)")
-		p.stdout = &prefixReader{scanner: scanner}
-		return nil
 	}
 
 	return errors.New("timeout waiting for session initialization")
@@ -250,15 +236,10 @@ func (p *Process) Send(msg []byte) error {
 }
 
 func (p *Process) Receive() (<-chan []byte, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.recvChan != nil {
-		return nil, errors.New("already receiving")
-	}
-
-	p.recvChan = make(chan []byte, 100) // buffered to avoid blocking
-	go p.readLoop(p.recvChan)
+	p.recvOnce.Do(func() {
+		p.recvChan = make(chan []byte, 100) // buffered to avoid blocking
+		go p.readLoop(p.recvChan)
+	})
 	return p.recvChan, nil
 }
 

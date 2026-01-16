@@ -1,0 +1,7 @@
+{
+  "task": "Fix the 3 failing tests + 1 panic in internal/cli/process_test.go:\n\n1. TestNewProcess_InitializesSession - SessionID not captured from system.init message\n2. TestNewProcess_ResumeSession - Same root cause (session ID extraction)\n3. TestProcess_ReceiveOnlyOnce - Expects error on second Receive() call but gets nil\n4. Panic in TestProcess_ReceiveOnlyOnce - Nil pointer dereference at line 340\n\nRoot cause is in internal/cli/process.go - session ID extraction logic and Receive() not being idempotent.\n\nRun tests with: go test ./internal/cli/...",
+  "success_criteria": "All tests pass: go test ./internal/cli/... returns 0 exit code with no failures or panics",
+  "max_iterations": 10,
+  "current_iteration": 0,
+  "status": "running"
+}

@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+	"log/slog"
+	"sync"
 
 	"github.com/pkg/errors"
 )
@@ -13,6 +15,7 @@ type Bot struct {
 	sessions *SessionManager
 	discord  DiscordClient
 	perms    PermissionChecker
+	mu       sync.Mutex // serialize message handling
 }
 
 // NewBot creates a bot with the given dependencies
@@ -26,23 +29,31 @@ func NewBot(sessions *SessionManager, discord DiscordClient, perms PermissionChe
 
 // HandleMessage processes a Discord message, sends to CLI, handles responses
 func (b *Bot) HandleMessage(channelID, userMessage string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	slog.Info("HandleMessage start", "msg", userMessage)
 	b.discord.SendTyping(channelID)
 
+	slog.Info("getting session")
 	proc, err := b.sessions.GetOrCreateSession()
 	if err != nil {
 		return errors.Wrap(err, "getting session")
 	}
+	slog.Info("got session", "sessionID", proc.SessionID())
 
+	slog.Info("sending user message to CLI")
 	if err := b.sendUserMessage(proc, userMessage); err != nil {
 		return errors.Wrap(err, "sending user message")
 	}
+	slog.Info("sent user message, processing responses")
 
 	return b.processResponses(proc, channelID)
 }
 
-// NewSession starts a fresh CLI session
-func (b *Bot) NewSession() error {
-	return b.sessions.NewSession()
+// NewSession starts a fresh CLI session with optional working directory
+func (b *Bot) NewSession(workDir string) error {
+	return b.sessions.NewSession(workDir)
 }
 
 func (b *Bot) sendUserMessage(proc CLIProcess, content string) error {
@@ -69,7 +80,13 @@ func (b *Bot) processResponses(proc CLIProcess, channelID string) error {
 
 	var responseText string
 
-	for data := range recvChan {
+	for {
+		data, ok := <-recvChan
+		if !ok {
+			// channel closed, process ended
+			break
+		}
+
 		var msg map[string]any
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
@@ -81,11 +98,15 @@ func (b *Bot) processResponses(proc CLIProcess, channelID string) error {
 		}
 
 		msgType, _ := msg["type"].(string)
+		slog.Info("CLI response", "type", msgType)
 
 		switch msgType {
 		case "assistant":
 			text := extractTextFromAssistant(msg)
 			if text != "" {
+				if responseText != "" {
+					responseText += "\n"
+				}
 				responseText += text
 			}
 
@@ -96,6 +117,7 @@ func (b *Bot) processResponses(proc CLIProcess, channelID string) error {
 
 		case "result":
 			// turn complete, post response if any
+			slog.Info("got result, posting response", "len", len(responseText))
 			if responseText != "" {
 				if err := b.postResponse(channelID, responseText); err != nil {
 					return errors.Wrap(err, "posting response")

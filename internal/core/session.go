@@ -8,7 +8,7 @@ import (
 
 // ProcessFactory creates new CLI processes
 type ProcessFactory interface {
-	Create(resumeSessionID string) (CLIProcess, error)
+	Create(resumeSessionID, workDir string) (CLIProcess, error)
 }
 
 // SessionManager manages the single active CLI session
@@ -24,7 +24,7 @@ func NewSessionManager(factory ProcessFactory) *SessionManager {
 }
 
 // NewSession starts a fresh CLI session, closing any existing one
-func (m *SessionManager) NewSession() error {
+func (m *SessionManager) NewSession(workDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -33,7 +33,7 @@ func (m *SessionManager) NewSession() error {
 		m.current = nil
 	}
 
-	proc, err := m.factory.Create("")
+	proc, err := m.factory.Create("", workDir)
 	if err != nil {
 		return errors.Wrap(err, "creating new session")
 	}
@@ -51,7 +51,7 @@ func (m *SessionManager) GetOrCreateSession() (CLIProcess, error) {
 		return m.current, nil
 	}
 
-	proc, err := m.factory.Create("")
+	proc, err := m.factory.Create("", "")
 	if err != nil {
 		return nil, errors.Wrap(err, "creating session")
 	}

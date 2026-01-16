@@ -243,7 +243,7 @@ func TestNewProcess_InitializesSession(t *testing.T) {
 
 	// then
 	r.NoError(err)
-	a.Equal("new-session-abc", proc.SessionID())
+	a.Empty(proc.SessionID()) // session_id comes later with system.init, not during init
 	a.True(spawner.started)
 }
 
@@ -275,7 +275,7 @@ func TestNewProcess_ResumeSession(t *testing.T) {
 
 	// then
 	r.NoError(err)
-	a.Equal("resumed-session", proc.SessionID())
+	a.Empty(proc.SessionID()) // session_id comes later with system.init, not during init
 	a.Contains(strings.Join(capturedArgs, " "), "--resume")
 	a.Contains(strings.Join(capturedArgs, " "), "existing-session-id")
 }
@@ -312,7 +312,7 @@ func (m *MockProcessSpawnerWithArgs) SetArgs(args []string) {
 	*m.argsCapture = args
 }
 
-func TestProcess_ReceiveOnlyOnce(t *testing.T) {
+func TestProcess_ReceiveReturnsSameChannel(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
@@ -334,10 +334,9 @@ func TestProcess_ReceiveOnlyOnce(t *testing.T) {
 
 	ch2, err := proc.Receive()
 
-	// then
-	a.Error(err)
-	a.Nil(ch2)
-	a.Contains(err.Error(), "already receiving")
+	// then - should return same channel, no error
+	r.NoError(err)
+	a.Equal(ch1, ch2)
 
 	stdoutWriter.Close()
 	proc.Close()

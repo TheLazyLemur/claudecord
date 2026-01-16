@@ -18,11 +18,26 @@ import (
 const initTimeout = 30 * time.Second
 
 type cliProcessFactory struct {
-	workingDir string
+	defaultWorkDir string
+	allowedDirs    []string
 }
 
-func (f *cliProcessFactory) Create(resumeSessionID string) (core.CLIProcess, error) {
-	return cli.NewProcess(f.workingDir, resumeSessionID, initTimeout)
+func (f *cliProcessFactory) Create(resumeSessionID, workDir string) (core.CLIProcess, error) {
+	if workDir == "" {
+		workDir = f.defaultWorkDir
+	} else if !f.isAllowed(workDir) {
+		return nil, errors.Errorf("directory %q not under allowed dirs", workDir)
+	}
+	return cli.NewProcess(workDir, resumeSessionID, initTimeout)
+}
+
+func (f *cliProcessFactory) isAllowed(path string) bool {
+	for _, allowed := range f.allowedDirs {
+		if path == allowed || strings.HasPrefix(path, allowed+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {
@@ -56,7 +71,7 @@ func run() error {
 
 	// create dependencies
 	permChecker := cli.NewPermissionChecker(allowedDirs)
-	processFactory := &cliProcessFactory{workingDir: claudeCwd}
+	processFactory := &cliProcessFactory{defaultWorkDir: claudeCwd, allowedDirs: allowedDirs}
 	sessionMgr := core.NewSessionManager(processFactory)
 
 	// create discord session
@@ -69,7 +84,17 @@ func run() error {
 	bot := core.NewBot(sessionMgr, discordClient, permChecker)
 
 	// need intents for message content
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
+
+	// register ready handler
+	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+		slog.Info("READY event", "user", r.User.Username, "guilds", len(r.Guilds))
+	})
+
+	// register raw message handler to debug
+	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		slog.Info("RAW message", "content", m.Content, "author", m.Author.Username)
+	})
 
 	// open discord connection to get bot ID
 	if err := dg.Open(); err != nil {
@@ -77,12 +102,17 @@ func run() error {
 	}
 	defer dg.Close()
 
-	botID := dg.State.User.ID
-	h := handler.NewHandler(bot, botID)
+	// set bot status to online
+	dg.UpdateGameStatus(0, "Ready")
 
-	// register event handlers (after Open is fine, discordgo queues internally)
+	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
+
+	// now create handler with botID
+	h := handler.NewHandler(bot, dg.State.User.ID)
 	dg.AddHandler(h.OnMessageCreate)
-	dg.AddHandler(h.OnInteractionCreate)
+	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		h.OnInteractionCreate(s, i)
+	})
 
 	// register slash commands
 	cmds := handler.SlashCommands()

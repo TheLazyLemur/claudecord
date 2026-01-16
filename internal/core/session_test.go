@@ -46,7 +46,7 @@ func TestSessionManager_NewSession_CreatesSession(t *testing.T) {
 	mgr := NewSessionManager(factory)
 
 	// when
-	err := mgr.NewSession()
+	err := mgr.NewSession("")
 
 	// then
 	r.NoError(err)
@@ -66,12 +66,12 @@ func TestSessionManager_NewSession_ClosesPreviousSession(t *testing.T) {
 	secondProc := &mockCLIProcess{sessionID: "session-2"}
 	factory := &mockProcessFactory{process: firstProc}
 	mgr := NewSessionManager(factory)
-	r.NoError(mgr.NewSession())
+	r.NoError(mgr.NewSession(""))
 
 	factory.process = secondProc
 
 	// when
-	err := mgr.NewSession()
+	err := mgr.NewSession("")
 
 	// then
 	r.NoError(err)
@@ -109,7 +109,7 @@ func TestSessionManager_GetOrCreateSession_ReturnsExisting(t *testing.T) {
 		process: &mockCLIProcess{sessionID: "existing"},
 	}
 	mgr := NewSessionManager(factory)
-	r.NoError(mgr.NewSession())
+	r.NoError(mgr.NewSession(""))
 	factory.createCalled = false
 
 	// when
@@ -143,7 +143,7 @@ func TestSessionManager_Close_ClosesCurrentSession(t *testing.T) {
 	proc := &mockCLIProcess{sessionID: "to-close"}
 	factory := &mockProcessFactory{process: proc}
 	mgr := NewSessionManager(factory)
-	r.NoError(mgr.NewSession())
+	r.NoError(mgr.NewSession(""))
 
 	// when
 	err := mgr.Close()
@@ -174,7 +174,7 @@ func TestSessionManager_NewSession_FactoryError(t *testing.T) {
 	mgr := NewSessionManager(factory)
 
 	// when
-	err := mgr.NewSession()
+	err := mgr.NewSession("")
 
 	// then
 	a.Error(err)
@@ -186,11 +186,13 @@ type mockProcessFactory struct {
 	err          error
 	createCalled bool
 	lastResumeID string
+	lastWorkDir  string
 }
 
-func (f *mockProcessFactory) Create(resumeSessionID string) (CLIProcess, error) {
+func (f *mockProcessFactory) Create(resumeSessionID, workDir string) (CLIProcess, error) {
 	f.createCalled = true
 	f.lastResumeID = resumeSessionID
+	f.lastWorkDir = workDir
 	if f.err != nil {
 		return nil, f.err
 	}

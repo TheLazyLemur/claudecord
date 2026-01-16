@@ -15,6 +15,7 @@ type DiscordSession interface {
 	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
 	ChannelTyping(channelID string, options ...discordgo.RequestOption) error
 	MessageThreadStartComplex(channelID, messageID string, data *discordgo.ThreadStart, options ...discordgo.RequestOption) (*discordgo.Channel, error)
+	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
 }
 
 // DiscordClientWrapper implements core.DiscordClient using discordgo
@@ -75,7 +76,7 @@ func (c *DiscordClientWrapper) CreateThread(channelID, content string) (string, 
 // BotInterface defines what the Handler needs from Bot
 type BotInterface interface {
 	HandleMessage(channelID, message string) error
-	NewSession() error
+	NewSession(workDir string) error
 }
 
 // Handler handles Discord events
@@ -91,11 +92,14 @@ func NewHandler(bot BotInterface, botID string) *Handler {
 
 // OnMessageCreate handles incoming messages
 func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	slog.Info("message received", "content", m.Content, "author", m.Author.Username, "mentions", len(m.Mentions), "botID", h.botID)
+
 	if m.Author == nil || m.Author.Bot {
 		return
 	}
 
 	msg, ok := ExtractClaudeMention(m.Content, m.Mentions, h.botID)
+	slog.Info("mention check", "extracted", msg, "ok", ok)
 	if !ok {
 		return
 	}
@@ -106,7 +110,9 @@ func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 }
 
 // OnInteractionCreate handles slash commands
-func (h *Handler) OnInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.InteractionCreate) {
+	slog.Debug("interaction received", "type", i.Type)
+
 	if i.Type != discordgo.InteractionApplicationCommand {
 		return
 	}
@@ -116,18 +122,45 @@ func (h *Handler) OnInteractionCreate(s *discordgo.Session, i *discordgo.Interac
 		return
 	}
 
-	if data.Name == "new-session" {
-		if err := h.bot.NewSession(); err != nil {
-			slog.Error("creating new session", "error", err)
+	slog.Info("slash command", "name", data.Name)
+
+	switch data.Name {
+	case "ping":
+		if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "pong!",
+			},
+		}); err != nil {
+			slog.Error("responding to ping", "error", err)
 		}
-		// respond to interaction
-		if s != nil {
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "New session started",
-				},
-			})
+
+	case "new-session":
+		var dir string
+		for _, opt := range data.Options {
+			if opt.Name == "directory" {
+				dir = opt.StringValue()
+				break
+			}
+		}
+
+		// respond to interaction first (Discord requires response within 3s)
+		msg := "Starting new session..."
+		if dir != "" {
+			msg = "Starting new session in " + dir + "..."
+		}
+		if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: msg,
+			},
+		}); err != nil {
+			slog.Error("responding to interaction", "error", err)
+			return
+		}
+
+		if err := h.bot.NewSession(dir); err != nil {
+			slog.Error("creating new session", "error", err)
 		}
 	}
 }
@@ -168,6 +201,18 @@ func SlashCommands() []*discordgo.ApplicationCommand {
 		{
 			Name:        "new-session",
 			Description: "Start a fresh Claude session",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "directory",
+					Description: "Working directory (must be under allowed dirs)",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "ping",
+			Description: "Check if bot is responding",
 		},
 	}
 }

@@ -11,14 +11,16 @@ import (
 // --- Mock discordgo session ---
 
 type mockSession struct {
-	sentMessages    []sentMsg
-	typingChannels  []string
-	createdThreads  []threadCreate
-	threadMessages  []sentMsg
-	sendErr         error
-	threadErr       error
-	threadMsgErr    error
-	createdThreadID string
+	sentMessages          []sentMsg
+	typingChannels        []string
+	createdThreads        []threadCreate
+	threadMessages        []sentMsg
+	interactionResponses  []*discordgo.InteractionResponse
+	sendErr               error
+	threadErr             error
+	threadMsgErr          error
+	interactionErr        error
+	createdThreadID       string
 }
 
 type sentMsg struct {
@@ -47,13 +49,19 @@ func (m *mockSession) MessageThreadStartComplex(channelID, messageID string, dat
 	return &discordgo.Channel{ID: m.createdThreadID}, m.threadErr
 }
 
+func (m *mockSession) InteractionRespond(_ *discordgo.Interaction, resp *discordgo.InteractionResponse, _ ...discordgo.RequestOption) error {
+	m.interactionResponses = append(m.interactionResponses, resp)
+	return m.interactionErr
+}
+
 // --- Mock Bot ---
 
 type mockBot struct {
-	handledMessages []handledMsg
-	newSessionCalls int
-	handleErr       error
-	newSessionErr   error
+	handledMessages   []handledMsg
+	newSessionCalls   int
+	lastNewSessionDir string
+	handleErr         error
+	newSessionErr     error
 }
 
 type handledMsg struct {
@@ -66,8 +74,9 @@ func (m *mockBot) HandleMessage(channelID, message string) error {
 	return m.handleErr
 }
 
-func (m *mockBot) NewSession() error {
+func (m *mockBot) NewSession(workDir string) error {
 	m.newSessionCalls++
+	m.lastNewSessionDir = workDir
 	return m.newSessionErr
 }
 
@@ -320,6 +329,7 @@ func TestHandler_OnNewSession_CallsBot(t *testing.T) {
 	a := assert.New(t)
 
 	// given
+	session := &mockSession{}
 	bot := &mockBot{}
 	h := NewHandler(bot, "bot-123")
 
@@ -333,8 +343,9 @@ func TestHandler_OnNewSession_CallsBot(t *testing.T) {
 	}
 
 	// when
-	h.OnInteractionCreate(nil, interaction)
+	h.OnInteractionCreate(session, interaction)
 
 	// then
 	a.Equal(1, bot.newSessionCalls)
+	a.Len(session.interactionResponses, 1)
 }

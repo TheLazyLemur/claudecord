@@ -95,7 +95,7 @@ type botMockFactory struct {
 	err     error
 }
 
-func (f *botMockFactory) Create(resumeSessionID string) (CLIProcess, error) {
+func (f *botMockFactory) Create(resumeSessionID, workDir string) (CLIProcess, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -381,7 +381,7 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 	factory.process = proc2
 
 	// when
-	err := bot.NewSession()
+	err := bot.NewSession("")
 
 	// then
 	r.NoError(err)
