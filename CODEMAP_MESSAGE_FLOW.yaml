@@ -18,7 +18,7 @@ sections:
               title: "OnMessageCreate handler"
               code: "func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {"
               file: "internal/handler/discord.go"
-              line: 93
+              line: 94
             children:
               - text: "Skip if author is bot"
                 children:
@@ -27,7 +27,7 @@ sections:
                       title: "Bot author check"
                       code: "if m.Author == nil || m.Author.Bot {"
                       file: "internal/handler/discord.go"
-                      line: 96
+                      line: 97
               - text: "Extract @claude mention from message start"
                 children:
                   - block:
@@ -35,13 +35,13 @@ sections:
                       title: "Extract mention"
                       code: "msg, ok := ExtractClaudeMention(m.Content, m.Mentions, h.botID)"
                       file: "internal/handler/discord.go"
-                      line: 100
+                      line: 101
                   - block:
                       id: "1d"
                       title: "Check mention prefix"
                       code: "if strings.HasPrefix(content, mentionPrefix) {"
                       file: "internal/handler/discord.go"
-                      line: 174
+                      line: 187
               - text: "Forward to bot"
                 children:
                   - block:
@@ -49,7 +49,7 @@ sections:
                       title: "Call bot.HandleMessage"
                       code: "if err := h.bot.HandleMessage(m.ChannelID, msg); err != nil {"
                       file: "internal/handler/discord.go"
-                      line: 106
+                      line: 107
 
   - id: 2
     title: "Bot Orchestration"
@@ -164,13 +164,13 @@ sections:
               title: "Handle control request"
               code: "if err := b.handleControlRequest(proc, msg); err != nil {"
               file: "internal/core/bot.go"
-              line: 111
+              line: 114
           - block:
               id: "4b"
               title: "Check permissions"
               code: "allow, reason := b.perms.Check(toolName, input)"
               file: "internal/core/bot.go"
-              line: 171
+              line: 174
       - text: "PermissionChecker validates paths"
         children:
           - block:
@@ -192,7 +192,7 @@ sections:
               title: "Send response"
               code: "return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)"
               file: "internal/core/bot.go"
-              line: 173
+              line: 176
 
   - id: 5
     title: "Response Posting"
@@ -205,7 +205,7 @@ sections:
               title: "Result handling"
               code: "case \"result\":"
               file: "internal/core/bot.go"
-              line: 115
+              line: 118
       - text: "Post accumulated response"
         children:
           - block:
@@ -213,13 +213,13 @@ sections:
               title: "Post response"
               code: "if err := b.postResponse(channelID, responseText); err != nil {"
               file: "internal/core/bot.go"
-              line: 119
+              line: 122
           - block:
               id: "5c"
               title: "Length check"
               code: "if len(content) > maxDiscordMessageLen {"
               file: "internal/core/bot.go"
-              line: 210
+              line: 213
       - text: "Thread for long responses"
         children:
           - block:
@@ -227,10 +227,10 @@ sections:
               title: "Create thread"
               code: "_, err := b.discord.CreateThread(channelID, content)"
               file: "internal/core/bot.go"
-              line: 211
+              line: 214
           - block:
               id: "5e"
               title: "Thread creation"
               code: "thread, err := c.session.MessageThreadStartComplex(channelID, msg.ID, &discordgo.ThreadStart{"
               file: "internal/handler/discord.go"
-              line: 49
+              line: 50

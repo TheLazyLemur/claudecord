@@ -17,15 +17,15 @@ sections:
           - block:
               id: "1a"
               title: "OnInteractionCreate handler"
-              code: "func (h *Handler) OnInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {"
+              code: "func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.InteractionCreate) {"
               file: "internal/handler/discord.go"
-              line: 112
+              line: 113
           - block:
               id: "1b"
               title: "Check command type"
               code: "if i.Type != discordgo.InteractionApplicationCommand {"
               file: "internal/handler/discord.go"
-              line: 115
+              line: 116
       - text: "Handle new-session command"
         children:
           - block:
@@ -33,21 +33,21 @@ sections:
               title: "Command switch"
               code: "case \"new-session\":"
               file: "internal/handler/discord.go"
-              line: 137
+              line: 138
           - block:
               id: "1d"
               title: "Respond to interaction"
               code: "if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{"
               file: "internal/handler/discord.go"
-              line: 139
+              line: 152
       - text: "Call bot NewSession"
         children:
           - block:
               id: "1e"
               title: "Trigger new session"
-              code: "if err := h.bot.NewSession(); err != nil {"
+              code: "if err := h.bot.NewSession(dir); err != nil {"
               file: "internal/handler/discord.go"
-              line: 149
+              line: 162
 
   - id: 2
     title: "Session Management"
@@ -58,13 +58,13 @@ sections:
           - block:
               id: "2a"
               title: "Bot.NewSession"
-              code: "func (b *Bot) NewSession() error {"
+              code: "func (b *Bot) NewSession(workDir string) error {"
               file: "internal/core/bot.go"
               line: 55
           - block:
               id: "2b"
               title: "Delegate to manager"
-              code: "return b.sessions.NewSession()"
+              code: "return b.sessions.NewSession(workDir)"
               file: "internal/core/bot.go"
               line: 56
       - text: "SessionManager creates new session"
@@ -72,7 +72,7 @@ sections:
           - block:
               id: "2c"
               title: "SessionManager.NewSession"
-              code: "func (m *SessionManager) NewSession() error {"
+              code: "func (m *SessionManager) NewSession(workDir string) error {"
               file: "internal/core/session.go"
               line: 27
           - block:
@@ -100,7 +100,7 @@ sections:
           - block:
               id: "2g"
               title: "Factory create"
-              code: "proc, err := m.factory.Create(\"\")"
+              code: "proc, err := m.factory.Create(\"\", workDir)"
               file: "internal/core/session.go"
               line: 36
 
@@ -113,15 +113,15 @@ sections:
           - block:
               id: "3a"
               title: "cliProcessFactory.Create"
-              code: "func (f *cliProcessFactory) Create(resumeSessionID string) (core.CLIProcess, error) {"
+              code: "func (f *cliProcessFactory) Create(resumeSessionID, workDir string) (core.CLIProcess, error) {"
               file: "cmd/claudecord/main.go"
-              line: 24
+              line: 25
           - block:
               id: "3b"
               title: "Call NewProcess"
-              code: "return cli.NewProcess(f.workingDir, resumeSessionID, initTimeout)"
+              code: "return cli.NewProcess(workDir, resumeSessionID, initTimeout)"
               file: "cmd/claudecord/main.go"
-              line: 25
+              line: 31
       - text: "Spawn CLI subprocess"
         children:
           - block:

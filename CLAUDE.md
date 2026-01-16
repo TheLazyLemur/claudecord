@@ -58,4 +58,4 @@ Env vars only, no config files.
 
 ## Reference
 
-Claude CLI stdio protocol docs: /Users/danrousseau/Programming/ai-agents/claude-code-stdio-protocol
+Claude CLI stdio protocol docs: https://github.com/TheLazyLemur/claude-code-stdio-protocol
