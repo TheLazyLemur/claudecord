@@ -79,6 +79,7 @@ func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) err
 	}
 
 	var responseText string
+	var threadID string // tracks thread for send_update calls
 
 	for {
 		data, ok := <-recvChan
@@ -111,7 +112,7 @@ func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) err
 			}
 
 		case "control_request":
-			if err := b.handleControlRequest(proc, msg, channelID, messageID); err != nil {
+			if err := b.handleControlRequest(proc, msg, channelID, messageID, &threadID); err != nil {
 				return errors.Wrap(err, "handling control request")
 			}
 
@@ -155,7 +156,7 @@ func extractTextFromAssistant(msg map[string]any) string {
 	return text
 }
 
-func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, channelID, messageID string) error {
+func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, channelID, messageID string, threadID *string) error {
 	requestID, _ := msg["request_id"].(string)
 	request, ok := msg["request"].(map[string]any)
 	if !ok {
@@ -163,6 +164,7 @@ func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, channelI
 	}
 
 	subtype, _ := request["subtype"].(string)
+	slog.Info("control_request", "subtype", subtype, "request_id", requestID)
 	switch subtype {
 	case "can_use_tool":
 		toolName, _ := request["tool_name"].(string)
@@ -172,7 +174,7 @@ func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, channelI
 		return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)
 
 	case "mcp_message":
-		return b.handleMCPMessage(proc, requestID, request, channelID, messageID)
+		return b.handleMCPMessage(proc, requestID, request, channelID, messageID, threadID)
 	}
 
 	return nil
@@ -219,65 +221,131 @@ func (b *Bot) postResponse(channelID, content string) error {
 	return b.discord.SendMessage(channelID, content)
 }
 
-// MCP error codes
-const (
-	mcpErrInvalidRequest = -32600
-	mcpErrMethodNotFound = -32601
-	mcpErrInvalidParams  = -32602
-	mcpErrServerError    = -32000
-)
-
-func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[string]any, channelID, messageID string) error {
-	serverName, _ := request["server_name"].(string)
-	message, _ := request["message"].(map[string]any)
-	jsonrpcID, _ := message["id"].(float64)
-
-	if serverName != "discord-tools" {
-		return b.sendMCPError(proc, requestID, int(jsonrpcID), mcpErrInvalidRequest, "unknown server: "+serverName)
-	}
-
-	method, _ := message["method"].(string)
-	if method != "tools/call" {
-		return b.sendMCPError(proc, requestID, int(jsonrpcID), mcpErrMethodNotFound, "unknown method: "+method)
-	}
-
-	params, _ := message["params"].(map[string]any)
-	return b.handleMCPToolCall(proc, requestID, int(jsonrpcID), params, channelID, messageID)
+// MCP tool definitions
+var mcpTools = []map[string]any{
+	{
+		"name":        "react_emoji",
+		"description": "Add emoji reaction to current Discord message. Call this first when you receive a message.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"emoji": map[string]any{
+					"type":        "string",
+					"description": "Unicode emoji character (e.g. 👀, 👍, 🚀)",
+				},
+			},
+			"required": []string{"emoji"},
+		},
+	},
+	{
+		"name":        "send_update",
+		"description": "Send a progress update message to a thread on the original Discord message. Use this to keep the user informed about what you're doing.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"message": map[string]any{
+					"type":        "string",
+					"description": "The update message to send",
+				},
+			},
+			"required": []string{"message"},
+		},
+	},
 }
 
-func (b *Bot) handleMCPToolCall(proc CLIProcess, requestID string, jsonrpcID int, params map[string]any, channelID, messageID string) error {
+func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[string]any, channelID, messageID string, threadID *string) error {
+	serverName, _ := request["server_name"].(string)
+	message, _ := request["message"].(map[string]any)
+	jsonrpcID := message["id"] // can be number or string
+	method, _ := message["method"].(string)
+
+	if serverName != "discord-tools" {
+		return b.sendMCPResult(proc, requestID, jsonrpcID, map[string]any{})
+	}
+
+	slog.Info("MCP message", "server", serverName, "method", method)
+
+	var result any
+	switch method {
+	case "initialize":
+		result = map[string]any{
+			"protocolVersion": "2024-11-05",
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+			"serverInfo":      map[string]any{"name": "discord-tools", "version": "1.0.0"},
+		}
+	case "notifications/initialized":
+		result = map[string]any{}
+	case "tools/list":
+		result = map[string]any{"tools": mcpTools}
+	case "tools/call":
+		params, _ := message["params"].(map[string]any)
+		return b.handleMCPToolCall(proc, requestID, jsonrpcID, params, channelID, messageID, threadID)
+	default:
+		result = map[string]any{}
+	}
+
+	return b.sendMCPResult(proc, requestID, jsonrpcID, result)
+}
+
+func (b *Bot) handleMCPToolCall(proc CLIProcess, requestID string, jsonrpcID any, params map[string]any, channelID, messageID string, threadID *string) error {
 	toolName, _ := params["name"].(string)
 	args, _ := params["arguments"].(map[string]any)
 
-	if toolName != "react_emoji" {
-		return b.sendMCPError(proc, requestID, jsonrpcID, mcpErrMethodNotFound, "unknown tool: "+toolName)
-	}
+	switch toolName {
+	case "react_emoji":
+		emoji, ok := args["emoji"].(string)
+		if !ok || emoji == "" {
+			return b.sendMCPToolError(proc, requestID, jsonrpcID, "missing emoji argument")
+		}
+		slog.Info("AddReaction", "channelID", channelID, "messageID", messageID, "emoji", emoji)
+		if err := b.discord.AddReaction(channelID, messageID, emoji); err != nil {
+			slog.Error("AddReaction failed", "error", err)
+			return b.sendMCPToolError(proc, requestID, jsonrpcID, err.Error())
+		}
+		return b.sendMCPResult(proc, requestID, jsonrpcID, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "reaction added"}},
+		})
 
-	emoji, ok := args["emoji"].(string)
-	if !ok || emoji == "" {
-		return b.sendMCPError(proc, requestID, jsonrpcID, mcpErrInvalidParams, "missing emoji argument")
-	}
+	case "send_update":
+		msg, ok := args["message"].(string)
+		if !ok || msg == "" {
+			return b.sendMCPToolError(proc, requestID, jsonrpcID, "missing message argument")
+		}
+		// create thread if needed
+		if *threadID == "" {
+			tid, err := b.discord.StartThread(channelID, messageID, "Updates")
+			if err != nil {
+				slog.Error("StartThread failed", "error", err)
+				return b.sendMCPToolError(proc, requestID, jsonrpcID, err.Error())
+			}
+			*threadID = tid
+			slog.Info("Created thread", "threadID", tid)
+		}
+		// send message to thread
+		if err := b.discord.SendMessage(*threadID, msg); err != nil {
+			slog.Error("SendMessage to thread failed", "error", err)
+			return b.sendMCPToolError(proc, requestID, jsonrpcID, err.Error())
+		}
+		return b.sendMCPResult(proc, requestID, jsonrpcID, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "update sent"}},
+		})
 
-	if err := b.discord.AddReaction(channelID, messageID, emoji); err != nil {
-		return b.sendMCPError(proc, requestID, jsonrpcID, mcpErrServerError, err.Error())
+	default:
+		return b.sendMCPToolError(proc, requestID, jsonrpcID, "unknown tool: "+toolName)
 	}
-
-	return b.sendMCPToolResult(proc, requestID, jsonrpcID, "reaction added")
 }
 
-func (b *Bot) sendMCPToolResult(proc CLIProcess, requestID string, jsonrpcID int, text string) error {
+func (b *Bot) sendMCPResult(proc CLIProcess, requestID string, jsonrpcID any, result any) error {
 	resp := map[string]any{
 		"type": "control_response",
 		"response": map[string]any{
 			"subtype":    "success",
 			"request_id": requestID,
 			"response": map[string]any{
-				"jsonrpc": "2.0",
-				"id":      jsonrpcID,
-				"result": map[string]any{
-					"content": []map[string]any{
-						{"type": "text", "text": text},
-					},
+				"mcp_response": map[string]any{
+					"jsonrpc": "2.0",
+					"id":      jsonrpcID,
+					"result":  result,
 				},
 			},
 		},
@@ -289,25 +357,9 @@ func (b *Bot) sendMCPToolResult(proc CLIProcess, requestID string, jsonrpcID int
 	return proc.Send(data)
 }
 
-func (b *Bot) sendMCPError(proc CLIProcess, requestID string, jsonrpcID int, code int, message string) error {
-	resp := map[string]any{
-		"type": "control_response",
-		"response": map[string]any{
-			"subtype":    "success",
-			"request_id": requestID,
-			"response": map[string]any{
-				"jsonrpc": "2.0",
-				"id":      jsonrpcID,
-				"error": map[string]any{
-					"code":    code,
-					"message": message,
-				},
-			},
-		},
-	}
-	data, err := json.Marshal(resp)
-	if err != nil {
-		return errors.Wrap(err, "marshaling MCP error")
-	}
-	return proc.Send(data)
+func (b *Bot) sendMCPToolError(proc CLIProcess, requestID string, jsonrpcID any, errMsg string) error {
+	return b.sendMCPResult(proc, requestID, jsonrpcID, map[string]any{
+		"content": []map[string]any{{"type": "text", "text": errMsg}},
+		"isError": true,
+	})
 }

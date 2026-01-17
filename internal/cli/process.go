@@ -16,6 +16,38 @@ import (
 
 var _ core.CLIProcess = (*Process)(nil)
 
+// MCP tool definitions for discord-tools server
+var mcpTools = []map[string]any{
+	{
+		"name":        "react_emoji",
+		"description": "Add emoji reaction to current Discord message. Call this first when you receive a message.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"emoji": map[string]any{
+					"type":        "string",
+					"description": "Unicode emoji character (e.g. 👀, 👍, 🚀)",
+				},
+			},
+			"required": []string{"emoji"},
+		},
+	},
+	{
+		"name":        "send_update",
+		"description": "Send a progress update message to a thread on the original Discord message. Use this to keep the user informed about what you're doing.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"message": map[string]any{
+					"type":        "string",
+					"description": "The update message to send",
+				},
+			},
+			"required": []string{"message"},
+		},
+	},
+}
+
 // ProcessSpawner abstracts process creation for testing
 type ProcessSpawner interface {
 	Start() error
@@ -172,6 +204,14 @@ func (p *Process) initialize(timeout time.Duration) error {
 
 		msgType, _ := msg["type"].(string)
 
+		// Handle MCP setup messages during init
+		if msgType == "control_request" {
+			if err := p.handleInitMCP(msg); err != nil {
+				slog.Error("MCP init error", "error", err)
+			}
+			continue
+		}
+
 		// If we get control_response for our init, we're ready
 		if msgType == "control_response" {
 			slog.Info("CLI initialize: got control_response, ready")
@@ -193,6 +233,57 @@ func (p *Process) initialize(timeout time.Duration) error {
 	}
 
 	return errors.New("timeout waiting for session initialization")
+}
+
+// handleInitMCP handles MCP setup messages during initialization
+func (p *Process) handleInitMCP(msg map[string]any) error {
+	requestID, _ := msg["request_id"].(string)
+	request, _ := msg["request"].(map[string]any)
+	subtype, _ := request["subtype"].(string)
+
+	if subtype != "mcp_message" {
+		return nil
+	}
+
+	message, _ := request["message"].(map[string]any)
+	method, _ := message["method"].(string)
+	jsonrpcID := message["id"]
+
+	slog.Info("MCP init", "method", method)
+
+	var result any
+	switch method {
+	case "initialize":
+		result = map[string]any{
+			"protocolVersion": "2024-11-05",
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+			"serverInfo":      map[string]any{"name": "discord-tools", "version": "1.0.0"},
+		}
+	case "notifications/initialized":
+		result = map[string]any{}
+	case "tools/list":
+		result = map[string]any{"tools": mcpTools}
+	default:
+		result = map[string]any{}
+	}
+
+	resp := map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"subtype":    "success",
+			"request_id": requestID,
+			"response": map[string]any{
+				"mcp_response": map[string]any{
+					"jsonrpc": "2.0",
+					"id":      jsonrpcID,
+					"result":  result,
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(resp)
+	_, err := p.stdin.Write(append(data, '\n'))
+	return err
 }
 
 // prefixReader allows continuing to read from scanner's buffer then underlying reader
@@ -317,28 +408,8 @@ func buildInitializeRequest(requestID string) []byte {
 		"request_id": requestID,
 		"request": map[string]any{
 			"subtype":       "initialize",
-			"system_prompt": "When you receive a message, first call react_emoji with 'eyes' to acknowledge.",
-			"mcp_servers": map[string]any{
-				"discord-tools": map[string]any{
-					"transport": "stdio",
-					"tools": []map[string]any{
-						{
-							"name":        "react_emoji",
-							"description": "Add emoji reaction to current Discord message",
-							"inputSchema": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"emoji": map[string]any{
-										"type":        "string",
-										"description": "Emoji name (e.g. eyes, thumbsup, rocket)",
-									},
-								},
-								"required": []string{"emoji"},
-							},
-						},
-					},
-				},
-			},
+			"systemPrompt":  "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates to a thread.",
+			"sdkMcpServers": []string{"discord-tools"},
 		},
 	}
 	data, _ := json.Marshal(req)

@@ -48,6 +48,17 @@ func (c *DiscordClientWrapper) AddReaction(channelID, messageID, emoji string) e
 	return nil
 }
 
+func (c *DiscordClientWrapper) StartThread(channelID, messageID, name string) (string, error) {
+	thread, err := c.session.MessageThreadStartComplex(channelID, messageID, &discordgo.ThreadStart{
+		Name:                name,
+		AutoArchiveDuration: 60,
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "starting thread")
+	}
+	return thread.ID, nil
+}
+
 func (c *DiscordClientWrapper) CreateThread(channelID, content string) (string, error) {
 	// post initial message, then create thread from it
 	msg, err := c.session.ChannelMessageSend(channelID, "Response (see thread)")
