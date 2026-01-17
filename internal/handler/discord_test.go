@@ -16,11 +16,19 @@ type mockSession struct {
 	createdThreads        []threadCreate
 	threadMessages        []sentMsg
 	interactionResponses  []*discordgo.InteractionResponse
+	addedReactions        []reactionAdd
 	sendErr               error
 	threadErr             error
 	threadMsgErr          error
 	interactionErr        error
+	reactionErr           error
 	createdThreadID       string
+}
+
+type reactionAdd struct {
+	channelID string
+	messageID string
+	emoji     string
 }
 
 type sentMsg struct {
@@ -52,6 +60,11 @@ func (m *mockSession) MessageThreadStartComplex(channelID, messageID string, dat
 func (m *mockSession) InteractionRespond(_ *discordgo.Interaction, resp *discordgo.InteractionResponse, _ ...discordgo.RequestOption) error {
 	m.interactionResponses = append(m.interactionResponses, resp)
 	return m.interactionErr
+}
+
+func (m *mockSession) MessageReactionAdd(channelID, messageID, emoji string, _ ...discordgo.RequestOption) error {
+	m.addedReactions = append(m.addedReactions, reactionAdd{channelID, messageID, emoji})
+	return m.reactionErr
 }
 
 // --- Mock Bot ---
@@ -164,6 +177,40 @@ func TestClientWrapper_CreateThread_ChunksLongContent(t *testing.T) {
 	r.Len(session.sentMessages, 3)
 	a.Equal(2000, len(session.sentMessages[1].content))
 	a.Equal(500, len(session.sentMessages[2].content))
+}
+
+func TestClientWrapper_AddReaction(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	session := &mockSession{}
+	client := NewDiscordClientWrapper(session)
+
+	// when
+	err := client.AddReaction("chan-1", "msg-123", "👍")
+
+	// then
+	r.NoError(err)
+	r.Len(session.addedReactions, 1)
+	a.Equal("chan-1", session.addedReactions[0].channelID)
+	a.Equal("msg-123", session.addedReactions[0].messageID)
+	a.Equal("👍", session.addedReactions[0].emoji)
+}
+
+func TestClientWrapper_AddReaction_Error(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{reactionErr: assert.AnError}
+	client := NewDiscordClientWrapper(session)
+
+	// when
+	err := client.AddReaction("chan-1", "msg-123", "👍")
+
+	// then
+	a.Error(err)
+	a.Contains(err.Error(), "adding reaction")
 }
 
 // --- Tests: Message detection ---

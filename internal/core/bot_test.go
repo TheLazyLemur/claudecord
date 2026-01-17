@@ -45,6 +45,10 @@ func (m *mockDiscordClient) SendTyping(channelID string) error {
 	return nil
 }
 
+func (m *mockDiscordClient) AddReaction(channelID, messageID, emoji string) error {
+	return nil
+}
+
 type mockPermissionChecker struct {
 	allowAll bool
 	reason   string

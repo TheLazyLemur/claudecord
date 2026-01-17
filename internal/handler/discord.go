@@ -16,6 +16,7 @@ type DiscordSession interface {
 	ChannelTyping(channelID string, options ...discordgo.RequestOption) error
 	MessageThreadStartComplex(channelID, messageID string, data *discordgo.ThreadStart, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
+	MessageReactionAdd(channelID, messageID, emoji string, options ...discordgo.RequestOption) error
 }
 
 // DiscordClientWrapper implements core.DiscordClient using discordgo
@@ -38,6 +39,13 @@ func (c *DiscordClientWrapper) SendMessage(channelID, content string) error {
 
 func (c *DiscordClientWrapper) SendTyping(channelID string) error {
 	return c.session.ChannelTyping(channelID)
+}
+
+func (c *DiscordClientWrapper) AddReaction(channelID, messageID, emoji string) error {
+	if err := c.session.MessageReactionAdd(channelID, messageID, emoji); err != nil {
+		return errors.Wrap(err, "adding reaction")
+	}
+	return nil
 }
 
 func (c *DiscordClientWrapper) CreateThread(channelID, content string) (string, error) {
