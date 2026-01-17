@@ -73,8 +73,6 @@ func (b *Bot) sendUserMessage(proc CLIProcess, content string) error {
 }
 
 func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) error {
-	// messageID available for future use (e.g., MCP handler reactions)
-	_ = messageID
 	recvChan, err := proc.Receive()
 	if err != nil {
 		return errors.Wrap(err, "receiving")
@@ -113,7 +111,7 @@ func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) err
 			}
 
 		case "control_request":
-			if err := b.handleControlRequest(proc, msg); err != nil {
+			if err := b.handleControlRequest(proc, msg, channelID, messageID); err != nil {
 				return errors.Wrap(err, "handling control request")
 			}
 
@@ -157,7 +155,7 @@ func extractTextFromAssistant(msg map[string]any) string {
 	return text
 }
 
-func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any) error {
+func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, channelID, messageID string) error {
 	requestID, _ := msg["request_id"].(string)
 	request, ok := msg["request"].(map[string]any)
 	if !ok {
@@ -165,17 +163,19 @@ func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any) error {
 	}
 
 	subtype, _ := request["subtype"].(string)
-	if subtype != "can_use_tool" {
-		return nil
+	switch subtype {
+	case "can_use_tool":
+		toolName, _ := request["tool_name"].(string)
+		toolUseID, _ := request["tool_use_id"].(string)
+		input, _ := request["input"].(map[string]any)
+		allow, reason := b.perms.Check(toolName, input)
+		return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)
+
+	case "mcp_message":
+		return b.handleMCPMessage(proc, requestID, request, channelID, messageID)
 	}
 
-	toolName, _ := request["tool_name"].(string)
-	toolUseID, _ := request["tool_use_id"].(string)
-	input, _ := request["input"].(map[string]any)
-
-	allow, reason := b.perms.Check(toolName, input)
-
-	return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)
+	return nil
 }
 
 func (b *Bot) sendPermissionResponse(proc CLIProcess, requestID, toolUseID string, allow bool, reason string, input map[string]any) error {
@@ -217,4 +217,97 @@ func (b *Bot) postResponse(channelID, content string) error {
 		return err
 	}
 	return b.discord.SendMessage(channelID, content)
+}
+
+// MCP error codes
+const (
+	mcpErrInvalidRequest = -32600
+	mcpErrMethodNotFound = -32601
+	mcpErrInvalidParams  = -32602
+	mcpErrServerError    = -32000
+)
+
+func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[string]any, channelID, messageID string) error {
+	serverName, _ := request["server_name"].(string)
+	message, _ := request["message"].(map[string]any)
+	jsonrpcID, _ := message["id"].(float64)
+
+	if serverName != "discord-tools" {
+		return b.sendMCPError(proc, requestID, int(jsonrpcID), mcpErrInvalidRequest, "unknown server: "+serverName)
+	}
+
+	method, _ := message["method"].(string)
+	if method != "tools/call" {
+		return b.sendMCPError(proc, requestID, int(jsonrpcID), mcpErrMethodNotFound, "unknown method: "+method)
+	}
+
+	params, _ := message["params"].(map[string]any)
+	return b.handleMCPToolCall(proc, requestID, int(jsonrpcID), params, channelID, messageID)
+}
+
+func (b *Bot) handleMCPToolCall(proc CLIProcess, requestID string, jsonrpcID int, params map[string]any, channelID, messageID string) error {
+	toolName, _ := params["name"].(string)
+	args, _ := params["arguments"].(map[string]any)
+
+	if toolName != "react_emoji" {
+		return b.sendMCPError(proc, requestID, jsonrpcID, mcpErrMethodNotFound, "unknown tool: "+toolName)
+	}
+
+	emoji, ok := args["emoji"].(string)
+	if !ok || emoji == "" {
+		return b.sendMCPError(proc, requestID, jsonrpcID, mcpErrInvalidParams, "missing emoji argument")
+	}
+
+	if err := b.discord.AddReaction(channelID, messageID, emoji); err != nil {
+		return b.sendMCPError(proc, requestID, jsonrpcID, mcpErrServerError, err.Error())
+	}
+
+	return b.sendMCPToolResult(proc, requestID, jsonrpcID, "reaction added")
+}
+
+func (b *Bot) sendMCPToolResult(proc CLIProcess, requestID string, jsonrpcID int, text string) error {
+	resp := map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"subtype":    "success",
+			"request_id": requestID,
+			"response": map[string]any{
+				"jsonrpc": "2.0",
+				"id":      jsonrpcID,
+				"result": map[string]any{
+					"content": []map[string]any{
+						{"type": "text", "text": text},
+					},
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		return errors.Wrap(err, "marshaling MCP result")
+	}
+	return proc.Send(data)
+}
+
+func (b *Bot) sendMCPError(proc CLIProcess, requestID string, jsonrpcID int, code int, message string) error {
+	resp := map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"subtype":    "success",
+			"request_id": requestID,
+			"response": map[string]any{
+				"jsonrpc": "2.0",
+				"id":      jsonrpcID,
+				"error": map[string]any{
+					"code":    code,
+					"message": message,
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		return errors.Wrap(err, "marshaling MCP error")
+	}
+	return proc.Send(data)
 }

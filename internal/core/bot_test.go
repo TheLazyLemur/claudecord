@@ -15,8 +15,10 @@ type mockDiscordClient struct {
 	sentMessages   []sentMessage
 	createdThreads []createdThread
 	typingChannels []string
+	addedReactions []addedReaction
 	sendErr        error
 	threadErr      error
+	reactionErr    error
 	threadID       string
 }
 
@@ -45,8 +47,15 @@ func (m *mockDiscordClient) SendTyping(channelID string) error {
 	return nil
 }
 
+type addedReaction struct {
+	channelID string
+	messageID string
+	emoji     string
+}
+
 func (m *mockDiscordClient) AddReaction(channelID, messageID, emoji string) error {
-	return nil
+	m.addedReactions = append(m.addedReactions, addedReaction{channelID, messageID, emoji})
+	return m.reactionErr
 }
 
 type mockPermissionChecker struct {
@@ -448,4 +457,195 @@ func TestBot_HandleMessage_IgnoresReplayMessages(t *testing.T) {
 	r.NoError(err)
 	r.Len(discord.sentMessages, 1)
 	a.Equal("New response", discord.sentMessages[0].content)
+}
+
+// --- MCP Message Tests ---
+
+func TestBot_HandleMessage_MCPReactEmoji_Success(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	recvChan := make(chan []byte, 3)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	discord := &mockDiscordClient{}
+	perms := &mockPermissionChecker{allowAll: true}
+	bot := NewBot(NewSessionManager(factory), discord, perms)
+
+	mcpReq := `{"type":"control_request","request_id":"mcp-123","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"react_emoji","arguments":{"emoji":"eyes"}}}}}`
+	result := `{"type":"result","subtype":"success","result":"done"}`
+	recvChan <- []byte(mcpReq)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage("chan-1", "msg-1", "react to this")
+
+	// then
+	r.NoError(err)
+	r.Len(discord.addedReactions, 1)
+	a.Equal("chan-1", discord.addedReactions[0].channelID)
+	a.Equal("msg-1", discord.addedReactions[0].messageID)
+	a.Equal("eyes", discord.addedReactions[0].emoji)
+
+	// check MCP success response sent
+	r.Len(proc.sentMessages, 2) // user msg + mcp response
+	var resp map[string]any
+	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
+	a.Equal("control_response", resp["type"])
+	response := resp["response"].(map[string]any)
+	a.Equal("success", response["subtype"])
+	a.Equal("mcp-123", response["request_id"])
+	mcpResp := response["response"].(map[string]any)
+	a.Equal("2.0", mcpResp["jsonrpc"])
+	a.Equal(float64(1), mcpResp["id"])
+	mcpResult := mcpResp["result"].(map[string]any)
+	content := mcpResult["content"].([]any)
+	r.Len(content, 1)
+	block := content[0].(map[string]any)
+	a.Equal("text", block["type"])
+	a.Equal("reaction added", block["text"])
+}
+
+func TestBot_HandleMessage_MCPReactEmoji_UnknownServer(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	recvChan := make(chan []byte, 3)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	discord := &mockDiscordClient{}
+	perms := &mockPermissionChecker{allowAll: true}
+	bot := NewBot(NewSessionManager(factory), discord, perms)
+
+	mcpReq := `{"type":"control_request","request_id":"mcp-123","request":{"subtype":"mcp_message","server_name":"unknown-server","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"react_emoji","arguments":{"emoji":"eyes"}}}}}`
+	result := `{"type":"result","subtype":"success","result":"done"}`
+	recvChan <- []byte(mcpReq)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage("chan-1", "msg-1", "react")
+
+	// then
+	r.NoError(err)
+	a.Len(discord.addedReactions, 0) // no reaction added
+
+	// check MCP error response
+	r.Len(proc.sentMessages, 2)
+	var resp map[string]any
+	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
+	response := resp["response"].(map[string]any)
+	a.Equal("success", response["subtype"])
+	mcpResp := response["response"].(map[string]any)
+	mcpErr := mcpResp["error"].(map[string]any)
+	a.Equal(float64(-32600), mcpErr["code"]) // invalid request
+	a.Contains(mcpErr["message"], "unknown server")
+}
+
+func TestBot_HandleMessage_MCPReactEmoji_UnknownTool(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	recvChan := make(chan []byte, 3)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	discord := &mockDiscordClient{}
+	perms := &mockPermissionChecker{allowAll: true}
+	bot := NewBot(NewSessionManager(factory), discord, perms)
+
+	mcpReq := `{"type":"control_request","request_id":"mcp-123","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"unknown_tool","arguments":{}}}}}`
+	result := `{"type":"result","subtype":"success","result":"done"}`
+	recvChan <- []byte(mcpReq)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage("chan-1", "msg-1", "call unknown")
+
+	// then
+	r.NoError(err)
+
+	// check MCP error response
+	r.Len(proc.sentMessages, 2)
+	var resp map[string]any
+	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
+	response := resp["response"].(map[string]any)
+	mcpResp := response["response"].(map[string]any)
+	mcpErr := mcpResp["error"].(map[string]any)
+	a.Equal(float64(-32601), mcpErr["code"]) // method not found
+	a.Contains(mcpErr["message"], "unknown tool")
+}
+
+func TestBot_HandleMessage_MCPReactEmoji_MissingEmoji(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	recvChan := make(chan []byte, 3)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	discord := &mockDiscordClient{}
+	perms := &mockPermissionChecker{allowAll: true}
+	bot := NewBot(NewSessionManager(factory), discord, perms)
+
+	mcpReq := `{"type":"control_request","request_id":"mcp-123","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"react_emoji","arguments":{}}}}}`
+	result := `{"type":"result","subtype":"success","result":"done"}`
+	recvChan <- []byte(mcpReq)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage("chan-1", "msg-1", "react without emoji")
+
+	// then
+	r.NoError(err)
+
+	// check MCP error response
+	r.Len(proc.sentMessages, 2)
+	var resp map[string]any
+	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
+	response := resp["response"].(map[string]any)
+	mcpResp := response["response"].(map[string]any)
+	mcpErr := mcpResp["error"].(map[string]any)
+	a.Equal(float64(-32602), mcpErr["code"]) // invalid params
+	a.Contains(mcpErr["message"], "missing emoji")
+}
+
+func TestBot_HandleMessage_MCPReactEmoji_DiscordError(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	recvChan := make(chan []byte, 3)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	discord := &mockDiscordClient{reactionErr: errors.New("discord API error")}
+	perms := &mockPermissionChecker{allowAll: true}
+	bot := NewBot(NewSessionManager(factory), discord, perms)
+
+	mcpReq := `{"type":"control_request","request_id":"mcp-123","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"react_emoji","arguments":{"emoji":"eyes"}}}}}`
+	result := `{"type":"result","subtype":"success","result":"done"}`
+	recvChan <- []byte(mcpReq)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage("chan-1", "msg-1", "react")
+
+	// then
+	r.NoError(err)
+
+	// check MCP error response
+	r.Len(proc.sentMessages, 2)
+	var resp map[string]any
+	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
+	response := resp["response"].(map[string]any)
+	mcpResp := response["response"].(map[string]any)
+	mcpErr := mcpResp["error"].(map[string]any)
+	a.Equal(float64(-32000), mcpErr["code"]) // server error
+	a.Contains(mcpErr["message"], "discord API error")
 }
