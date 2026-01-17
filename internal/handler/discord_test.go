@@ -79,11 +79,12 @@ type mockBot struct {
 
 type handledMsg struct {
 	channelID string
+	messageID string
 	message   string
 }
 
-func (m *mockBot) HandleMessage(channelID, message string) error {
-	m.handledMessages = append(m.handledMessages, handledMsg{channelID, message})
+func (m *mockBot) HandleMessage(channelID, messageID, message string) error {
+	m.handledMessages = append(m.handledMessages, handledMsg{channelID, messageID, message})
 	return m.handleErr
 }
 
@@ -386,6 +387,7 @@ func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
 	// then
 	r.Len(bot.handledMessages, 1)
 	a.Equal("chan-1", bot.handledMessages[0].channelID)
+	a.Equal("msg-1", bot.handledMessages[0].messageID)
 	a.Equal("do something", bot.handledMessages[0].message)
 }
 
@@ -457,6 +459,7 @@ func TestHandler_OnMessageCreate_AllowedUser_Processes(t *testing.T) {
 	// then
 	r.Len(bot.handledMessages, 1)
 	a.Equal("chan-1", bot.handledMessages[0].channelID)
+	a.Equal("msg-1", bot.handledMessages[0].messageID)
 	a.Equal("do something", bot.handledMessages[0].message)
 }
 

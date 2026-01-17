@@ -83,7 +83,7 @@ func (c *DiscordClientWrapper) CreateThread(channelID, content string) (string, 
 
 // BotInterface defines what the Handler needs from Bot
 type BotInterface interface {
-	HandleMessage(channelID, message string) error
+	HandleMessage(channelID, messageID, message string) error
 	NewSession(workDir string) error
 }
 
@@ -132,7 +132,7 @@ func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		return
 	}
 
-	if err := h.bot.HandleMessage(m.ChannelID, msg); err != nil {
+	if err := h.bot.HandleMessage(m.ChannelID, m.Message.ID, msg); err != nil {
 		slog.Error("handling message", "error", err)
 	}
 }

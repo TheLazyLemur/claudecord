@@ -126,7 +126,7 @@ func TestBot_HandleMessage_SendsTypingIndicator(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hello")
+	err := bot.HandleMessage("chan-1", "msg-1", "hello")
 
 	// then
 	r.NoError(err)
@@ -150,7 +150,7 @@ func TestBot_HandleMessage_SendsUserMessageToCLI(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "test message")
+	err := bot.HandleMessage("chan-1", "msg-1", "test message")
 
 	// then
 	r.NoError(err)
@@ -184,7 +184,7 @@ func TestBot_HandleMessage_PostsAssistantTextToDiscord(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hi")
+	err := bot.HandleMessage("chan-1", "msg-1", "hi")
 
 	// then
 	r.NoError(err)
@@ -217,7 +217,7 @@ func TestBot_HandleMessage_CreatesThreadForLongResponse(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hi")
+	err := bot.HandleMessage("chan-1", "msg-1", "hi")
 
 	// then
 	r.NoError(err)
@@ -248,7 +248,7 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Allow(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "write file")
+	err := bot.HandleMessage("chan-1", "msg-1", "write file")
 
 	// then
 	r.NoError(err)
@@ -291,7 +291,7 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Deny(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "delete everything")
+	err := bot.HandleMessage("chan-1", "msg-1", "delete everything")
 
 	// then
 	r.NoError(err)
@@ -326,7 +326,7 @@ func TestBot_HandleMessage_ConcatenatesMultipleTextBlocks(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hi")
+	err := bot.HandleMessage("chan-1", "msg-1", "hi")
 
 	// then
 	r.NoError(err)
@@ -342,7 +342,7 @@ func TestBot_HandleMessage_SessionError(t *testing.T) {
 	bot := NewBot(NewSessionManager(factory), discord, perms)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hello")
+	err := bot.HandleMessage("chan-1", "msg-1", "hello")
 
 	// then
 	assert.Error(t, err)
@@ -360,7 +360,7 @@ func TestBot_HandleMessage_SendError(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hello")
+	err := bot.HandleMessage("chan-1", "msg-1", "hello")
 
 	// then
 	assert.Error(t, err)
@@ -381,7 +381,7 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 
 	// create initial session
 	close(proc1.recvChan)
-	_ = bot.HandleMessage("chan-1", "init")
+	_ = bot.HandleMessage("chan-1", "msg-1", "init")
 	factory.process = proc2
 
 	// when
@@ -412,7 +412,7 @@ func TestBot_HandleMessage_NoResponseIfNoText(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hi")
+	err := bot.HandleMessage("chan-1", "msg-1", "hi")
 
 	// then
 	r.NoError(err)
@@ -442,7 +442,7 @@ func TestBot_HandleMessage_IgnoresReplayMessages(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "hi")
+	err := bot.HandleMessage("chan-1", "msg-1", "hi")
 
 	// then
 	r.NoError(err)

@@ -28,7 +28,7 @@ func NewBot(sessions *SessionManager, discord DiscordClient, perms PermissionChe
 }
 
 // HandleMessage processes a Discord message, sends to CLI, handles responses
-func (b *Bot) HandleMessage(channelID, userMessage string) error {
+func (b *Bot) HandleMessage(channelID, messageID, userMessage string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -48,7 +48,7 @@ func (b *Bot) HandleMessage(channelID, userMessage string) error {
 	}
 	slog.Info("sent user message, processing responses")
 
-	return b.processResponses(proc, channelID)
+	return b.processResponses(proc, channelID, messageID)
 }
 
 // NewSession starts a fresh CLI session with optional working directory
@@ -72,7 +72,9 @@ func (b *Bot) sendUserMessage(proc CLIProcess, content string) error {
 	return proc.Send(data)
 }
 
-func (b *Bot) processResponses(proc CLIProcess, channelID string) error {
+func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) error {
+	// messageID available for future use (e.g., MCP handler reactions)
+	_ = messageID
 	recvChan, err := proc.Receive()
 	if err != nil {
 		return errors.Wrap(err, "receiving")
