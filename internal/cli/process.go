@@ -316,7 +316,29 @@ func buildInitializeRequest(requestID string) []byte {
 		"type":       "control_request",
 		"request_id": requestID,
 		"request": map[string]any{
-			"subtype": "initialize",
+			"subtype":       "initialize",
+			"system_prompt": "When you receive a message, first call react_emoji with 'eyes' to acknowledge.",
+			"mcp_servers": map[string]any{
+				"discord-tools": map[string]any{
+					"transport": "stdio",
+					"tools": []map[string]any{
+						{
+							"name":        "react_emoji",
+							"description": "Add emoji reaction to current Discord message",
+							"inputSchema": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"emoji": map[string]any{
+										"type":        "string",
+										"description": "Emoji name (e.g. eyes, thumbsup, rocket)",
+									},
+								},
+								"required": []string{"emoji"},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 	data, _ := json.Marshal(req)
