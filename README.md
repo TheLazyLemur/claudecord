@@ -17,15 +17,18 @@ Discord bot that integrates Claude Code CLI via the stdio protocol.
 
 ## Configuration
 
-Set environment variables:
+Set environment variables in `.env`:
 
 ```
 DISCORD_TOKEN=your_bot_token
-BOT_ID=your_bot_user_id
 ALLOWED_DIRS=/path/to/dir1,/path/to/dir2
+ALLOWED_USERS=discord_user_id1,discord_user_id2
 ```
 
-`ALLOWED_DIRS` restricts which directories Claude can access (applied recursively).
+- `ALLOWED_DIRS` - directories Claude can access (applied recursively)
+- `ALLOWED_USERS` - Discord user IDs allowed to use the bot
+
+Uses direnv (`.envrc`) to auto-load `.env`.
 
 ## Usage
 

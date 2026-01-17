@@ -4,7 +4,7 @@ Discord bot integrating Claude Code CLI via stdio protocol.
 
 ## What It Is
 
-- Single-user, single-server Discord bot (user-restricted via `allowed_users.json`)
+- Single-user, single-server Discord bot (user-restricted via `ALLOWED_USERS` env var)
 - `@claude` as first word triggers bot
 - `/new-session` starts fresh session, subsequent `@claude` continues it
 - Uses Claude CLI's built-in session management (no disk persistence)
@@ -35,10 +35,8 @@ Hexagonal with simplified layout:
 Env vars:
 - `DISCORD_TOKEN` - Discord bot token (required)
 - `ALLOWED_DIRS` - Comma-separated list of allowed directories (required)
+- `ALLOWED_USERS` - Comma-separated Discord user IDs allowed to use bot (required)
 - `CLAUDE_CWD` - Default working directory for Claude CLI (optional, defaults to first allowed dir)
-
-Config file (project root):
-- `allowed_users.json` - JSON array of Discord user IDs allowed to use the bot (required). Empty list denies all users. Example: `["123456789", "987654321"]`
 
 ## Coding Rules
 

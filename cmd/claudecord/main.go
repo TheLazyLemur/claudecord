@@ -4,12 +4,12 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/cli"
-	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/bwmarrin/discordgo"
@@ -108,10 +108,17 @@ func run() error {
 
 	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
 
-	// load allowed users config
-	allowedUsers, err := config.LoadAllowedUsers()
-	if err != nil {
-		return errors.Wrap(err, "loading allowed users config")
+	// parse allowed users (required)
+	allowedUsersStr := os.Getenv("ALLOWED_USERS")
+	if allowedUsersStr == "" {
+		return errors.New("ALLOWED_USERS required")
+	}
+	allowedUsers := strings.Split(allowedUsersStr, ",")
+	for i := range allowedUsers {
+		allowedUsers[i] = strings.TrimSpace(allowedUsers[i])
+		if _, err := strconv.ParseUint(allowedUsers[i], 10, 64); err != nil {
+			return errors.Errorf("invalid user ID %q: must be numeric", allowedUsers[i])
+		}
 	}
 
 	// now create handler with botID and allowed users
