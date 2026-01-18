@@ -41,6 +41,17 @@ func (f *cliProcessFactory) isAllowed(path string) bool {
 	return false
 }
 
+type passiveCLIProcessFactory struct {
+	defaultWorkDir string
+}
+
+func (f *passiveCLIProcessFactory) Create(resumeSessionID, workDir string) (core.CLIProcess, error) {
+	if workDir == "" {
+		workDir = f.defaultWorkDir
+	}
+	return cli.NewProcessWithSystemPrompt(workDir, resumeSessionID, initTimeout, core.PassiveSystemPrompt())
+}
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("fatal", "error", err)
@@ -68,6 +79,13 @@ func run() error {
 	discordClient := handler.NewDiscordClientWrapper(dg)
 	bot := core.NewBot(sessionMgr, discordClient, permChecker)
 
+	// create passive bot for auto-help feature
+	roPermChecker := cli.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
+	passiveSessionMgr := core.NewSessionManager(&passiveCLIProcessFactory{
+		defaultWorkDir: cfg.ClaudeCWD,
+	})
+	passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPermChecker)
+
 	// need intents for message content
 	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
 
@@ -92,8 +110,8 @@ func run() error {
 
 	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
 
-	// create handler with botID and allowed users
-	h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers)
+	// create handler with botID, allowed users, and passive bot
+	h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers, passiveBot)
 	dg.AddHandler(h.OnMessageCreate)
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		h.OnInteractionCreate(s, i)

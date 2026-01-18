@@ -3,7 +3,9 @@ package handler
 import (
 	"log/slog"
 	"strings"
+	"time"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 )
@@ -92,20 +94,42 @@ type BotInterface interface {
 	NewSession(workDir string) error
 }
 
-// Handler handles Discord events
-type Handler struct {
-	bot         BotInterface
-	botID       string
-	allowedUsers []string
+// PassiveBotInterface defines what the Handler needs from PassiveBot
+type PassiveBotInterface interface {
+	NewSession() error
 }
 
-// NewHandler creates a new Handler
-func NewHandler(bot BotInterface, botID string, allowedUsers []string) *Handler {
-	return &Handler{
-		bot:         bot,
-		botID:       botID,
+// Handler handles Discord events
+type Handler struct {
+	bot          BotInterface
+	botID        string
+	allowedUsers []string
+	passiveBot   PassiveBotInterface
+	buffer       *core.DebouncedBuffer
+}
+
+// PassiveBotWithHandler wraps PassiveBotInterface and adds HandleBufferedMessages
+type PassiveBotWithHandler interface {
+	PassiveBotInterface
+	HandleBufferedMessages(channelID string, msgs []core.BufferedMessage) error
+}
+
+// NewHandler creates a new Handler. passiveBot is optional (can be nil).
+func NewHandler(bot BotInterface, botID string, allowedUsers []string, passiveBot ...PassiveBotWithHandler) *Handler {
+	h := &Handler{
+		bot:          bot,
+		botID:        botID,
 		allowedUsers: allowedUsers,
 	}
+	if len(passiveBot) > 0 && passiveBot[0] != nil {
+		h.passiveBot = passiveBot[0]
+		h.buffer = core.NewDebouncedBuffer(30*time.Second, func(channelID string, msgs []core.BufferedMessage) {
+			if err := passiveBot[0].HandleBufferedMessages(channelID, msgs); err != nil {
+				slog.Error("passive bot error", "error", err)
+			}
+		})
+	}
+	return h
 }
 
 // isUserAllowed checks if a user is in the allowed users list
@@ -150,12 +174,25 @@ func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 
 	msg, ok := ExtractClaudeMention(m.Content, m.Mentions, h.botID)
 	slog.Info("mention check", "extracted", msg, "ok", ok)
-	if !ok {
+	if ok {
+		// @claude mention - handle immediately, clear buffer for this channel
+		if h.buffer != nil {
+			h.buffer.ClearChannel(m.ChannelID)
+		}
+		if err := h.bot.HandleMessage(m.ChannelID, m.Message.ID, msg); err != nil {
+			slog.Error("handling message", "error", err)
+		}
 		return
 	}
 
-	if err := h.bot.HandleMessage(m.ChannelID, m.Message.ID, msg); err != nil {
-		slog.Error("handling message", "error", err)
+	// no mention - accumulate for passive help if enabled
+	if h.buffer != nil {
+		h.buffer.Add(core.BufferedMessage{
+			ChannelID: m.ChannelID,
+			MessageID: m.Message.ID,
+			Content:   m.Content,
+			AuthorID:  m.Author.ID,
+		})
 	}
 }
 
@@ -225,6 +262,12 @@ func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.Interaction
 
 		if err := h.bot.NewSession(dir); err != nil {
 			slog.Error("creating new session", "error", err)
+		}
+		// reset passive session too
+		if h.passiveBot != nil {
+			if err := h.passiveBot.NewSession(); err != nil {
+				slog.Error("resetting passive session", "error", err)
+			}
 		}
 	}
 }

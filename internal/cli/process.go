@@ -86,10 +86,16 @@ type Process struct {
 // NewProcess spawns the claude CLI and performs the initialize handshake.
 func NewProcess(workingDir, resumeSessionID string, initTimeout time.Duration) (*Process, error) {
 	spawner := NewRealProcessSpawner(workingDir, resumeSessionID)
-	return newProcessWithSpawner(spawner, workingDir, resumeSessionID, initTimeout)
+	return newProcessWithSpawner(spawner, initTimeout, "")
 }
 
-func newProcessWithSpawner(spawner ProcessSpawner, workingDir, resumeSessionID string, initTimeout time.Duration) (*Process, error) {
+// NewProcessWithSystemPrompt spawns the claude CLI with a custom system prompt.
+func NewProcessWithSystemPrompt(workingDir, resumeSessionID string, initTimeout time.Duration, systemPrompt string) (*Process, error) {
+	spawner := NewRealProcessSpawner(workingDir, resumeSessionID)
+	return newProcessWithSpawner(spawner, initTimeout, systemPrompt)
+}
+
+func newProcessWithSpawner(spawner ProcessSpawner, initTimeout time.Duration, systemPrompt string) (*Process, error) {
 	stdin, err := spawner.StdinPipe()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting stdin pipe")
@@ -111,7 +117,7 @@ func newProcessWithSpawner(spawner ProcessSpawner, workingDir, resumeSessionID s
 		done:    make(chan struct{}),
 	}
 
-	if err := proc.initialize(initTimeout); err != nil {
+	if err := proc.initialize(initTimeout, systemPrompt); err != nil {
 		spawner.Kill()
 		return nil, errors.Wrap(err, "initializing session")
 	}
@@ -119,30 +125,11 @@ func newProcessWithSpawner(spawner ProcessSpawner, workingDir, resumeSessionID s
 	return proc, nil
 }
 
-func newProcessWithSpawnerAndArgs(spawner interface {
-	ProcessSpawner
-	SetArgs([]string)
-}, workingDir, resumeSessionID string, initTimeout time.Duration) (*Process, error) {
-	args := []string{
-		"-p",
-		"--verbose",
-		"--input-format", "stream-json",
-		"--output-format", "stream-json",
-		"--permission-prompt-tool", "stdio",
-	}
-	if resumeSessionID != "" {
-		args = append(args, "--resume", resumeSessionID)
-	}
-	spawner.SetArgs(args)
-
-	return newProcessWithSpawner(spawner, workingDir, resumeSessionID, initTimeout)
-}
-
-func (p *Process) initialize(timeout time.Duration) error {
+func (p *Process) initialize(timeout time.Duration, systemPrompt string) error {
 	slog.Info("CLI initialize: sending init request")
 	// Send initialize request
 	reqID := fmt.Sprintf("init-%d", time.Now().UnixNano())
-	initMsg := buildInitializeRequest(reqID)
+	initMsg := buildInitializeRequest(reqID, systemPrompt)
 	if _, err := p.stdin.Write(append(initMsg, '\n')); err != nil {
 		return errors.Wrap(err, "sending initialize request")
 	}
@@ -355,17 +342,20 @@ func (p *Process) SessionID() string {
 	return p.sessionID
 }
 
-func buildInitializeRequest(requestID string) []byte {
+func buildInitializeRequest(requestID, systemPrompt string) []byte {
+	prompt := systemPrompt
+	if prompt == "" {
+		prompt = "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates to a thread."
+	}
 	req := map[string]any{
 		"type":       "control_request",
 		"request_id": requestID,
 		"request": map[string]any{
 			"subtype":       "initialize",
-			"systemPrompt":  "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates to a thread.",
+			"systemPrompt":  prompt,
 			"sdkMcpServers": []string{"discord-tools"},
 		},
 	}
 	data, _ := json.Marshal(req)
 	return data
 }
-

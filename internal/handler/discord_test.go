@@ -3,6 +3,7 @@ package handler
 import (
 	"testing"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/bwmarrin/discordgo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,18 +12,18 @@ import (
 // --- Mock discordgo session ---
 
 type mockSession struct {
-	sentMessages          []sentMsg
-	typingChannels        []string
-	createdThreads        []threadCreate
-	threadMessages        []sentMsg
-	interactionResponses  []*discordgo.InteractionResponse
-	addedReactions        []reactionAdd
-	sendErr               error
-	threadErr             error
-	threadMsgErr          error
-	interactionErr        error
-	reactionErr           error
-	createdThreadID       string
+	sentMessages         []sentMsg
+	typingChannels       []string
+	createdThreads       []threadCreate
+	threadMessages       []sentMsg
+	interactionResponses []*discordgo.InteractionResponse
+	addedReactions       []reactionAdd
+	sendErr              error
+	threadErr            error
+	threadMsgErr         error
+	interactionErr       error
+	reactionErr          error
+	createdThreadID      string
 }
 
 type reactionAdd struct {
@@ -309,7 +310,7 @@ func TestHandler_isUserAllowed_AllowedUser(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123", "user-456"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	// when
 	result := h.isUserAllowed("user-123")
@@ -783,7 +784,7 @@ func TestHandler_OnInteractionCreate_Ping_Unrestricted(t *testing.T) {
 	session := &mockSession{}
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -804,4 +805,153 @@ func TestHandler_OnInteractionCreate_Ping_Unrestricted(t *testing.T) {
 	a.Equal(0, bot.newSessionCalls)
 	a.Len(session.interactionResponses, 1)
 	a.Equal("pong!", session.interactionResponses[0].Data.Content)
+}
+
+// --- Passive Help Tests ---
+
+func TestHandler_OnMessageCreate_AccumulatesForPassiveHelp(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	passiveBot := &mockPassiveBot{}
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "how do I parse JSON?",
+			Author:    &discordgo.User{ID: "user-1"},
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then - should not immediately call bot (no mention)
+	a.Len(bot.handledMessages, 0)
+	// message should be buffered for passive help
+	a.True(passiveBot.lastAccumulated != nil || h.buffer != nil)
+}
+
+func TestHandler_OnMessageCreate_MentionBypassesAccumulation(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	bot := &mockBot{}
+	passiveBot := &mockPassiveBot{}
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "<@bot-123> do something",
+			Author:    &discordgo.User{ID: "user-1"},
+			Mentions:  []*discordgo.User{{ID: "bot-123"}},
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then - should immediately call bot
+	r.Len(bot.handledMessages, 1)
+	a.Equal("do something", bot.handledMessages[0].message)
+}
+
+func TestHandler_OnMessageCreate_ExcludesBotMessages(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	passiveBot := &mockPassiveBot{}
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "I am a bot",
+			Author:    &discordgo.User{ID: "some-bot", Bot: true},
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then - bot messages should not be accumulated
+	a.Len(bot.handledMessages, 0)
+}
+
+func TestHandler_OnMessageCreate_ExcludesDisallowedUsers(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	bot := &mockBot{}
+	passiveBot := &mockPassiveBot{}
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg-1",
+			ChannelID: "chan-1",
+			Content:   "how do I parse JSON?",
+			Author:    &discordgo.User{ID: "user-999"}, // not allowed
+		},
+	}
+
+	// when
+	h.OnMessageCreate(nil, msg)
+
+	// then - should not accumulate for disallowed users
+	a.Len(bot.handledMessages, 0)
+}
+
+func TestHandler_NewSession_ResetsBothSessions(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	session := &mockSession{}
+	bot := &mockBot{}
+	passiveBot := &mockPassiveBot{}
+	h := NewHandler(bot, "bot-123", []string{"user-123"}, passiveBot)
+
+	interaction := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "new-session",
+			},
+			Member: &discordgo.Member{
+				User: &discordgo.User{ID: "user-123"},
+			},
+		},
+	}
+
+	// when
+	h.OnInteractionCreate(session, interaction)
+
+	// then
+	a.Equal(1, bot.newSessionCalls)
+	a.Equal(1, passiveBot.newSessionCalls)
+}
+
+type mockPassiveBot struct {
+	lastAccumulated []core.BufferedMessage
+	newSessionCalls int
+	newSessionErr   error
+	handleErr       error
+}
+
+func (m *mockPassiveBot) NewSession() error {
+	m.newSessionCalls++
+	return m.newSessionErr
+}
+
+func (m *mockPassiveBot) HandleBufferedMessages(channelID string, msgs []core.BufferedMessage) error {
+	m.lastAccumulated = msgs
+	return m.handleErr
 }

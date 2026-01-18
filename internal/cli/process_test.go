@@ -139,8 +139,8 @@ func TestBuildInitializeRequest(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
-	// when
-	msg := buildInitializeRequest("req-123")
+	// when - empty system prompt uses default
+	msg := buildInitializeRequest("req-123", "")
 
 	// then
 	var parsed map[string]any
@@ -153,6 +153,21 @@ func TestBuildInitializeRequest(t *testing.T) {
 	a.Equal("initialize", req["subtype"])
 }
 
+func TestBuildInitializeRequest_CustomPrompt(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// when - custom system prompt
+	msg := buildInitializeRequest("req-456", "custom prompt")
+
+	// then
+	var parsed map[string]any
+	err := json.Unmarshal(msg, &parsed)
+	r.NoError(err)
+
+	req := parsed["request"].(map[string]any)
+	a.Equal("custom prompt", req["systemPrompt"])
+}
 
 // ProcessSpawner interface for testing
 type MockProcessSpawner struct {
@@ -211,7 +226,7 @@ func TestNewProcess_InitializesSession(t *testing.T) {
 	}()
 
 	// when
-	proc, err := newProcessWithSpawner(spawner, "/tmp", "", 5*time.Second)
+	proc, err := newProcessWithSpawner(spawner, 5*time.Second, "")
 
 	// then
 	r.NoError(err)
@@ -219,69 +234,15 @@ func TestNewProcess_InitializesSession(t *testing.T) {
 	a.True(spawner.started)
 }
 
-func TestNewProcess_ResumeSession(t *testing.T) {
+func TestNewRealProcessSpawner_ResumeSession(t *testing.T) {
 	a := assert.New(t)
-	r := require.New(t)
 
-	// given
-	stdinReader, stdinWriter := io.Pipe()
-	stdoutReader, stdoutWriter := io.Pipe()
+	// when - spawner is created with resume session ID
+	spawner := NewRealProcessSpawner("/tmp", "existing-session-id")
 
-	var capturedArgs []string
-	spawner := &MockProcessSpawnerWithArgs{
-		stdinWriter:  stdinWriter,
-		stdoutReader: stdoutReader,
-		argsCapture:  &capturedArgs,
-	}
-
-	// simulate CLI responses
-	go func() {
-		reader := bufio.NewReader(stdinReader)
-		reader.ReadString('\n')
-		stdoutWriter.Write([]byte(`{"type":"control_response","response":{"subtype":"success"}}` + "\n"))
-		stdoutWriter.Write([]byte(`{"type":"system","subtype":"init","session_id":"resumed-session"}` + "\n"))
-	}()
-
-	// when
-	proc, err := newProcessWithSpawnerAndArgs(spawner, "/tmp", "existing-session-id", 5*time.Second)
-
-	// then
-	r.NoError(err)
-	a.Empty(proc.SessionID()) // session_id comes later with system.init, not during init
-	a.Contains(strings.Join(capturedArgs, " "), "--resume")
-	a.Contains(strings.Join(capturedArgs, " "), "existing-session-id")
-}
-
-type MockProcessSpawnerWithArgs struct {
-	stdinWriter  io.WriteCloser
-	stdoutReader io.Reader
-	argsCapture  *[]string
-	started      bool
-}
-
-func (m *MockProcessSpawnerWithArgs) Start() error {
-	m.started = true
-	return nil
-}
-
-func (m *MockProcessSpawnerWithArgs) StdinPipe() (io.WriteCloser, error) {
-	return m.stdinWriter, nil
-}
-
-func (m *MockProcessSpawnerWithArgs) StdoutPipe() (io.Reader, error) {
-	return m.stdoutReader, nil
-}
-
-func (m *MockProcessSpawnerWithArgs) Kill() error {
-	return nil
-}
-
-func (m *MockProcessSpawnerWithArgs) Wait() error {
-	return nil
-}
-
-func (m *MockProcessSpawnerWithArgs) SetArgs(args []string) {
-	*m.argsCapture = args
+	// then - command args should include --resume
+	a.Contains(strings.Join(spawner.cmd.Args, " "), "--resume")
+	a.Contains(strings.Join(spawner.cmd.Args, " "), "existing-session-id")
 }
 
 func TestProcess_ReceiveReturnsSameChannel(t *testing.T) {
