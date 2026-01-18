@@ -4,12 +4,12 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/cli"
+	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/bwmarrin/discordgo"
@@ -49,34 +49,18 @@ func main() {
 }
 
 func run() error {
-	// read required env vars
-	discordToken := os.Getenv("DISCORD_TOKEN")
-	if discordToken == "" {
-		return errors.New("DISCORD_TOKEN required")
-	}
-
-	allowedDirsStr := os.Getenv("ALLOWED_DIRS")
-	if allowedDirsStr == "" {
-		return errors.New("ALLOWED_DIRS required")
-	}
-
-	allowedDirs := strings.Split(allowedDirsStr, ",")
-	for i := range allowedDirs {
-		allowedDirs[i] = strings.TrimSpace(allowedDirs[i])
-	}
-
-	claudeCwd := os.Getenv("CLAUDE_CWD")
-	if claudeCwd == "" {
-		claudeCwd = allowedDirs[0]
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		return err
 	}
 
 	// create dependencies
-	permChecker := cli.NewPermissionChecker(allowedDirs)
-	processFactory := &cliProcessFactory{defaultWorkDir: claudeCwd, allowedDirs: allowedDirs}
+	permChecker := cli.NewPermissionChecker(cfg.AllowedDirs)
+	processFactory := &cliProcessFactory{defaultWorkDir: cfg.ClaudeCWD, allowedDirs: cfg.AllowedDirs}
 	sessionMgr := core.NewSessionManager(processFactory)
 
 	// create discord session
-	dg, err := discordgo.New("Bot " + discordToken)
+	dg, err := discordgo.New("Bot " + cfg.DiscordToken)
 	if err != nil {
 		return errors.Wrap(err, "creating discord session")
 	}
@@ -108,21 +92,8 @@ func run() error {
 
 	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
 
-	// parse allowed users (required)
-	allowedUsersStr := os.Getenv("ALLOWED_USERS")
-	if allowedUsersStr == "" {
-		return errors.New("ALLOWED_USERS required")
-	}
-	allowedUsers := strings.Split(allowedUsersStr, ",")
-	for i := range allowedUsers {
-		allowedUsers[i] = strings.TrimSpace(allowedUsers[i])
-		if _, err := strconv.ParseUint(allowedUsers[i], 10, 64); err != nil {
-			return errors.Errorf("invalid user ID %q: must be numeric", allowedUsers[i])
-		}
-	}
-
-	// now create handler with botID and allowed users
-	h := handler.NewHandler(bot, dg.State.User.ID, allowedUsers)
+	// create handler with botID and allowed users
+	h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers)
 	dg.AddHandler(h.OnMessageCreate)
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		h.OnInteractionCreate(s, i)
