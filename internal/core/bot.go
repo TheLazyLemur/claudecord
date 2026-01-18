@@ -221,8 +221,8 @@ func (b *Bot) postResponse(channelID, content string) error {
 	return b.discord.SendMessage(channelID, content)
 }
 
-// MCP tool definitions
-var mcpTools = []map[string]any{
+// MCPTools defines the MCP tool schema for discord-tools server
+var MCPTools = []map[string]any{
 	{
 		"name":        "react_emoji",
 		"description": "Add emoji reaction to current Discord message. Call this first when you receive a message.",
@@ -276,7 +276,7 @@ func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[st
 	case "notifications/initialized":
 		result = map[string]any{}
 	case "tools/list":
-		result = map[string]any{"tools": mcpTools}
+		result = map[string]any{"tools": MCPTools}
 	case "tools/call":
 		params, _ := message["params"].(map[string]any)
 		return b.handleMCPToolCall(proc, requestID, jsonrpcID, params, channelID, messageID, threadID)

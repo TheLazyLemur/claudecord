@@ -16,38 +16,6 @@ import (
 
 var _ core.CLIProcess = (*Process)(nil)
 
-// MCP tool definitions for discord-tools server
-var mcpTools = []map[string]any{
-	{
-		"name":        "react_emoji",
-		"description": "Add emoji reaction to current Discord message. Call this first when you receive a message.",
-		"inputSchema": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"emoji": map[string]any{
-					"type":        "string",
-					"description": "Unicode emoji character (e.g. 👀, 👍, 🚀)",
-				},
-			},
-			"required": []string{"emoji"},
-		},
-	},
-	{
-		"name":        "send_update",
-		"description": "Send a progress update message to a thread on the original Discord message. Use this to keep the user informed about what you're doing.",
-		"inputSchema": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"message": map[string]any{
-					"type":        "string",
-					"description": "The update message to send",
-				},
-			},
-			"required": []string{"message"},
-		},
-	},
-}
-
 // ProcessSpawner abstracts process creation for testing
 type ProcessSpawner interface {
 	Start() error
@@ -262,7 +230,7 @@ func (p *Process) handleInitMCP(msg map[string]any) error {
 	case "notifications/initialized":
 		result = map[string]any{}
 	case "tools/list":
-		result = map[string]any{"tools": mcpTools}
+		result = map[string]any{"tools": core.MCPTools}
 	default:
 		result = map[string]any{}
 	}
@@ -385,21 +353,6 @@ func (p *Process) Close() error {
 
 func (p *Process) SessionID() string {
 	return p.sessionID
-}
-
-func extractSessionID(msg []byte) (string, error) {
-	var m struct {
-		Type      string `json:"type"`
-		Subtype   string `json:"subtype"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(msg, &m); err != nil {
-		return "", err
-	}
-	if m.Type == "system" && m.Subtype == "init" {
-		return m.SessionID, nil
-	}
-	return "", nil
 }
 
 func buildInitializeRequest(requestID string) []byte {

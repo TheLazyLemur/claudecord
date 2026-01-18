@@ -31,10 +31,7 @@ func NewDiscordClientWrapper(session DiscordSession) *DiscordClientWrapper {
 
 func (c *DiscordClientWrapper) SendMessage(channelID, content string) error {
 	_, err := c.session.ChannelMessageSend(channelID, content)
-	if err != nil {
-		return errors.Wrap(err, "sending message")
-	}
-	return nil
+	return errors.Wrap(err, "sending message")
 }
 
 func (c *DiscordClientWrapper) SendTyping(channelID string) error {
@@ -42,10 +39,7 @@ func (c *DiscordClientWrapper) SendTyping(channelID string) error {
 }
 
 func (c *DiscordClientWrapper) AddReaction(channelID, messageID, emoji string) error {
-	if err := c.session.MessageReactionAdd(channelID, messageID, emoji); err != nil {
-		return errors.Wrap(err, "adding reaction")
-	}
-	return nil
+	return errors.Wrap(c.session.MessageReactionAdd(channelID, messageID, emoji), "adding reaction")
 }
 
 func (c *DiscordClientWrapper) StartThread(channelID, messageID, name string) (string, error) {
@@ -124,6 +118,23 @@ func (h *Handler) isUserAllowed(userID string) bool {
 	return false
 }
 
+// getInteractionUser extracts user from interaction (guild or DM)
+func getInteractionUser(i *discordgo.InteractionCreate) *discordgo.User {
+	if i.Interaction.Member != nil {
+		return i.Interaction.Member.User
+	}
+	return i.Interaction.User
+}
+
+func (h *Handler) respondError(s DiscordSession, i *discordgo.InteractionCreate, msg string) {
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: msg},
+	}); err != nil {
+		slog.Error("responding to interaction", "error", err)
+	}
+}
+
 // OnMessageCreate handles incoming messages
 func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	slog.Info("message received", "content", m.Content, "author", m.Author.Username, "mentions", len(m.Mentions), "botID", h.botID)
@@ -176,38 +187,16 @@ func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.Interaction
 		}
 
 	case "new-session":
-		// Get user ID - check guild command first, then DM
-		userID := ""
-		username := ""
-		if i.Interaction.Member != nil {
-			userID = i.Interaction.Member.User.ID
-			username = i.Interaction.Member.User.Username
-		} else if i.Interaction.User != nil {
-			userID = i.Interaction.User.ID
-			username = i.Interaction.User.Username
-		} else {
+		user := getInteractionUser(i)
+		if user == nil {
 			slog.Error("interaction has no member or user", "type", i.Type)
-			if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "Error: Unable to identify user.",
-				},
-			}); err != nil {
-				slog.Error("responding to interaction", "error", err)
-			}
+			h.respondError(s, i, "Error: Unable to identify user.")
 			return
 		}
 
-		if !h.isUserAllowed(userID) {
-			slog.Info("unauthorized user attempt", "user_id", userID, "username", username)
-			if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "You are not authorized to use this command.",
-				},
-			}); err != nil {
-				slog.Error("responding to unauthorized interaction", "error", err)
-			}
+		if !h.isUserAllowed(user.ID) {
+			slog.Info("unauthorized user attempt", "user_id", user.ID, "username", user.Username)
+			h.respondError(s, i, "You are not authorized to use this command.")
 			return
 		}
 

@@ -135,34 +135,6 @@ func TestProcess_CloseStopsProcess(t *testing.T) {
 	stdinReader.Close()
 }
 
-func TestExtractSessionID_FromSystemInit(t *testing.T) {
-	a := assert.New(t)
-
-	// given
-	msg := `{"type":"system","subtype":"init","session_id":"my-session-123"}`
-
-	// when
-	id, err := extractSessionID([]byte(msg))
-
-	// then
-	a.NoError(err)
-	a.Equal("my-session-123", id)
-}
-
-func TestExtractSessionID_NonInitMessage(t *testing.T) {
-	a := assert.New(t)
-
-	// given
-	msg := `{"type":"assistant","message":{"role":"assistant"}}`
-
-	// when
-	id, err := extractSessionID([]byte(msg))
-
-	// then
-	a.NoError(err)
-	a.Empty(id)
-}
-
 func TestBuildInitializeRequest(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
