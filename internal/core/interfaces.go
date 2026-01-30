@@ -19,3 +19,14 @@ type DiscordClient interface {
 	SendTyping(channelID string) error
 	AddReaction(channelID, messageID, emoji string) error
 }
+
+type Responder interface {
+	SendTyping() error
+	PostResponse(content string) error
+	AddReaction(emoji string) error
+	SendUpdate(message string) error
+}
+
+type EmailClient interface {
+	Send(to, subject, body string) error
+}

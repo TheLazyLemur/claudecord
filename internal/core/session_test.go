@@ -57,6 +57,50 @@ func TestSessionManager_NewSession_CreatesSession(t *testing.T) {
 	a.Equal("session-1", sess.SessionID())
 }
 
+func TestSessionManager_NewSession_PassesWorkDirToFactory(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	factory := &mockProcessFactory{
+		process: &mockCLIProcess{sessionID: "session-1"},
+	}
+	mgr := NewSessionManager(factory)
+
+	// when
+	err := mgr.NewSession("/custom/work/dir")
+
+	// then
+	r.NoError(err)
+	a.Equal("/custom/work/dir", factory.lastWorkDir)
+}
+
+func TestSessionManager_NewSession_ClosesOldAndCreatesNewWithDifferentWorkDir(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given - first session with /first/dir
+	firstProc := &mockCLIProcess{sessionID: "session-1"}
+	secondProc := &mockCLIProcess{sessionID: "session-2"}
+	factory := &mockProcessFactory{process: firstProc}
+	mgr := NewSessionManager(factory)
+	r.NoError(mgr.NewSession("/first/dir"))
+	a.Equal("/first/dir", factory.lastWorkDir)
+
+	// prepare second process
+	factory.process = secondProc
+
+	// when - new session with different dir
+	err := mgr.NewSession("/second/dir")
+
+	// then
+	r.NoError(err)
+	a.True(firstProc.closed, "old session should be closed")
+	a.Equal("/second/dir", factory.lastWorkDir, "new session should use new workDir")
+	sess, _ := mgr.GetSession()
+	a.Equal("session-2", sess.SessionID())
+}
+
 func TestSessionManager_NewSession_ClosesPreviousSession(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)

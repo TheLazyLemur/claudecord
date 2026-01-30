@@ -90,7 +90,7 @@ func (c *DiscordClientWrapper) CreateThread(channelID, content string) (string, 
 
 // BotInterface defines what the Handler needs from Bot
 type BotInterface interface {
-	HandleMessage(channelID, messageID, message string) error
+	HandleMessage(responder core.Responder, message string) error
 	NewSession(workDir string) error
 }
 
@@ -101,11 +101,12 @@ type PassiveBotInterface interface {
 
 // Handler handles Discord events
 type Handler struct {
-	bot          BotInterface
-	botID        string
-	allowedUsers []string
-	passiveBot   PassiveBotInterface
-	buffer       *core.DebouncedBuffer
+	bot           BotInterface
+	botID         string
+	allowedUsers  []string
+	passiveBot    PassiveBotInterface
+	buffer        *core.DebouncedBuffer
+	discordClient core.DiscordClient
 }
 
 // PassiveBotWithHandler wraps PassiveBotInterface and adds HandleBufferedMessages
@@ -115,11 +116,12 @@ type PassiveBotWithHandler interface {
 }
 
 // NewHandler creates a new Handler. passiveBot is optional (can be nil).
-func NewHandler(bot BotInterface, botID string, allowedUsers []string, passiveBot ...PassiveBotWithHandler) *Handler {
+func NewHandler(bot BotInterface, botID string, allowedUsers []string, discordClient core.DiscordClient, passiveBot ...PassiveBotWithHandler) *Handler {
 	h := &Handler{
-		bot:          bot,
-		botID:        botID,
-		allowedUsers: allowedUsers,
+		bot:           bot,
+		botID:         botID,
+		allowedUsers:  allowedUsers,
+		discordClient: discordClient,
 	}
 	if len(passiveBot) > 0 && passiveBot[0] != nil {
 		h.passiveBot = passiveBot[0]
@@ -179,7 +181,8 @@ func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		if h.buffer != nil {
 			h.buffer.ClearChannel(m.ChannelID)
 		}
-		if err := h.bot.HandleMessage(m.ChannelID, m.Message.ID, msg); err != nil {
+		responder := core.NewDiscordResponder(h.discordClient, m.ChannelID, m.Message.ID)
+		if err := h.bot.HandleMessage(responder, msg); err != nil {
 			slog.Error("handling message", "error", err)
 		}
 		return

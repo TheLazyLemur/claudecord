@@ -11,63 +11,34 @@ import (
 
 // --- Mocks ---
 
-type mockDiscordClient struct {
-	sentMessages   []sentMessage
-	createdThreads []createdThread
-	startedThreads []startedThread
-	typingChannels []string
-	addedReactions []addedReaction
-	sendErr        error
-	threadErr      error
-	reactionErr    error
-	threadID       string
+type mockResponder struct {
+	typingCalled bool
+	responses    []string
+	reactions    []string
+	updates      []string
+	postErr      error
+	reactionErr  error
+	updateErr    error
 }
 
-type startedThread struct {
-	channelID string
-	messageID string
-	name      string
-}
-
-type sentMessage struct {
-	channelID string
-	content   string
-}
-
-type createdThread struct {
-	channelID string
-	content   string
-}
-
-func (m *mockDiscordClient) SendMessage(channelID, content string) error {
-	m.sentMessages = append(m.sentMessages, sentMessage{channelID, content})
-	return m.sendErr
-}
-
-func (m *mockDiscordClient) CreateThread(channelID, content string) (string, error) {
-	m.createdThreads = append(m.createdThreads, createdThread{channelID, content})
-	return m.threadID, m.threadErr
-}
-
-func (m *mockDiscordClient) SendTyping(channelID string) error {
-	m.typingChannels = append(m.typingChannels, channelID)
+func (m *mockResponder) SendTyping() error {
+	m.typingCalled = true
 	return nil
 }
 
-type addedReaction struct {
-	channelID string
-	messageID string
-	emoji     string
+func (m *mockResponder) PostResponse(content string) error {
+	m.responses = append(m.responses, content)
+	return m.postErr
 }
 
-func (m *mockDiscordClient) AddReaction(channelID, messageID, emoji string) error {
-	m.addedReactions = append(m.addedReactions, addedReaction{channelID, messageID, emoji})
+func (m *mockResponder) AddReaction(emoji string) error {
+	m.reactions = append(m.reactions, emoji)
 	return m.reactionErr
 }
 
-func (m *mockDiscordClient) StartThread(channelID, messageID, name string) (string, error) {
-	m.startedThreads = append(m.startedThreads, startedThread{channelID, messageID, name})
-	return m.threadID, m.threadErr
+func (m *mockResponder) SendUpdate(message string) error {
+	m.updates = append(m.updates, message)
+	return m.updateErr
 }
 
 type mockPermissionChecker struct {
@@ -137,9 +108,9 @@ func TestBot_HandleMessage_SendsTypingIndicator(t *testing.T) {
 	recvChan := make(chan []byte, 2)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	// send result to complete
 	result := `{"type":"result","subtype":"success","result":"done"}`
@@ -147,11 +118,11 @@ func TestBot_HandleMessage_SendsTypingIndicator(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hello")
+	err := bot.HandleMessage(responder, "hello")
 
 	// then
 	r.NoError(err)
-	a.Contains(discord.typingChannels, "chan-1")
+	a.True(responder.typingCalled)
 }
 
 func TestBot_HandleMessage_SendsUserMessageToCLI(t *testing.T) {
@@ -162,16 +133,16 @@ func TestBot_HandleMessage_SendsUserMessageToCLI(t *testing.T) {
 	recvChan := make(chan []byte, 2)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	result := `{"type":"result","subtype":"success","result":"done"}`
 	recvChan <- []byte(result)
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "test message")
+	err := bot.HandleMessage(responder, "test message")
 
 	// then
 	r.NoError(err)
@@ -186,7 +157,7 @@ func TestBot_HandleMessage_SendsUserMessageToCLI(t *testing.T) {
 	a.Equal("test message", message["content"])
 }
 
-func TestBot_HandleMessage_PostsAssistantTextToDiscord(t *testing.T) {
+func TestBot_HandleMessage_PostsAssistantTextViaResponder(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
@@ -194,9 +165,9 @@ func TestBot_HandleMessage_PostsAssistantTextToDiscord(t *testing.T) {
 	recvChan := make(chan []byte, 3)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello there!"}]}}`
 	result := `{"type":"result","subtype":"success","result":"done"}`
@@ -205,47 +176,12 @@ func TestBot_HandleMessage_PostsAssistantTextToDiscord(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hi")
+	err := bot.HandleMessage(responder, "hi")
 
 	// then
 	r.NoError(err)
-	r.Len(discord.sentMessages, 1)
-	a.Equal("chan-1", discord.sentMessages[0].channelID)
-	a.Equal("Hello there!", discord.sentMessages[0].content)
-}
-
-func TestBot_HandleMessage_CreatesThreadForLongResponse(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 3)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{threadID: "thread-1"}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
-
-	// create >2000 char response
-	longText := make([]byte, 2100)
-	for i := range longText {
-		longText[i] = 'a'
-	}
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"` + string(longText) + `"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hi")
-
-	// then
-	r.NoError(err)
-	a.Len(discord.sentMessages, 0)
-	r.Len(discord.createdThreads, 1)
-	a.Equal("chan-1", discord.createdThreads[0].channelID)
-	a.Equal(string(longText), discord.createdThreads[0].content)
+	r.Len(responder.responses, 1)
+	a.Equal("Hello there!", responder.responses[0])
 }
 
 func TestBot_HandleMessage_HandlesPermissionRequest_Allow(t *testing.T) {
@@ -256,9 +192,9 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Allow(t *testing.T) {
 	recvChan := make(chan []byte, 4)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	permReq := `{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Write","tool_use_id":"toolu_123","input":{"file_path":"/tmp/test.txt"}}}`
 	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done!"}]}}`
@@ -269,7 +205,7 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Allow(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "write file")
+	err := bot.HandleMessage(responder, "write file")
 
 	// then
 	r.NoError(err)
@@ -301,9 +237,9 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Deny(t *testing.T) {
 	recvChan := make(chan []byte, 4)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: false, reason: "path not allowed"}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	permReq := `{"type":"control_request","request_id":"req-2","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"toolu_456","input":{"command":"rm -rf /"}}}`
 	result := `{"type":"result","subtype":"success","result":"denied"}`
@@ -312,7 +248,7 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Deny(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "delete everything")
+	err := bot.HandleMessage(responder, "delete everything")
 
 	// then
 	r.NoError(err)
@@ -336,9 +272,9 @@ func TestBot_HandleMessage_ConcatenatesMultipleTextBlocks(t *testing.T) {
 	recvChan := make(chan []byte, 3)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello "},{"type":"tool_use","name":"test"},{"type":"text","text":"world!"}]}}`
 	result := `{"type":"result","subtype":"success","result":"done"}`
@@ -347,23 +283,23 @@ func TestBot_HandleMessage_ConcatenatesMultipleTextBlocks(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hi")
+	err := bot.HandleMessage(responder, "hi")
 
 	// then
 	r.NoError(err)
-	r.Len(discord.sentMessages, 1)
-	a.Equal("Hello world!", discord.sentMessages[0].content)
+	r.Len(responder.responses, 1)
+	a.Equal("Hello world!", responder.responses[0])
 }
 
 func TestBot_HandleMessage_SessionError(t *testing.T) {
 	// given
 	factory := &botMockFactory{err: errors.New("spawn failed")}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hello")
+	err := bot.HandleMessage(responder, "hello")
 
 	// then
 	assert.Error(t, err)
@@ -375,13 +311,13 @@ func TestBot_HandleMessage_SendError(t *testing.T) {
 	recvChan := make(chan []byte)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan, sendErr: errors.New("send failed")}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hello")
+	err := bot.HandleMessage(responder, "hello")
 
 	// then
 	assert.Error(t, err)
@@ -396,13 +332,13 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 	proc1 := &botMockProcess{sessionID: "s1", recvChan: make(chan []byte)}
 	proc2 := &botMockProcess{sessionID: "s2", recvChan: make(chan []byte)}
 	factory := &botMockFactory{process: proc1}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	// create initial session
 	close(proc1.recvChan)
-	_ = bot.HandleMessage("chan-1", "msg-1", "init")
+	_ = bot.HandleMessage(responder, "init")
 	factory.process = proc2
 
 	// when
@@ -421,9 +357,9 @@ func TestBot_HandleMessage_NoResponseIfNoText(t *testing.T) {
 	recvChan := make(chan []byte, 2)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	// only tool_use, no text
 	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"test"}]}}`
@@ -433,12 +369,11 @@ func TestBot_HandleMessage_NoResponseIfNoText(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hi")
+	err := bot.HandleMessage(responder, "hi")
 
 	// then
 	r.NoError(err)
-	a.Len(discord.sentMessages, 0)
-	a.Len(discord.createdThreads, 0)
+	a.Len(responder.responses, 0)
 }
 
 func TestBot_HandleMessage_IgnoresReplayMessages(t *testing.T) {
@@ -449,9 +384,9 @@ func TestBot_HandleMessage_IgnoresReplayMessages(t *testing.T) {
 	recvChan := make(chan []byte, 4)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	// replay message should be ignored
 	replay := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Old response"}]},"isReplay":true}`
@@ -463,12 +398,12 @@ func TestBot_HandleMessage_IgnoresReplayMessages(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "hi")
+	err := bot.HandleMessage(responder, "hi")
 
 	// then
 	r.NoError(err)
-	r.Len(discord.sentMessages, 1)
-	a.Equal("New response", discord.sentMessages[0].content)
+	r.Len(responder.responses, 1)
+	a.Equal("New response", responder.responses[0])
 }
 
 // --- MCP Message Tests ---
@@ -481,9 +416,9 @@ func TestBot_HandleMessage_MCPReactEmoji_Success(t *testing.T) {
 	recvChan := make(chan []byte, 3)
 	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
 	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), discord, perms)
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
 
 	mcpReq := `{"type":"control_request","request_id":"mcp-123","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"react_emoji","arguments":{"emoji":"eyes"}}}}}`
 	result := `{"type":"result","subtype":"success","result":"done"}`
@@ -492,14 +427,12 @@ func TestBot_HandleMessage_MCPReactEmoji_Success(t *testing.T) {
 	close(recvChan)
 
 	// when
-	err := bot.HandleMessage("chan-1", "msg-1", "react to this")
+	err := bot.HandleMessage(responder, "react to this")
 
 	// then
 	r.NoError(err)
-	r.Len(discord.addedReactions, 1)
-	a.Equal("chan-1", discord.addedReactions[0].channelID)
-	a.Equal("msg-1", discord.addedReactions[0].messageID)
-	a.Equal("eyes", discord.addedReactions[0].emoji)
+	r.Len(responder.reactions, 1)
+	a.Equal("eyes", responder.reactions[0])
 
 	// check MCP success response sent
 	r.Len(proc.sentMessages, 2) // user msg + mcp response
@@ -521,4 +454,29 @@ func TestBot_HandleMessage_MCPReactEmoji_Success(t *testing.T) {
 	a.Equal("reaction added", block["text"])
 }
 
-// TODO: Add error case tests for MCP tools with updated response format
+func TestBot_HandleMessage_MCPSendUpdate_Success(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	recvChan := make(chan []byte, 3)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	perms := &mockPermissionChecker{allowAll: true}
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
+
+	mcpReq := `{"type":"control_request","request_id":"mcp-456","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"send_update","arguments":{"message":"Working on it..."}}}}}`
+	result := `{"type":"result","subtype":"success","result":"done"}`
+	recvChan <- []byte(mcpReq)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage(responder, "do something")
+
+	// then
+	r.NoError(err)
+	r.Len(responder.updates, 1)
+	a.Equal("Working on it...", responder.updates[0])
+}

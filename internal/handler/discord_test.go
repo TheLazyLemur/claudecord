@@ -79,13 +79,11 @@ type mockBot struct {
 }
 
 type handledMsg struct {
-	channelID string
-	messageID string
-	message   string
+	message string
 }
 
-func (m *mockBot) HandleMessage(channelID, messageID, message string) error {
-	m.handledMessages = append(m.handledMessages, handledMsg{channelID, messageID, message})
+func (m *mockBot) HandleMessage(responder core.Responder, message string) error {
+	m.handledMessages = append(m.handledMessages, handledMsg{message})
 	return m.handleErr
 }
 
@@ -325,7 +323,7 @@ func TestHandler_isUserAllowed_DisallowedUser(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123", "user-456"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	// when
 	result := h.isUserAllowed("user-789")
@@ -339,7 +337,7 @@ func TestHandler_isUserAllowed_EmptyAllowList(t *testing.T) {
 
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{}, nil)
 
 	// when
 	result := h.isUserAllowed("user-123")
@@ -353,7 +351,7 @@ func TestHandler_isUserAllowed_NilAllowList(t *testing.T) {
 
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", nil)
+	h := NewHandler(bot, "bot-123", nil, nil)
 
 	// when
 	result := h.isUserAllowed("user-123")
@@ -370,7 +368,9 @@ func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
 
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-1"})
+	session := &mockSession{}
+	client := NewDiscordClientWrapper(session)
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, client)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -387,15 +387,13 @@ func TestHandler_OnMessageCreate_TriggersBot(t *testing.T) {
 
 	// then
 	r.Len(bot.handledMessages, 1)
-	a.Equal("chan-1", bot.handledMessages[0].channelID)
-	a.Equal("msg-1", bot.handledMessages[0].messageID)
 	a.Equal("do something", bot.handledMessages[0].message)
 }
 
 func TestHandler_OnMessageCreate_IgnoresBotMessages(t *testing.T) {
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{"any-user"})
+	h := NewHandler(bot, "bot-123", []string{"any-user"}, nil)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -417,7 +415,7 @@ func TestHandler_OnMessageCreate_IgnoresBotMessages(t *testing.T) {
 func TestHandler_OnMessageCreate_IgnoresNoMention(t *testing.T) {
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-1"})
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, nil)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -442,7 +440,9 @@ func TestHandler_OnMessageCreate_AllowedUser_Processes(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123", "user-456"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	session := &mockSession{}
+	client := NewDiscordClientWrapper(session)
+	h := NewHandler(bot, "bot-123", allowedUsers, client)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -459,8 +459,6 @@ func TestHandler_OnMessageCreate_AllowedUser_Processes(t *testing.T) {
 
 	// then
 	r.Len(bot.handledMessages, 1)
-	a.Equal("chan-1", bot.handledMessages[0].channelID)
-	a.Equal("msg-1", bot.handledMessages[0].messageID)
 	a.Equal("do something", bot.handledMessages[0].message)
 }
 
@@ -468,7 +466,7 @@ func TestHandler_OnMessageCreate_DisallowedUser_Ignored(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123", "user-456"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -490,7 +488,7 @@ func TestHandler_OnMessageCreate_DisallowedUser_Ignored(t *testing.T) {
 func TestHandler_OnMessageCreate_EmptyAllowList_DeniesAll(t *testing.T) {
 	// given
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{}, nil)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -515,7 +513,7 @@ func TestHandler_OnMessageCreate_AllowedUserButNotMentioned_Ignored(t *testing.T
 	// given
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123", "user-456"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -541,7 +539,7 @@ func TestHandler_NewHandler_WithAllowedUsers(t *testing.T) {
 	allowedUsers := []string{"user-123", "user-456"}
 
 	// when
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	// then
 	a.Equal(bot, h.bot)
@@ -556,7 +554,7 @@ func TestHandler_NewHandler_WithoutAllowedUsers(t *testing.T) {
 	bot := &mockBot{}
 
 	// when
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{}, nil)
 
 	// then
 	a.Equal(bot, h.bot)
@@ -570,7 +568,7 @@ func TestHandler_OnNewSession_CallsBot(t *testing.T) {
 	// given
 	session := &mockSession{}
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-123"})
+	h := NewHandler(bot, "bot-123", []string{"user-123"}, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -599,7 +597,7 @@ func TestHandler_OnInteractionCreate_NewSession_AllowedUser(t *testing.T) {
 	session := &mockSession{}
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -630,7 +628,7 @@ func TestHandler_OnInteractionCreate_NewSession_DisallowedUser(t *testing.T) {
 	session := &mockSession{}
 	bot := &mockBot{}
 	allowedUsers := []string{"user-456"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -659,7 +657,7 @@ func TestHandler_OnInteractionCreate_NewSession_EmptyAllowList_DeniesAll(t *test
 	// given
 	session := &mockSession{}
 	bot := &mockBot{}
-	h := NewHandler(bot, "bot-123", []string{})
+	h := NewHandler(bot, "bot-123", []string{}, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -689,7 +687,7 @@ func TestHandler_OnInteractionCreate_NewSession_DM_AllowedUser(t *testing.T) {
 	session := &mockSession{}
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -718,7 +716,7 @@ func TestHandler_OnInteractionCreate_NewSession_DM_DisallowedUser(t *testing.T) 
 	session := &mockSession{}
 	bot := &mockBot{}
 	allowedUsers := []string{"user-456"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -746,7 +744,7 @@ func TestHandler_OnInteractionCreate_NewSession_WithDirectory_AllowedUser(t *tes
 	session := &mockSession{}
 	bot := &mockBot{}
 	allowedUsers := []string{"user-123"}
-	h := NewHandler(bot, "bot-123", allowedUsers)
+	h := NewHandler(bot, "bot-123", allowedUsers, nil)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
@@ -815,7 +813,7 @@ func TestHandler_OnMessageCreate_AccumulatesForPassiveHelp(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	passiveBot := &mockPassiveBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, nil, passiveBot)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -842,7 +840,9 @@ func TestHandler_OnMessageCreate_MentionBypassesAccumulation(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	passiveBot := &mockPassiveBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+	msession := &mockSession{}
+	client := NewDiscordClientWrapper(msession)
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, client, passiveBot)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -868,7 +868,7 @@ func TestHandler_OnMessageCreate_ExcludesBotMessages(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	passiveBot := &mockPassiveBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, nil, passiveBot)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -892,7 +892,7 @@ func TestHandler_OnMessageCreate_ExcludesDisallowedUsers(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	passiveBot := &mockPassiveBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-1"}, passiveBot)
+	h := NewHandler(bot, "bot-123", []string{"user-1"}, nil, passiveBot)
 
 	msg := &discordgo.MessageCreate{
 		Message: &discordgo.Message{
@@ -917,7 +917,7 @@ func TestHandler_NewSession_ResetsBothSessions(t *testing.T) {
 	session := &mockSession{}
 	bot := &mockBot{}
 	passiveBot := &mockPassiveBot{}
-	h := NewHandler(bot, "bot-123", []string{"user-123"}, passiveBot)
+	h := NewHandler(bot, "bot-123", []string{"user-123"}, nil, passiveBot)
 
 	interaction := &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{

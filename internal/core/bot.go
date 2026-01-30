@@ -8,32 +8,28 @@ import (
 	"github.com/pkg/errors"
 )
 
-const maxDiscordMessageLen = 2000
-
-// Bot orchestrates CLI sessions, Discord posting, and permission checks
+// Bot orchestrates CLI sessions and permission checks
 type Bot struct {
 	sessions *SessionManager
-	discord  DiscordClient
 	perms    PermissionChecker
 	mu       sync.Mutex // serialize message handling
 }
 
 // NewBot creates a bot with the given dependencies
-func NewBot(sessions *SessionManager, discord DiscordClient, perms PermissionChecker) *Bot {
+func NewBot(sessions *SessionManager, perms PermissionChecker) *Bot {
 	return &Bot{
 		sessions: sessions,
-		discord:  discord,
 		perms:    perms,
 	}
 }
 
-// HandleMessage processes a Discord message, sends to CLI, handles responses
-func (b *Bot) HandleMessage(channelID, messageID, userMessage string) error {
+// HandleMessage processes a message, sends to CLI, handles responses via Responder
+func (b *Bot) HandleMessage(responder Responder, userMessage string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	slog.Info("HandleMessage start", "msg", userMessage)
-	b.discord.SendTyping(channelID)
+	responder.SendTyping()
 
 	slog.Info("getting session")
 	proc, err := b.sessions.GetOrCreateSession()
@@ -48,7 +44,7 @@ func (b *Bot) HandleMessage(channelID, messageID, userMessage string) error {
 	}
 	slog.Info("sent user message, processing responses")
 
-	return b.processResponses(proc, channelID, messageID)
+	return b.processResponses(proc, responder)
 }
 
 // NewSession starts a fresh CLI session with optional working directory
@@ -72,14 +68,13 @@ func (b *Bot) sendUserMessage(proc CLIProcess, content string) error {
 	return proc.Send(data)
 }
 
-func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) error {
+func (b *Bot) processResponses(proc CLIProcess, responder Responder) error {
 	recvChan, err := proc.Receive()
 	if err != nil {
 		return errors.Wrap(err, "receiving")
 	}
 
 	var responseText string
-	var threadID string // tracks thread for send_update calls
 
 	for {
 		data, ok := <-recvChan
@@ -112,7 +107,7 @@ func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) err
 			}
 
 		case "control_request":
-			if err := b.handleControlRequest(proc, msg, channelID, messageID, &threadID); err != nil {
+			if err := b.handleControlRequest(proc, msg, responder); err != nil {
 				return errors.Wrap(err, "handling control request")
 			}
 
@@ -120,7 +115,7 @@ func (b *Bot) processResponses(proc CLIProcess, channelID, messageID string) err
 			// turn complete, post response if any
 			slog.Info("got result, posting response", "len", len(responseText))
 			if responseText != "" {
-				if err := b.postResponse(channelID, responseText); err != nil {
+				if err := responder.PostResponse(responseText); err != nil {
 					return errors.Wrap(err, "posting response")
 				}
 			}
@@ -156,7 +151,7 @@ func extractTextFromAssistant(msg map[string]any) string {
 	return text
 }
 
-func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, channelID, messageID string, threadID *string) error {
+func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, responder Responder) error {
 	requestID, _ := msg["request_id"].(string)
 	request, ok := msg["request"].(map[string]any)
 	if !ok {
@@ -174,7 +169,7 @@ func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, channelI
 		return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)
 
 	case "mcp_message":
-		return b.handleMCPMessage(proc, requestID, request, channelID, messageID, threadID)
+		return b.handleMCPMessage(proc, requestID, request, responder)
 	}
 
 	return nil
@@ -213,14 +208,6 @@ func (b *Bot) sendPermissionResponse(proc CLIProcess, requestID, toolUseID strin
 	return proc.Send(data)
 }
 
-func (b *Bot) postResponse(channelID, content string) error {
-	if len(content) > maxDiscordMessageLen {
-		_, err := b.discord.CreateThread(channelID, content)
-		return err
-	}
-	return b.discord.SendMessage(channelID, content)
-}
-
 // MCPTools defines the MCP tool schema for discord-tools server
 var MCPTools = []map[string]any{
 	{
@@ -253,7 +240,7 @@ var MCPTools = []map[string]any{
 	},
 }
 
-func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[string]any, channelID, messageID string, threadID *string) error {
+func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[string]any, responder Responder) error {
 	serverName, _ := request["server_name"].(string)
 	message, _ := request["message"].(map[string]any)
 	jsonrpcID := message["id"] // can be number or string
@@ -279,7 +266,7 @@ func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[st
 		result = map[string]any{"tools": MCPTools}
 	case "tools/call":
 		params, _ := message["params"].(map[string]any)
-		return b.handleMCPToolCall(proc, requestID, jsonrpcID, params, channelID, messageID, threadID)
+		return b.handleMCPToolCall(proc, requestID, jsonrpcID, params, responder)
 	default:
 		result = map[string]any{}
 	}
@@ -287,7 +274,7 @@ func (b *Bot) handleMCPMessage(proc CLIProcess, requestID string, request map[st
 	return b.sendMCPResult(proc, requestID, jsonrpcID, result)
 }
 
-func (b *Bot) handleMCPToolCall(proc CLIProcess, requestID string, jsonrpcID any, params map[string]any, channelID, messageID string, threadID *string) error {
+func (b *Bot) handleMCPToolCall(proc CLIProcess, requestID string, jsonrpcID any, params map[string]any, responder Responder) error {
 	toolName, _ := params["name"].(string)
 	args, _ := params["arguments"].(map[string]any)
 
@@ -297,8 +284,8 @@ func (b *Bot) handleMCPToolCall(proc CLIProcess, requestID string, jsonrpcID any
 		if !ok || emoji == "" {
 			return b.sendMCPToolError(proc, requestID, jsonrpcID, "missing emoji argument")
 		}
-		slog.Info("AddReaction", "channelID", channelID, "messageID", messageID, "emoji", emoji)
-		if err := b.discord.AddReaction(channelID, messageID, emoji); err != nil {
+		slog.Info("AddReaction", "emoji", emoji)
+		if err := responder.AddReaction(emoji); err != nil {
 			slog.Error("AddReaction failed", "error", err)
 			return b.sendMCPToolError(proc, requestID, jsonrpcID, err.Error())
 		}
@@ -311,19 +298,8 @@ func (b *Bot) handleMCPToolCall(proc CLIProcess, requestID string, jsonrpcID any
 		if !ok || msg == "" {
 			return b.sendMCPToolError(proc, requestID, jsonrpcID, "missing message argument")
 		}
-		// create thread if needed
-		if *threadID == "" {
-			tid, err := b.discord.StartThread(channelID, messageID, "Updates")
-			if err != nil {
-				slog.Error("StartThread failed", "error", err)
-				return b.sendMCPToolError(proc, requestID, jsonrpcID, err.Error())
-			}
-			*threadID = tid
-			slog.Info("Created thread", "threadID", tid)
-		}
-		// send message to thread
-		if err := b.discord.SendMessage(*threadID, msg); err != nil {
-			slog.Error("SendMessage to thread failed", "error", err)
+		if err := responder.SendUpdate(msg); err != nil {
+			slog.Error("SendUpdate failed", "error", err)
 			return b.sendMCPToolError(proc, requestID, jsonrpcID, err.Error())
 		}
 		return b.sendMCPResult(proc, requestID, jsonrpcID, map[string]any{

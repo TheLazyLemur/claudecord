@@ -1,0 +1,33 @@
+# fly.toml app configuration file generated for claudecord on 2026-01-30T17:55:04+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'claudecord'
+primary_region = 'lhr'
+
+[build]
+
+[env]
+  ALLOWED_DIRS = '/workspace'
+  CLAUDE_CWD = '/workspace'
+  WEBHOOK_PORT = '8080'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+[deploy]
+  strategy = 'immediate'
+
+[mounts]
+  source = 'claude_config'
+  destination = '/root/.claude'
+
+[[vm]]
+  memory = '1gb'
+  cpus = 1
+  memory_mb = 1024
