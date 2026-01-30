@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -128,12 +130,26 @@ func run() error {
 
 	slog.Info("bot started", "user", dg.State.User.Username)
 
+	// start webhook server
+	mux := http.NewServeMux()
+	mux.Handle("/webhook", handler.NewWebhookHandler())
+	srv := &http.Server{Addr: ":" + cfg.WebhookPort, Handler: mux}
+	go func() {
+		slog.Info("webhook server starting", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("webhook server error", "error", err)
+		}
+	}()
+
 	// wait for interrupt
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
 	slog.Info("shutting down")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	srv.Shutdown(ctx)
 	sessionMgr.Close()
 
 	return nil

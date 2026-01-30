@@ -13,6 +13,7 @@ type Config struct {
 	AllowedDirs  []string
 	AllowedUsers []string
 	ClaudeCWD    string
+	WebhookPort  string
 }
 
 // Load reads config from env map. For production use LoadFromEnv.
@@ -46,11 +47,17 @@ func Load(env map[string]string) (*Config, error) {
 		claudeCwd = allowedDirs[0]
 	}
 
+	webhookPort := env["WEBHOOK_PORT"]
+	if webhookPort == "" {
+		webhookPort = "5005"
+	}
+
 	return &Config{
 		DiscordToken: discordToken,
 		AllowedDirs:  allowedDirs,
 		AllowedUsers: allowedUsers,
 		ClaudeCWD:    claudeCwd,
+		WebhookPort:  webhookPort,
 	}, nil
 }
 
@@ -61,6 +68,7 @@ func LoadFromEnv() (*Config, error) {
 		"ALLOWED_DIRS":  os.Getenv("ALLOWED_DIRS"),
 		"ALLOWED_USERS": os.Getenv("ALLOWED_USERS"),
 		"CLAUDE_CWD":    os.Getenv("CLAUDE_CWD"),
+		"WEBHOOK_PORT":  os.Getenv("WEBHOOK_PORT"),
 	}
 	return Load(env)
 }
