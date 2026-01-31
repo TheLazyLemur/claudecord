@@ -257,3 +257,53 @@ func convertInputSchema(schema map[string]any) anthropic.ToolInputSchemaParam {
 		Properties: schema["properties"],
 	}
 }
+
+// PassiveBackendFactory creates API backends with passive system prompt
+type PassiveBackendFactory struct {
+	APIKey         string
+	BaseURL        string
+	AllowedDirs    []string
+	DefaultWorkDir string
+	SkillStore     skills.SkillStore
+}
+
+var _ core.BackendFactory = (*PassiveBackendFactory)(nil)
+
+func (f *PassiveBackendFactory) Create(workDir string) (core.Backend, error) {
+	opts := []option.RequestOption{
+		option.WithAPIKey(f.APIKey),
+	}
+	if f.BaseURL != "" {
+		opts = append(opts, option.WithBaseURL(f.BaseURL))
+	}
+
+	client := anthropic.NewClient(opts...)
+
+	// Passive bot uses read-only file tools only
+	tools := buildPassiveTools()
+
+	// Use passive system prompt
+	systemPrompt := core.PassiveSystemPrompt()
+	if f.SkillStore != nil {
+		skillList, _ := f.SkillStore.List()
+		if len(skillList) > 0 {
+			systemPrompt += "\n\n" + skills.GenerateSkillsXML(skillList)
+		}
+	}
+
+	return NewBackend(client, systemPrompt, tools, f.SkillStore), nil
+}
+
+func buildPassiveTools() []anthropic.ToolUnionParam {
+	// Passive bot only gets read-only file tools
+	var tools []anthropic.ToolUnionParam
+	for _, t := range core.FileTools() {
+		tool := anthropic.ToolParam{
+			Name:        t.Name,
+			Description: anthropic.String(t.Description),
+			InputSchema: convertInputSchema(t.InputSchema),
+		}
+		tools = append(tools, anthropic.ToolUnionParam{OfTool: &tool})
+	}
+	return tools
+}

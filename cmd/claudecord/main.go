@@ -73,8 +73,13 @@ func run() error {
 			DefaultWorkDir: cfg.ClaudeCWD,
 			SkillStore:     skillStore,
 		}
-		// API mode uses same factory for passive (no passive-specific prompt yet)
-		passiveFactory = backendFactory
+		passiveFactory = &api.PassiveBackendFactory{
+			APIKey:         cfg.APIKey,
+			BaseURL:        cfg.BaseURL,
+			AllowedDirs:    cfg.AllowedDirs,
+			DefaultWorkDir: cfg.ClaudeCWD,
+			SkillStore:     skillStore,
+		}
 	}
 
 	// Create permission checkers
