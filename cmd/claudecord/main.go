@@ -6,53 +6,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
+	"github.com/TheLazyLemur/claudecord/internal/api"
 	"github.com/TheLazyLemur/claudecord/internal/cli"
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
+	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 )
 
 const initTimeout = 30 * time.Second
-
-type cliProcessFactory struct {
-	defaultWorkDir string
-	allowedDirs    []string
-}
-
-func (f *cliProcessFactory) Create(resumeSessionID, workDir string) (core.CLIProcess, error) {
-	if workDir == "" {
-		workDir = f.defaultWorkDir
-	} else if !f.isAllowed(workDir) {
-		return nil, errors.Errorf("directory %q not under allowed dirs", workDir)
-	}
-	return cli.NewProcess(workDir, resumeSessionID, initTimeout)
-}
-
-func (f *cliProcessFactory) isAllowed(path string) bool {
-	for _, allowed := range f.allowedDirs {
-		if path == allowed || strings.HasPrefix(path, allowed+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-type passiveCLIProcessFactory struct {
-	defaultWorkDir string
-}
-
-func (f *passiveCLIProcessFactory) Create(resumeSessionID, workDir string) (core.CLIProcess, error) {
-	if workDir == "" {
-		workDir = f.defaultWorkDir
-	}
-	return cli.NewProcessWithSystemPrompt(workDir, resumeSessionID, initTimeout, core.PassiveSystemPrompt())
-}
 
 func main() {
 	if err := run(); err != nil {
@@ -67,12 +34,58 @@ func run() error {
 		return err
 	}
 
-	// create dependencies
-	permChecker := cli.NewPermissionChecker(cfg.AllowedDirs)
-	processFactory := &cliProcessFactory{defaultWorkDir: cfg.ClaudeCWD, allowedDirs: cfg.AllowedDirs}
-	sessionMgr := core.NewSessionManager(processFactory)
+	slog.Info("starting", "mode", cfg.Mode)
 
-	// create discord session
+	// Initialize skills
+	skillsDir, err := skills.DefaultSkillsDir()
+	if err != nil {
+		return errors.Wrap(err, "getting skills dir")
+	}
+	if err := skills.DumpBuiltinSkills(skillsDir); err != nil {
+		slog.Warn("dumping builtin skills", "error", err)
+	}
+	skillStore := skills.NewFSSkillStore(skillsDir)
+	skillList, _ := skillStore.List()
+	slog.Info("skills loaded", "count", len(skillList))
+
+	// Create backend factory based on mode
+	var backendFactory core.BackendFactory
+	var passiveFactory core.BackendFactory
+
+	switch cfg.Mode {
+	case config.ModeCLI:
+		backendFactory = &cli.BackendFactory{
+			DefaultWorkDir: cfg.ClaudeCWD,
+			AllowedDirs:    cfg.AllowedDirs,
+			InitTimeout:    initTimeout,
+			SkillStore:     skillStore,
+		}
+		passiveFactory = &cli.PassiveBackendFactory{
+			DefaultWorkDir: cfg.ClaudeCWD,
+			InitTimeout:    initTimeout,
+			SkillStore:     skillStore,
+		}
+	case config.ModeAPI:
+		backendFactory = &api.BackendFactory{
+			APIKey:         cfg.APIKey,
+			BaseURL:        cfg.BaseURL,
+			AllowedDirs:    cfg.AllowedDirs,
+			DefaultWorkDir: cfg.ClaudeCWD,
+			SkillStore:     skillStore,
+		}
+		// API mode uses same factory for passive (no passive-specific prompt yet)
+		passiveFactory = backendFactory
+	}
+
+	// Create permission checkers
+	permChecker := cli.NewPermissionChecker(cfg.AllowedDirs)
+	roPermChecker := cli.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
+
+	// Create session managers
+	sessionMgr := core.NewSessionManager(backendFactory)
+	passiveSessionMgr := core.NewSessionManager(passiveFactory)
+
+	// Create discord session
 	dg, err := discordgo.New("Bot " + cfg.DiscordToken)
 	if err != nil {
 		return errors.Wrap(err, "creating discord session")
@@ -80,39 +93,33 @@ func run() error {
 
 	discordClient := handler.NewDiscordClientWrapper(dg)
 	bot := core.NewBot(sessionMgr, permChecker)
-
-	// create passive bot for auto-help feature
-	roPermChecker := cli.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
-	passiveSessionMgr := core.NewSessionManager(&passiveCLIProcessFactory{
-		defaultWorkDir: cfg.ClaudeCWD,
-	})
 	passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPermChecker)
 
-	// need intents for message content and reactions
+	// Need intents for message content and reactions
 	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuildMessageReactions
 
-	// register ready handler
+	// Register ready handler
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		slog.Info("READY event", "user", r.User.Username, "guilds", len(r.Guilds))
 	})
 
-	// register raw message handler to debug
+	// Register raw message handler to debug
 	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		slog.Info("RAW message", "content", m.Content, "author", m.Author.Username)
 	})
 
-	// open discord connection to get bot ID
+	// Open discord connection to get bot ID
 	if err := dg.Open(); err != nil {
 		return errors.Wrap(err, "opening discord connection")
 	}
 	defer dg.Close()
 
-	// set bot status to online
+	// Set bot status to online
 	dg.UpdateGameStatus(0, "Ready")
 
 	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
 
-	// create handler with botID, allowed users, and passive bot
+	// Create handler with botID, allowed users, and passive bot
 	h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
 	dg.AddHandler(h.OnMessageCreate)
 	dg.AddHandler(h.OnReactionAdd)
@@ -120,7 +127,7 @@ func run() error {
 		h.OnInteractionCreate(s, i)
 	})
 
-	// register slash commands
+	// Register slash commands
 	cmds := handler.SlashCommands()
 	for _, cmd := range cmds {
 		_, err := dg.ApplicationCommandCreate(dg.State.User.ID, "", cmd)
@@ -131,7 +138,7 @@ func run() error {
 
 	slog.Info("bot started", "user", dg.State.User.Username)
 
-	// start webhook server
+	// Start webhook server
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())
 	srv := &http.Server{Addr: ":" + cfg.WebhookPort, Handler: mux}
@@ -142,7 +149,7 @@ func run() error {
 		}
 	}()
 
-	// wait for interrupt
+	// Wait for interrupt
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig

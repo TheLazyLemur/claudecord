@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /claudecord ./cmd/claudecord
 FROM node:20-alpine
 
 # Install bash, zsh, git, gh CLI, and openssh
-RUN apk add --no-cache bash zsh git github-cli openssh-client
+RUN apk add --no-cache bash zsh git github-cli openssh-client curl jq
 
 # Install Claude CLI globally
 RUN npm install -g @anthropic-ai/claude-code
