@@ -166,6 +166,20 @@ func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, responde
 		toolUseID, _ := request["tool_use_id"].(string)
 		input, _ := request["input"].(map[string]any)
 		allow, reason := b.perms.Check(toolName, input)
+
+		// if auto-check denies, ask user for approval
+		if !allow {
+			prompt := formatPermissionPrompt(toolName, input)
+			userApproved, err := responder.AskPermission(prompt)
+			if err != nil {
+				slog.Warn("asking permission", "error", err)
+			}
+			if userApproved {
+				allow = true
+				reason = ""
+			}
+		}
+
 		return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)
 
 	case "mcp_message":
@@ -173,6 +187,21 @@ func (b *Bot) handleControlRequest(proc CLIProcess, msg map[string]any, responde
 	}
 
 	return nil
+}
+
+func formatPermissionPrompt(toolName string, input map[string]any) string {
+	prompt := "Allow **" + toolName + "**?"
+	// add relevant input details
+	if cmd, ok := input["command"].(string); ok {
+		if len(cmd) > 100 {
+			cmd = cmd[:100] + "..."
+		}
+		prompt += "\n`" + cmd + "`"
+	}
+	if path, ok := input["file_path"].(string); ok {
+		prompt += "\n`" + path + "`"
+	}
+	return prompt
 }
 
 func (b *Bot) sendPermissionResponse(proc CLIProcess, requestID, toolUseID string, allow bool, reason string, input map[string]any) error {

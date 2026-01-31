@@ -8,6 +8,7 @@ type DiscordResponder struct {
 	channelID string
 	messageID string
 	threadID  string
+	userID    string
 }
 
 func NewDiscordResponder(client DiscordClient, channelID, messageID string) *DiscordResponder {
@@ -45,6 +46,29 @@ func (r *DiscordResponder) SendUpdate(message string) error {
 	return r.client.SendMessage(r.threadID, message)
 }
 
+func (r *DiscordResponder) SetUserID(userID string) {
+	r.userID = userID
+}
+
+func (r *DiscordResponder) AskPermission(prompt string) (bool, error) {
+	msg := prompt + " React ✅ or ❌"
+	msgID, err := r.client.SendMessageReturningID(r.channelID, msg)
+	if err != nil {
+		return false, err
+	}
+
+	// add reaction options
+	r.client.AddReaction(r.channelID, msgID, "✅")
+	r.client.AddReaction(r.channelID, msgID, "❌")
+
+	emoji, err := r.client.WaitForReaction(r.channelID, msgID, []string{"✅", "❌"}, r.userID)
+	if err != nil {
+		return false, err
+	}
+
+	return emoji == "✅", nil
+}
+
 // EmailResponder sends responses via email
 type EmailResponder struct {
 	client  EmailClient
@@ -74,4 +98,8 @@ func (r *EmailResponder) AddReaction(emoji string) error {
 
 func (r *EmailResponder) SendUpdate(message string) error {
 	return nil // no-op for email
+}
+
+func (r *EmailResponder) AskPermission(prompt string) (bool, error) {
+	return false, nil // auto-deny for email (no interactive channel)
 }

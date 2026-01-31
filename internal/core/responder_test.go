@@ -84,6 +84,40 @@ func TestDiscordResponder_SendUpdate_ReusesThread(t *testing.T) {
 	client.AssertExpectations(t)
 }
 
+func TestDiscordResponder_AskPermission_Approved(t *testing.T) {
+	a := assert.New(t)
+	client := &MockDiscordClient{}
+	client.On("SendMessageReturningID", "chan-1", "Allow file edit? React ✅ or ❌").Return("perm-msg-1", nil)
+	client.On("AddReaction", "chan-1", "perm-msg-1", "✅").Return(nil)
+	client.On("AddReaction", "chan-1", "perm-msg-1", "❌").Return(nil)
+	client.On("WaitForReaction", "chan-1", "perm-msg-1", []string{"✅", "❌"}, "user-1").Return("✅", nil)
+
+	r := NewDiscordResponder(client, "chan-1", "msg-1")
+	r.SetUserID("user-1")
+	approved, err := r.AskPermission("Allow file edit?")
+
+	a.NoError(err)
+	a.True(approved)
+	client.AssertExpectations(t)
+}
+
+func TestDiscordResponder_AskPermission_Denied(t *testing.T) {
+	a := assert.New(t)
+	client := &MockDiscordClient{}
+	client.On("SendMessageReturningID", "chan-1", "Allow bash cmd? React ✅ or ❌").Return("perm-msg-2", nil)
+	client.On("AddReaction", "chan-1", "perm-msg-2", "✅").Return(nil)
+	client.On("AddReaction", "chan-1", "perm-msg-2", "❌").Return(nil)
+	client.On("WaitForReaction", "chan-1", "perm-msg-2", []string{"✅", "❌"}, "user-1").Return("❌", nil)
+
+	r := NewDiscordResponder(client, "chan-1", "msg-1")
+	r.SetUserID("user-1")
+	approved, err := r.AskPermission("Allow bash cmd?")
+
+	a.NoError(err)
+	a.False(approved)
+	client.AssertExpectations(t)
+}
+
 func TestEmailResponder_SendTyping_Noop(t *testing.T) {
 	a := assert.New(t)
 	client := &MockEmailClient{}
@@ -164,4 +198,14 @@ func (m *MockDiscordClient) SendTyping(channelID string) error {
 func (m *MockDiscordClient) AddReaction(channelID, messageID, emoji string) error {
 	args := m.Called(channelID, messageID, emoji)
 	return args.Error(0)
+}
+
+func (m *MockDiscordClient) SendMessageReturningID(channelID, content string) (string, error) {
+	args := m.Called(channelID, content)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockDiscordClient) WaitForReaction(channelID, messageID string, emojis []string, userID string) (string, error) {
+	args := m.Called(channelID, messageID, emojis, userID)
+	return args.String(0), args.Error(1)
 }

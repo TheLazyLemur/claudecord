@@ -955,3 +955,71 @@ func (m *mockPassiveBot) HandleBufferedMessages(channelID string, msgs []core.Bu
 	m.lastAccumulated = msgs
 	return m.handleErr
 }
+
+func TestDiscordClientWrapper_WaitForReaction_Success(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	session := &mockSession{}
+	wrapper := NewDiscordClientWrapper(session)
+
+	// when
+	// ... we start waiting and then receive a matching reaction
+	go func() {
+		// simulate reaction after small delay
+		wrapper.HandleReactionAdd("msg-456", "user-123", "✅")
+	}()
+
+	emoji, err := wrapper.WaitForReaction("chan-1", "msg-456", []string{"✅", "❌"}, "user-123")
+
+	// then
+	r.NoError(err)
+	a.Equal("✅", emoji)
+}
+
+func TestDiscordClientWrapper_WaitForReaction_IgnoresWrongUser(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	session := &mockSession{}
+	wrapper := NewDiscordClientWrapper(session)
+
+	// when
+	go func() {
+		// wrong user first
+		wrapper.HandleReactionAdd("msg-456", "wrong-user", "✅")
+		// then correct user
+		wrapper.HandleReactionAdd("msg-456", "user-123", "❌")
+	}()
+
+	emoji, err := wrapper.WaitForReaction("chan-1", "msg-456", []string{"✅", "❌"}, "user-123")
+
+	// then
+	r.NoError(err)
+	a.Equal("❌", emoji)
+}
+
+func TestDiscordClientWrapper_WaitForReaction_IgnoresWrongEmoji(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	session := &mockSession{}
+	wrapper := NewDiscordClientWrapper(session)
+
+	// when
+	go func() {
+		// wrong emoji
+		wrapper.HandleReactionAdd("msg-456", "user-123", "🎉")
+		// correct emoji
+		wrapper.HandleReactionAdd("msg-456", "user-123", "✅")
+	}()
+
+	emoji, err := wrapper.WaitForReaction("chan-1", "msg-456", []string{"✅", "❌"}, "user-123")
+
+	// then
+	r.NoError(err)
+	a.Equal("✅", emoji)
+}

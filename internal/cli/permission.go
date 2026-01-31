@@ -26,17 +26,19 @@ func NewPermissionChecker(allowedDirs []string) *PermissionChecker {
 }
 
 func (p *PermissionChecker) Check(toolName string, input map[string]any) (allow bool, reason string) {
-	paths := p.extractPaths(input)
-	if len(paths) == 0 {
+	// Read auto-approves if path in allowed dirs
+	if toolName == "Read" {
+		paths := p.extractPaths(input)
+		for _, path := range paths {
+			if !p.isAllowed(path) {
+				return false, fmt.Sprintf("path %s is outside allowed directories", path)
+			}
+		}
 		return true, ""
 	}
 
-	for _, path := range paths {
-		if !p.isAllowed(path) {
-			return false, fmt.Sprintf("path %s is outside allowed directories", path)
-		}
-	}
-	return true, ""
+	// everything else requires user approval
+	return false, "requires approval"
 }
 
 func (p *PermissionChecker) extractPaths(input map[string]any) []string {

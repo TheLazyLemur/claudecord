@@ -67,6 +67,15 @@ func (m *mockDiscordClient) StartThread(channelID, messageID, name string) (stri
 	return m.threadID, m.threadErr
 }
 
+func (m *mockDiscordClient) SendMessageReturningID(channelID, content string) (string, error) {
+	m.sentMessages = append(m.sentMessages, sentMessage{channelID, content})
+	return "mock-msg-id", m.sendErr
+}
+
+func (m *mockDiscordClient) WaitForReaction(channelID, messageID string, emojis []string, userID string) (string, error) {
+	return "", nil
+}
+
 func TestPassiveBot_HandleBufferedMessages_NoResponseIfEmpty(t *testing.T) {
 	a := assert.New(t)
 

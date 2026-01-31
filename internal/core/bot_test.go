@@ -12,13 +12,16 @@ import (
 // --- Mocks ---
 
 type mockResponder struct {
-	typingCalled bool
-	responses    []string
-	reactions    []string
-	updates      []string
-	postErr      error
-	reactionErr  error
-	updateErr    error
+	typingCalled       bool
+	responses          []string
+	reactions          []string
+	updates            []string
+	permissionPrompts  []string
+	postErr            error
+	reactionErr        error
+	updateErr          error
+	askPermissionAllow bool
+	askPermissionErr   error
 }
 
 func (m *mockResponder) SendTyping() error {
@@ -39,6 +42,11 @@ func (m *mockResponder) AddReaction(emoji string) error {
 func (m *mockResponder) SendUpdate(message string) error {
 	m.updates = append(m.updates, message)
 	return m.updateErr
+}
+
+func (m *mockResponder) AskPermission(prompt string) (bool, error) {
+	m.permissionPrompts = append(m.permissionPrompts, prompt)
+	return m.askPermissionAllow, m.askPermissionErr
 }
 
 type mockPermissionChecker struct {
@@ -262,6 +270,85 @@ func TestBot_HandleMessage_HandlesPermissionRequest_Deny(t *testing.T) {
 	a.Equal("deny", inner["behavior"])
 	a.Equal("toolu_456", inner["toolUseID"])
 	a.Equal("path not allowed", inner["message"])
+}
+
+func TestBot_HandleMessage_PermissionDeniedByChecker_UserApproves(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... checker denies but user approves via reaction
+	recvChan := make(chan []byte, 4)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	perms := &mockPermissionChecker{allowAll: false, reason: "needs approval"}
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{askPermissionAllow: true}
+
+	permReq := `{"type":"control_request","request_id":"req-3","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"toolu_789","input":{"command":"echo hello"}}}`
+	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done!"}]}}`
+	result := `{"type":"result","subtype":"success","result":"done"}`
+	recvChan <- []byte(permReq)
+	recvChan <- []byte(assistant)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage(responder, "run echo")
+
+	// then
+	r.NoError(err)
+
+	// should have asked user for permission
+	r.Len(responder.permissionPrompts, 1)
+	a.Contains(responder.permissionPrompts[0], "Bash")
+
+	// should have sent allow response
+	r.Len(proc.sentMessages, 2)
+	var resp map[string]any
+	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
+	response := resp["response"].(map[string]any)
+	inner := response["response"].(map[string]any)
+	a.Equal("allow", inner["behavior"])
+	a.Equal("toolu_789", inner["toolUseID"])
+}
+
+func TestBot_HandleMessage_PermissionDeniedByChecker_UserDenies(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... checker denies and user also denies via reaction
+	recvChan := make(chan []byte, 4)
+	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
+	factory := &botMockFactory{process: proc}
+	perms := &mockPermissionChecker{allowAll: false, reason: "needs approval"}
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{askPermissionAllow: false}
+
+	permReq := `{"type":"control_request","request_id":"req-4","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"toolu_999","input":{"command":"rm -rf /"}}}`
+	result := `{"type":"result","subtype":"success","result":"denied"}`
+	recvChan <- []byte(permReq)
+	recvChan <- []byte(result)
+	close(recvChan)
+
+	// when
+	err := bot.HandleMessage(responder, "delete all")
+
+	// then
+	r.NoError(err)
+
+	// should have asked user for permission
+	r.Len(responder.permissionPrompts, 1)
+
+	// should have sent deny response
+	r.Len(proc.sentMessages, 2)
+	var resp map[string]any
+	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
+	response := resp["response"].(map[string]any)
+	inner := response["response"].(map[string]any)
+	a.Equal("deny", inner["behavior"])
+	a.Equal("toolu_999", inner["toolUseID"])
 }
 
 func TestBot_HandleMessage_ConcatenatesMultipleTextBlocks(t *testing.T) {

@@ -11,8 +11,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /claudecord ./cmd/claudecord
 # Runtime stage
 FROM node:20-alpine
 
-# Install bash, zsh, git, and gh CLI
-RUN apk add --no-cache bash zsh git github-cli
+# Install bash, zsh, git, gh CLI, and openssh
+RUN apk add --no-cache bash zsh git github-cli openssh-client
 
 # Install Claude CLI globally
 RUN npm install -g @anthropic-ai/claude-code
@@ -24,10 +24,13 @@ COPY --from=builder /claudecord /usr/local/bin/claudecord
 RUN mkdir -p /workspace
 WORKDIR /workspace
 
+# Custom entrypoint to symlink config dirs
+RUN printf '#!/bin/sh\nmkdir -p /root/.claude/.config\nln -sf /root/.claude/.config /root/.config\nln -sf /root/.claude/.claude.json /root/.claude.json\nexec claudecord\n' > /entrypoint.sh && chmod +x /entrypoint.sh
+
 # Default port for webhook server
 ENV WEBHOOK_PORT=8080
 ENV SHELL=/bin/bash
 
 EXPOSE 8080
 
-CMD ["claudecord"]
+CMD ["/entrypoint.sh"]
