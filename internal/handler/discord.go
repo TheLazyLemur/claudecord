@@ -3,6 +3,7 @@ package handler
 import (
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
@@ -21,19 +22,41 @@ type DiscordSession interface {
 	MessageReactionAdd(channelID, messageID, emoji string, options ...discordgo.RequestOption) error
 }
 
+// reactionWaiter holds state for a pending reaction wait
+type reactionWaiter struct {
+	messageID string
+	userID    string
+	emojis    map[string]bool
+	result    chan string
+}
+
 // DiscordClientWrapper implements core.DiscordClient using discordgo
 type DiscordClientWrapper struct {
-	session DiscordSession
+	session        DiscordSession
+	reactionMu     sync.Mutex
+	reactionWaiter *reactionWaiter
+	timeout        time.Duration
 }
 
 // NewDiscordClientWrapper creates a wrapper around a discordgo session
 func NewDiscordClientWrapper(session DiscordSession) *DiscordClientWrapper {
-	return &DiscordClientWrapper{session: session}
+	return &DiscordClientWrapper{
+		session: session,
+		timeout: 60 * time.Second,
+	}
 }
 
 func (c *DiscordClientWrapper) SendMessage(channelID, content string) error {
 	_, err := c.session.ChannelMessageSend(channelID, content)
 	return errors.Wrap(err, "sending message")
+}
+
+func (c *DiscordClientWrapper) SendMessageReturningID(channelID, content string) (string, error) {
+	msg, err := c.session.ChannelMessageSend(channelID, content)
+	if err != nil {
+		return "", errors.Wrap(err, "sending message")
+	}
+	return msg.ID, nil
 }
 
 func (c *DiscordClientWrapper) SendTyping(channelID string) error {
@@ -42,6 +65,60 @@ func (c *DiscordClientWrapper) SendTyping(channelID string) error {
 
 func (c *DiscordClientWrapper) AddReaction(channelID, messageID, emoji string) error {
 	return errors.Wrap(c.session.MessageReactionAdd(channelID, messageID, emoji), "adding reaction")
+}
+
+func (c *DiscordClientWrapper) WaitForReaction(channelID, messageID string, emojis []string, userID string) (string, error) {
+	emojiSet := make(map[string]bool)
+	for _, e := range emojis {
+		emojiSet[e] = true
+	}
+
+	c.reactionMu.Lock()
+	c.reactionWaiter = &reactionWaiter{
+		messageID: messageID,
+		userID:    userID,
+		emojis:    emojiSet,
+		result:    make(chan string, 1),
+	}
+	waiter := c.reactionWaiter
+	c.reactionMu.Unlock()
+
+	defer func() {
+		c.reactionMu.Lock()
+		c.reactionWaiter = nil
+		c.reactionMu.Unlock()
+	}()
+
+	select {
+	case emoji := <-waiter.result:
+		return emoji, nil
+	case <-time.After(c.timeout):
+		return "", errors.New("timeout waiting for reaction")
+	}
+}
+
+// HandleReactionAdd should be called by the Handler when a reaction is added
+func (c *DiscordClientWrapper) HandleReactionAdd(messageID, userID, emoji string) {
+	c.reactionMu.Lock()
+	waiter := c.reactionWaiter
+	c.reactionMu.Unlock()
+
+	if waiter == nil {
+		return
+	}
+
+	if waiter.messageID != messageID || waiter.userID != userID {
+		return
+	}
+
+	if !waiter.emojis[emoji] {
+		return
+	}
+
+	select {
+	case waiter.result <- emoji:
+	default:
+	}
 }
 
 func (c *DiscordClientWrapper) StartThread(channelID, messageID, name string) (string, error) {
@@ -90,7 +167,7 @@ func (c *DiscordClientWrapper) CreateThread(channelID, content string) (string, 
 
 // BotInterface defines what the Handler needs from Bot
 type BotInterface interface {
-	HandleMessage(channelID, messageID, message string) error
+	HandleMessage(responder core.Responder, message string) error
 	NewSession(workDir string) error
 }
 
@@ -101,11 +178,12 @@ type PassiveBotInterface interface {
 
 // Handler handles Discord events
 type Handler struct {
-	bot          BotInterface
-	botID        string
-	allowedUsers []string
-	passiveBot   PassiveBotInterface
-	buffer       *core.DebouncedBuffer
+	bot           BotInterface
+	botID         string
+	allowedUsers  []string
+	passiveBot    PassiveBotInterface
+	buffer        *core.DebouncedBuffer
+	discordClient core.DiscordClient
 }
 
 // PassiveBotWithHandler wraps PassiveBotInterface and adds HandleBufferedMessages
@@ -115,11 +193,12 @@ type PassiveBotWithHandler interface {
 }
 
 // NewHandler creates a new Handler. passiveBot is optional (can be nil).
-func NewHandler(bot BotInterface, botID string, allowedUsers []string, passiveBot ...PassiveBotWithHandler) *Handler {
+func NewHandler(bot BotInterface, botID string, allowedUsers []string, discordClient core.DiscordClient, passiveBot ...PassiveBotWithHandler) *Handler {
 	h := &Handler{
-		bot:          bot,
-		botID:        botID,
-		allowedUsers: allowedUsers,
+		bot:           bot,
+		botID:         botID,
+		allowedUsers:  allowedUsers,
+		discordClient: discordClient,
 	}
 	if len(passiveBot) > 0 && passiveBot[0] != nil {
 		h.passiveBot = passiveBot[0]
@@ -179,7 +258,9 @@ func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		if h.buffer != nil {
 			h.buffer.ClearChannel(m.ChannelID)
 		}
-		if err := h.bot.HandleMessage(m.ChannelID, m.Message.ID, msg); err != nil {
+		responder := core.NewDiscordResponder(h.discordClient, m.ChannelID, m.Message.ID)
+		responder.SetUserID(m.Author.ID)
+		if err := h.bot.HandleMessage(responder, msg); err != nil {
 			slog.Error("handling message", "error", err)
 		}
 		return
@@ -269,6 +350,19 @@ func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.Interaction
 				slog.Error("resetting passive session", "error", err)
 			}
 		}
+	}
+}
+
+// OnReactionAdd handles reaction events for permission flow
+func (h *Handler) OnReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
+	// ignore bot's own reactions
+	if r.UserID == h.botID {
+		return
+	}
+
+	// forward to wrapper if it supports reaction handling
+	if wrapper, ok := h.discordClient.(*DiscordClientWrapper); ok {
+		wrapper.HandleReactionAdd(r.MessageID, r.UserID, r.Emoji.Name)
 	}
 }
 

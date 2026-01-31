@@ -245,6 +245,16 @@ func TestNewRealProcessSpawner_ResumeSession(t *testing.T) {
 	a.Contains(strings.Join(spawner.cmd.Args, " "), "existing-session-id")
 }
 
+func TestNewRealProcessSpawner_SetsWorkingDirectory(t *testing.T) {
+	a := assert.New(t)
+
+	// when - spawner is created with a working directory
+	spawner := NewRealProcessSpawner("/custom/working/dir", "")
+
+	// then - cmd.Dir should be set to the working directory
+	a.Equal("/custom/working/dir", spawner.cmd.Dir)
+}
+
 func TestProcess_ReceiveReturnsSameChannel(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)

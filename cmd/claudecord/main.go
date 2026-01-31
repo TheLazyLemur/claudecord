@@ -79,7 +79,7 @@ func run() error {
 	}
 
 	discordClient := handler.NewDiscordClientWrapper(dg)
-	bot := core.NewBot(sessionMgr, discordClient, permChecker)
+	bot := core.NewBot(sessionMgr, permChecker)
 
 	// create passive bot for auto-help feature
 	roPermChecker := cli.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
@@ -88,8 +88,8 @@ func run() error {
 	})
 	passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPermChecker)
 
-	// need intents for message content
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
+	// need intents for message content and reactions
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuildMessageReactions
 
 	// register ready handler
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
@@ -113,8 +113,9 @@ func run() error {
 	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
 
 	// create handler with botID, allowed users, and passive bot
-	h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers, passiveBot)
+	h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
 	dg.AddHandler(h.OnMessageCreate)
+	dg.AddHandler(h.OnReactionAdd)
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		h.OnInteractionCreate(s, i)
 	})
