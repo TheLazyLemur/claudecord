@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -8,30 +9,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockCLIProcess struct {
+type mockBackend struct {
 	sessionID string
 	closed    bool
 }
 
-func (m *mockCLIProcess) Send(msg []byte) error {
-	if m.closed {
-		return errors.New("process closed")
-	}
-	return nil
+func (m *mockBackend) Converse(ctx context.Context, msg string, responder Responder, perms PermissionChecker) (string, error) {
+	return "", nil
 }
 
-func (m *mockCLIProcess) Receive() (<-chan []byte, error) {
-	ch := make(chan []byte)
-	close(ch)
-	return ch, nil
-}
-
-func (m *mockCLIProcess) Close() error {
+func (m *mockBackend) Close() error {
 	m.closed = true
 	return nil
 }
 
-func (m *mockCLIProcess) SessionID() string {
+func (m *mockBackend) SessionID() string {
 	return m.sessionID
 }
 
@@ -40,8 +32,8 @@ func TestSessionManager_NewSession_CreatesSession(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	factory := &mockProcessFactory{
-		process: &mockCLIProcess{sessionID: "session-1"},
+	factory := &mockBackendFactory{
+		backend: &mockBackend{sessionID: "session-1"},
 	}
 	mgr := NewSessionManager(factory)
 
@@ -51,7 +43,6 @@ func TestSessionManager_NewSession_CreatesSession(t *testing.T) {
 	// then
 	r.NoError(err)
 	a.True(factory.createCalled)
-	a.Empty(factory.lastResumeID)
 	sess, _ := mgr.GetSession()
 	a.NotNil(sess)
 	a.Equal("session-1", sess.SessionID())
@@ -62,8 +53,8 @@ func TestSessionManager_NewSession_PassesWorkDirToFactory(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	factory := &mockProcessFactory{
-		process: &mockCLIProcess{sessionID: "session-1"},
+	factory := &mockBackendFactory{
+		backend: &mockBackend{sessionID: "session-1"},
 	}
 	mgr := NewSessionManager(factory)
 
@@ -80,22 +71,22 @@ func TestSessionManager_NewSession_ClosesOldAndCreatesNewWithDifferentWorkDir(t 
 	r := require.New(t)
 
 	// given - first session with /first/dir
-	firstProc := &mockCLIProcess{sessionID: "session-1"}
-	secondProc := &mockCLIProcess{sessionID: "session-2"}
-	factory := &mockProcessFactory{process: firstProc}
+	firstBackend := &mockBackend{sessionID: "session-1"}
+	secondBackend := &mockBackend{sessionID: "session-2"}
+	factory := &mockBackendFactory{backend: firstBackend}
 	mgr := NewSessionManager(factory)
 	r.NoError(mgr.NewSession("/first/dir"))
 	a.Equal("/first/dir", factory.lastWorkDir)
 
-	// prepare second process
-	factory.process = secondProc
+	// prepare second backend
+	factory.backend = secondBackend
 
 	// when - new session with different dir
 	err := mgr.NewSession("/second/dir")
 
 	// then
 	r.NoError(err)
-	a.True(firstProc.closed, "old session should be closed")
+	a.True(firstBackend.closed, "old session should be closed")
 	a.Equal("/second/dir", factory.lastWorkDir, "new session should use new workDir")
 	sess, _ := mgr.GetSession()
 	a.Equal("session-2", sess.SessionID())
@@ -106,20 +97,20 @@ func TestSessionManager_NewSession_ClosesPreviousSession(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	firstProc := &mockCLIProcess{sessionID: "session-1"}
-	secondProc := &mockCLIProcess{sessionID: "session-2"}
-	factory := &mockProcessFactory{process: firstProc}
+	firstBackend := &mockBackend{sessionID: "session-1"}
+	secondBackend := &mockBackend{sessionID: "session-2"}
+	factory := &mockBackendFactory{backend: firstBackend}
 	mgr := NewSessionManager(factory)
 	r.NoError(mgr.NewSession(""))
 
-	factory.process = secondProc
+	factory.backend = secondBackend
 
 	// when
 	err := mgr.NewSession("")
 
 	// then
 	r.NoError(err)
-	a.True(firstProc.closed)
+	a.True(firstBackend.closed)
 	sess, _ := mgr.GetSession()
 	a.Equal("session-2", sess.SessionID())
 }
@@ -129,8 +120,8 @@ func TestSessionManager_GetOrCreateSession_CreatesIfNone(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	factory := &mockProcessFactory{
-		process: &mockCLIProcess{sessionID: "auto-created"},
+	factory := &mockBackendFactory{
+		backend: &mockBackend{sessionID: "auto-created"},
 	}
 	mgr := NewSessionManager(factory)
 
@@ -149,8 +140,8 @@ func TestSessionManager_GetOrCreateSession_ReturnsExisting(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	factory := &mockProcessFactory{
-		process: &mockCLIProcess{sessionID: "existing"},
+	factory := &mockBackendFactory{
+		backend: &mockBackend{sessionID: "existing"},
 	}
 	mgr := NewSessionManager(factory)
 	r.NoError(mgr.NewSession(""))
@@ -169,7 +160,7 @@ func TestSessionManager_GetSession_ReturnsNilIfNone(t *testing.T) {
 	a := assert.New(t)
 
 	// given
-	mgr := NewSessionManager(&mockProcessFactory{})
+	mgr := NewSessionManager(&mockBackendFactory{})
 
 	// when
 	sess, err := mgr.GetSession()
@@ -184,8 +175,8 @@ func TestSessionManager_Close_ClosesCurrentSession(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	proc := &mockCLIProcess{sessionID: "to-close"}
-	factory := &mockProcessFactory{process: proc}
+	backend := &mockBackend{sessionID: "to-close"}
+	factory := &mockBackendFactory{backend: backend}
 	mgr := NewSessionManager(factory)
 	r.NoError(mgr.NewSession(""))
 
@@ -194,14 +185,14 @@ func TestSessionManager_Close_ClosesCurrentSession(t *testing.T) {
 
 	// then
 	r.NoError(err)
-	a.True(proc.closed)
+	a.True(backend.closed)
 	sess, _ := mgr.GetSession()
 	a.Nil(sess)
 }
 
 func TestSessionManager_Close_NoopIfNoSession(t *testing.T) {
 	// given
-	mgr := NewSessionManager(&mockProcessFactory{})
+	mgr := NewSessionManager(&mockBackendFactory{})
 
 	// when
 	err := mgr.Close()
@@ -214,7 +205,7 @@ func TestSessionManager_NewSession_FactoryError(t *testing.T) {
 	a := assert.New(t)
 
 	// given
-	factory := &mockProcessFactory{err: errors.New("spawn failed")}
+	factory := &mockBackendFactory{err: errors.New("spawn failed")}
 	mgr := NewSessionManager(factory)
 
 	// when
@@ -225,20 +216,18 @@ func TestSessionManager_NewSession_FactoryError(t *testing.T) {
 	a.Contains(err.Error(), "spawn failed")
 }
 
-type mockProcessFactory struct {
-	process      *mockCLIProcess
+type mockBackendFactory struct {
+	backend      *mockBackend
 	err          error
 	createCalled bool
-	lastResumeID string
 	lastWorkDir  string
 }
 
-func (f *mockProcessFactory) Create(resumeSessionID, workDir string) (CLIProcess, error) {
+func (f *mockBackendFactory) Create(workDir string) (Backend, error) {
 	f.createCalled = true
-	f.lastResumeID = resumeSessionID
 	f.lastWorkDir = workDir
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.process, nil
+	return f.backend, nil
 }

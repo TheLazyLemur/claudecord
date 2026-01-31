@@ -14,7 +14,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-var _ core.CLIProcess = (*Process)(nil)
+// CLIProcess is the low-level interface for CLI communication
+type CLIProcess interface {
+	Send(msg []byte) error
+	Receive() (<-chan []byte, error)
+	Close() error
+	SessionID() string
+}
+
+var _ CLIProcess = (*Process)(nil)
 
 // ProcessSpawner abstracts process creation for testing
 type ProcessSpawner interface {

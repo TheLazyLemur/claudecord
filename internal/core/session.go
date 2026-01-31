@@ -6,24 +6,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ProcessFactory creates new CLI processes
-type ProcessFactory interface {
-	Create(resumeSessionID, workDir string) (CLIProcess, error)
-}
-
-// SessionManager manages the single active CLI session
+// SessionManager manages the single active backend session
 type SessionManager struct {
 	mu      sync.RWMutex
-	current CLIProcess
-	factory ProcessFactory
+	current Backend
+	factory BackendFactory
 }
 
-// NewSessionManager creates a session manager with the given process factory
-func NewSessionManager(factory ProcessFactory) *SessionManager {
+// NewSessionManager creates a session manager with the given backend factory
+func NewSessionManager(factory BackendFactory) *SessionManager {
 	return &SessionManager{factory: factory}
 }
 
-// NewSession starts a fresh CLI session, closing any existing one
+// NewSession starts a fresh session, closing any existing one
 func (m *SessionManager) NewSession(workDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -33,17 +28,17 @@ func (m *SessionManager) NewSession(workDir string) error {
 		m.current = nil
 	}
 
-	proc, err := m.factory.Create("", workDir)
+	backend, err := m.factory.Create(workDir)
 	if err != nil {
 		return errors.Wrap(err, "creating new session")
 	}
 
-	m.current = proc
+	m.current = backend
 	return nil
 }
 
 // GetOrCreateSession returns current session or creates one if none exists
-func (m *SessionManager) GetOrCreateSession() (CLIProcess, error) {
+func (m *SessionManager) GetOrCreateSession() (Backend, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -51,17 +46,17 @@ func (m *SessionManager) GetOrCreateSession() (CLIProcess, error) {
 		return m.current, nil
 	}
 
-	proc, err := m.factory.Create("", "")
+	backend, err := m.factory.Create("")
 	if err != nil {
 		return nil, errors.Wrap(err, "creating session")
 	}
 
-	m.current = proc
+	m.current = backend
 	return m.current, nil
 }
 
 // GetSession returns the current session or error if none
-func (m *SessionManager) GetSession() (CLIProcess, error) {
+func (m *SessionManager) GetSession() (Backend, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

@@ -1,7 +1,7 @@
 package core
 
 import (
-	"encoding/json"
+	"context"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -65,45 +65,44 @@ func (m *mockPermissionChecker) Check(toolName string, input map[string]any) (bo
 	return m.allowAll, m.reason
 }
 
-type botMockProcess struct {
-	sessionID    string
-	sentMessages [][]byte
-	recvChan     chan []byte
-	closed       bool
-	sendErr      error
+type botMockBackend struct {
+	sessionID       string
+	closed          bool
+	converseResp    string
+	converseErr     error
+	converseCalled  bool
+	lastMsg         string
+	lastResponder   Responder
+	lastPerms       PermissionChecker
 }
 
-func (m *botMockProcess) Send(msg []byte) error {
-	if m.closed {
-		return errors.New("process closed")
-	}
-	m.sentMessages = append(m.sentMessages, msg)
-	return m.sendErr
+func (m *botMockBackend) Converse(ctx context.Context, msg string, responder Responder, perms PermissionChecker) (string, error) {
+	m.converseCalled = true
+	m.lastMsg = msg
+	m.lastResponder = responder
+	m.lastPerms = perms
+	return m.converseResp, m.converseErr
 }
 
-func (m *botMockProcess) Receive() (<-chan []byte, error) {
-	return m.recvChan, nil
-}
-
-func (m *botMockProcess) Close() error {
+func (m *botMockBackend) Close() error {
 	m.closed = true
 	return nil
 }
 
-func (m *botMockProcess) SessionID() string {
+func (m *botMockBackend) SessionID() string {
 	return m.sessionID
 }
 
 type botMockFactory struct {
-	process *botMockProcess
+	backend *botMockBackend
 	err     error
 }
 
-func (f *botMockFactory) Create(resumeSessionID, workDir string) (CLIProcess, error) {
+func (f *botMockFactory) Create(workDir string) (Backend, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.process, nil
+	return f.backend, nil
 }
 
 // --- Tests ---
@@ -113,17 +112,11 @@ func TestBot_HandleMessage_SendsTypingIndicator(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	recvChan := make(chan []byte, 2)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
+	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
+	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
 	bot := NewBot(NewSessionManager(factory), perms)
 	responder := &mockResponder{}
-
-	// send result to complete
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(result)
-	close(recvChan)
 
 	// when
 	err := bot.HandleMessage(responder, "hello")
@@ -133,55 +126,38 @@ func TestBot_HandleMessage_SendsTypingIndicator(t *testing.T) {
 	a.True(responder.typingCalled)
 }
 
-func TestBot_HandleMessage_SendsUserMessageToCLI(t *testing.T) {
+func TestBot_HandleMessage_CallsBackendConverse(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
 	// given
-	recvChan := make(chan []byte, 2)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
+	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
+	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
 	bot := NewBot(NewSessionManager(factory), perms)
 	responder := &mockResponder{}
-
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(result)
-	close(recvChan)
 
 	// when
 	err := bot.HandleMessage(responder, "test message")
 
 	// then
 	r.NoError(err)
-	r.Len(proc.sentMessages, 1)
-
-	var msg map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[0], &msg))
-	a.Equal("user", msg["type"])
-	a.Equal("s1", msg["session_id"])
-	message := msg["message"].(map[string]any)
-	a.Equal("user", message["role"])
-	a.Equal("test message", message["content"])
+	a.True(backend.converseCalled)
+	a.Equal("test message", backend.lastMsg)
+	a.Equal(responder, backend.lastResponder)
+	a.Equal(perms, backend.lastPerms)
 }
 
-func TestBot_HandleMessage_PostsAssistantTextViaResponder(t *testing.T) {
+func TestBot_HandleMessage_PostsResponseFromBackend(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
 	// given
-	recvChan := make(chan []byte, 3)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
+	backend := &botMockBackend{sessionID: "s1", converseResp: "Hello there!"}
+	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
 	bot := NewBot(NewSessionManager(factory), perms)
 	responder := &mockResponder{}
-
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello there!"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
 
 	// when
 	err := bot.HandleMessage(responder, "hi")
@@ -192,190 +168,23 @@ func TestBot_HandleMessage_PostsAssistantTextViaResponder(t *testing.T) {
 	a.Equal("Hello there!", responder.responses[0])
 }
 
-func TestBot_HandleMessage_HandlesPermissionRequest_Allow(t *testing.T) {
+func TestBot_HandleMessage_NoResponseIfEmpty(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
 	// given
-	recvChan := make(chan []byte, 4)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
+	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
+	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
 	bot := NewBot(NewSessionManager(factory), perms)
 	responder := &mockResponder{}
-
-	permReq := `{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Write","tool_use_id":"toolu_123","input":{"file_path":"/tmp/test.txt"}}}`
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done!"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(permReq)
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "write file")
-
-	// then
-	r.NoError(err)
-	r.Len(perms.checks, 1)
-	a.Equal("Write", perms.checks[0].toolName)
-	a.Equal("/tmp/test.txt", perms.checks[0].input["file_path"])
-
-	// check response sent to CLI
-	r.Len(proc.sentMessages, 2) // user msg + control response
-	var resp map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
-	a.Equal("control_response", resp["type"])
-	response := resp["response"].(map[string]any)
-	a.Equal("success", response["subtype"])
-	a.Equal("req-1", response["request_id"])
-	inner := response["response"].(map[string]any)
-	a.Equal("allow", inner["behavior"])
-	a.Equal("toolu_123", inner["toolUseID"])
-	// updatedInput is required per protocol spec
-	updatedInput := inner["updatedInput"].(map[string]any)
-	a.Equal("/tmp/test.txt", updatedInput["file_path"])
-}
-
-func TestBot_HandleMessage_HandlesPermissionRequest_Deny(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 4)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: false, reason: "path not allowed"}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{}
-
-	permReq := `{"type":"control_request","request_id":"req-2","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"toolu_456","input":{"command":"rm -rf /"}}}`
-	result := `{"type":"result","subtype":"success","result":"denied"}`
-	recvChan <- []byte(permReq)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "delete everything")
-
-	// then
-	r.NoError(err)
-
-	// check deny response sent
-	r.Len(proc.sentMessages, 2)
-	var resp map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
-	response := resp["response"].(map[string]any)
-	inner := response["response"].(map[string]any)
-	a.Equal("deny", inner["behavior"])
-	a.Equal("toolu_456", inner["toolUseID"])
-	a.Equal("path not allowed", inner["message"])
-}
-
-func TestBot_HandleMessage_PermissionDeniedByChecker_UserApproves(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	// ... checker denies but user approves via reaction
-	recvChan := make(chan []byte, 4)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: false, reason: "needs approval"}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{askPermissionAllow: true}
-
-	permReq := `{"type":"control_request","request_id":"req-3","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"toolu_789","input":{"command":"echo hello"}}}`
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done!"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(permReq)
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "run echo")
-
-	// then
-	r.NoError(err)
-
-	// should have asked user for permission
-	r.Len(responder.permissionPrompts, 1)
-	a.Contains(responder.permissionPrompts[0], "Bash")
-
-	// should have sent allow response
-	r.Len(proc.sentMessages, 2)
-	var resp map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
-	response := resp["response"].(map[string]any)
-	inner := response["response"].(map[string]any)
-	a.Equal("allow", inner["behavior"])
-	a.Equal("toolu_789", inner["toolUseID"])
-}
-
-func TestBot_HandleMessage_PermissionDeniedByChecker_UserDenies(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	// ... checker denies and user also denies via reaction
-	recvChan := make(chan []byte, 4)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: false, reason: "needs approval"}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{askPermissionAllow: false}
-
-	permReq := `{"type":"control_request","request_id":"req-4","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"toolu_999","input":{"command":"rm -rf /"}}}`
-	result := `{"type":"result","subtype":"success","result":"denied"}`
-	recvChan <- []byte(permReq)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "delete all")
-
-	// then
-	r.NoError(err)
-
-	// should have asked user for permission
-	r.Len(responder.permissionPrompts, 1)
-
-	// should have sent deny response
-	r.Len(proc.sentMessages, 2)
-	var resp map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
-	response := resp["response"].(map[string]any)
-	inner := response["response"].(map[string]any)
-	a.Equal("deny", inner["behavior"])
-	a.Equal("toolu_999", inner["toolUseID"])
-}
-
-func TestBot_HandleMessage_ConcatenatesMultipleTextBlocks(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 3)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{}
-
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello "},{"type":"tool_use","name":"test"},{"type":"text","text":"world!"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
 
 	// when
 	err := bot.HandleMessage(responder, "hi")
 
 	// then
 	r.NoError(err)
-	r.Len(responder.responses, 1)
-	a.Equal("Hello world!", responder.responses[0])
+	a.Len(responder.responses, 0)
 }
 
 func TestBot_HandleMessage_SessionError(t *testing.T) {
@@ -393,22 +202,20 @@ func TestBot_HandleMessage_SessionError(t *testing.T) {
 	assert.Contains(t, err.Error(), "spawn failed")
 }
 
-func TestBot_HandleMessage_SendError(t *testing.T) {
+func TestBot_HandleMessage_ConverseError(t *testing.T) {
 	// given
-	recvChan := make(chan []byte)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan, sendErr: errors.New("send failed")}
-	factory := &botMockFactory{process: proc}
+	backend := &botMockBackend{sessionID: "s1", converseErr: errors.New("converse failed")}
+	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
 	bot := NewBot(NewSessionManager(factory), perms)
 	responder := &mockResponder{}
-	close(recvChan)
 
 	// when
 	err := bot.HandleMessage(responder, "hello")
 
 	// then
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "send failed")
+	assert.Contains(t, err.Error(), "converse failed")
 }
 
 func TestBot_NewSession_StartsNewSession(t *testing.T) {
@@ -416,154 +223,21 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	proc1 := &botMockProcess{sessionID: "s1", recvChan: make(chan []byte)}
-	proc2 := &botMockProcess{sessionID: "s2", recvChan: make(chan []byte)}
-	factory := &botMockFactory{process: proc1}
+	backend1 := &botMockBackend{sessionID: "s1"}
+	backend2 := &botMockBackend{sessionID: "s2"}
+	factory := &botMockFactory{backend: backend1}
 	perms := &mockPermissionChecker{}
 	bot := NewBot(NewSessionManager(factory), perms)
 	responder := &mockResponder{}
 
 	// create initial session
-	close(proc1.recvChan)
 	_ = bot.HandleMessage(responder, "init")
-	factory.process = proc2
+	factory.backend = backend2
 
 	// when
 	err := bot.NewSession("")
 
 	// then
 	r.NoError(err)
-	a.True(proc1.closed)
-}
-
-func TestBot_HandleMessage_NoResponseIfNoText(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 2)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{}
-
-	// only tool_use, no text
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"test"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "hi")
-
-	// then
-	r.NoError(err)
-	a.Len(responder.responses, 0)
-}
-
-func TestBot_HandleMessage_IgnoresReplayMessages(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 4)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{}
-
-	// replay message should be ignored
-	replay := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Old response"}]},"isReplay":true}`
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"New response"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(replay)
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "hi")
-
-	// then
-	r.NoError(err)
-	r.Len(responder.responses, 1)
-	a.Equal("New response", responder.responses[0])
-}
-
-// --- MCP Message Tests ---
-
-func TestBot_HandleMessage_MCPReactEmoji_Success(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 3)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{}
-
-	mcpReq := `{"type":"control_request","request_id":"mcp-123","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"react_emoji","arguments":{"emoji":"eyes"}}}}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(mcpReq)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "react to this")
-
-	// then
-	r.NoError(err)
-	r.Len(responder.reactions, 1)
-	a.Equal("eyes", responder.reactions[0])
-
-	// check MCP success response sent
-	r.Len(proc.sentMessages, 2) // user msg + mcp response
-	var resp map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
-	a.Equal("control_response", resp["type"])
-	response := resp["response"].(map[string]any)
-	a.Equal("success", response["subtype"])
-	a.Equal("mcp-123", response["request_id"])
-	innerResp := response["response"].(map[string]any)
-	mcpResp := innerResp["mcp_response"].(map[string]any)
-	a.Equal("2.0", mcpResp["jsonrpc"])
-	a.Equal(float64(1), mcpResp["id"])
-	mcpResult := mcpResp["result"].(map[string]any)
-	content := mcpResult["content"].([]any)
-	r.Len(content, 1)
-	block := content[0].(map[string]any)
-	a.Equal("text", block["type"])
-	a.Equal("reaction added", block["text"])
-}
-
-func TestBot_HandleMessage_MCPSendUpdate_Success(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 3)
-	proc := &botMockProcess{sessionID: "s1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
-	responder := &mockResponder{}
-
-	mcpReq := `{"type":"control_request","request_id":"mcp-456","request":{"subtype":"mcp_message","server_name":"discord-tools","message":{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"send_update","arguments":{"message":"Working on it..."}}}}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(mcpReq)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	err := bot.HandleMessage(responder, "do something")
-
-	// then
-	r.NoError(err)
-	r.Len(responder.updates, 1)
-	a.Equal("Working on it...", responder.updates[0])
+	a.True(backend1.closed)
 }

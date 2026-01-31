@@ -1,7 +1,7 @@
 package core
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -50,17 +50,23 @@ func (b *PassiveBot) HandleBufferedMessages(channelID string, msgs []BufferedMes
 
 	slog.Info("PassiveBot handling messages", "channel", channelID, "count", len(msgs))
 
-	proc, err := b.sessions.GetOrCreateSession()
+	backend, err := b.sessions.GetOrCreateSession()
 	if err != nil {
 		return errors.Wrap(err, "getting passive session")
 	}
 
 	combined := b.formatMessages(msgs)
-	if err := b.sendUserMessage(proc, combined); err != nil {
-		return errors.Wrap(err, "sending to passive session")
+
+	// Use a no-op responder since passive bot doesn't support discord tools
+	responder := &noopResponder{}
+	ctx := context.Background()
+
+	response, err := backend.Converse(ctx, combined, responder, b.perms)
+	if err != nil {
+		return errors.Wrap(err, "conversing")
 	}
 
-	return b.processResponses(proc, channelID, msgs[0].MessageID)
+	return b.maybePostResponse(channelID, msgs[0].MessageID, response)
 }
 
 func (b *PassiveBot) formatMessages(msgs []BufferedMessage) string {
@@ -72,124 +78,6 @@ func (b *PassiveBot) formatMessages(msgs []BufferedMessage) string {
 		sb.WriteString(fmt.Sprintf("[%s]: %s", m.AuthorID, m.Content))
 	}
 	return sb.String()
-}
-
-func (b *PassiveBot) sendUserMessage(proc CLIProcess, content string) error {
-	msg := map[string]any{
-		"type":       "user",
-		"session_id": proc.SessionID(),
-		"message": map[string]any{
-			"role":    "user",
-			"content": content,
-		},
-	}
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return errors.Wrap(err, "marshaling user message")
-	}
-	return proc.Send(data)
-}
-
-func (b *PassiveBot) processResponses(proc CLIProcess, channelID, firstMessageID string) error {
-	recvChan, err := proc.Receive()
-	if err != nil {
-		return errors.Wrap(err, "receiving")
-	}
-
-	var responseText string
-
-	for {
-		data, ok := <-recvChan
-		if !ok {
-			break
-		}
-
-		var msg map[string]any
-		if err := json.Unmarshal(data, &msg); err != nil {
-			continue
-		}
-
-		if isReplay, ok := msg["isReplay"].(bool); ok && isReplay {
-			continue
-		}
-
-		msgType, _ := msg["type"].(string)
-
-		switch msgType {
-		case "assistant":
-			text := extractTextFromAssistant(msg)
-			if text != "" {
-				if responseText != "" {
-					responseText += "\n"
-				}
-				responseText += text
-			}
-
-		case "control_request":
-			if err := b.handleControlRequest(proc, msg); err != nil {
-				return errors.Wrap(err, "handling control request")
-			}
-
-		case "result":
-			slog.Info("PassiveBot got result", "responseLen", len(responseText))
-			return b.maybePostResponse(channelID, firstMessageID, responseText)
-		}
-	}
-
-	return nil
-}
-
-func (b *PassiveBot) handleControlRequest(proc CLIProcess, msg map[string]any) error {
-	requestID, _ := msg["request_id"].(string)
-	request, ok := msg["request"].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	subtype, _ := request["subtype"].(string)
-	if subtype != "can_use_tool" {
-		return nil
-	}
-
-	toolName, _ := request["tool_name"].(string)
-	toolUseID, _ := request["tool_use_id"].(string)
-	input, _ := request["input"].(map[string]any)
-
-	allow, reason := b.perms.Check(toolName, input)
-	return b.sendPermissionResponse(proc, requestID, toolUseID, allow, reason, input)
-}
-
-func (b *PassiveBot) sendPermissionResponse(proc CLIProcess, requestID, toolUseID string, allow bool, reason string, input map[string]any) error {
-	var innerResp map[string]any
-	if allow {
-		innerResp = map[string]any{
-			"behavior":     "allow",
-			"toolUseID":    toolUseID,
-			"updatedInput": input,
-		}
-	} else {
-		innerResp = map[string]any{
-			"behavior":  "deny",
-			"toolUseID": toolUseID,
-			"message":   reason,
-			"interrupt": false,
-		}
-	}
-
-	resp := map[string]any{
-		"type": "control_response",
-		"response": map[string]any{
-			"subtype":    "success",
-			"request_id": requestID,
-			"response":   innerResp,
-		},
-	}
-
-	data, err := json.Marshal(resp)
-	if err != nil {
-		return errors.Wrap(err, "marshaling permission response")
-	}
-	return proc.Send(data)
 }
 
 func (b *PassiveBot) maybePostResponse(channelID, firstMessageID, response string) error {
@@ -231,3 +119,12 @@ func (b *PassiveBot) NewSession() error {
 func PassiveSystemPrompt() string {
 	return passiveSystemPrompt
 }
+
+// noopResponder is used by passive bot since it doesn't support discord tools
+type noopResponder struct{}
+
+func (n *noopResponder) SendTyping() error                            { return nil }
+func (n *noopResponder) PostResponse(content string) error            { return nil }
+func (n *noopResponder) AddReaction(emoji string) error               { return nil }
+func (n *noopResponder) SendUpdate(message string) error              { return nil }
+func (n *noopResponder) AskPermission(prompt string) (bool, error)    { return false, nil }

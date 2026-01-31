@@ -4,7 +4,7 @@
 #
 
 app = 'claudecord'
-primary_region = 'lhr'
+primary_region = 'jnb'
 
 [build]
 

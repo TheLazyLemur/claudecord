@@ -1,7 +1,7 @@
 package core
 
 import (
-	"encoding/json"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,23 +76,70 @@ func (m *mockDiscordClient) WaitForReaction(channelID, messageID string, emojis 
 	return "", nil
 }
 
+type passiveMockBackend struct {
+	sessionID     string
+	closed        bool
+	converseResp  string
+	converseErr   error
+	lastMsg       string
+}
+
+func (m *passiveMockBackend) Converse(ctx context.Context, msg string, responder Responder, perms PermissionChecker) (string, error) {
+	m.lastMsg = msg
+	return m.converseResp, m.converseErr
+}
+
+func (m *passiveMockBackend) Close() error {
+	m.closed = true
+	return nil
+}
+
+func (m *passiveMockBackend) SessionID() string {
+	return m.sessionID
+}
+
+type passiveMockFactory struct {
+	backend *passiveMockBackend
+	err     error
+}
+
+func (f *passiveMockFactory) Create(workDir string) (Backend, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.backend, nil
+}
+
 func TestPassiveBot_HandleBufferedMessages_NoResponseIfEmpty(t *testing.T) {
 	a := assert.New(t)
 
 	// given
-	recvChan := make(chan []byte, 2)
-	proc := &botMockProcess{sessionID: "p1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
+	backend := &passiveMockBackend{sessionID: "p1", converseResp: ""}
+	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{}
 	perms := &mockPassivePermissionChecker{}
 	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
 
-	// empty response from Claude
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":""}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
+	// when
+	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
+		{ChannelID: "chan-1", MessageID: "m1", Content: "random chat", AuthorID: "u1"},
+	})
+
+	// then
+	require.NoError(t, err)
+	a.Len(discord.sentMessages, 0)
+	a.Len(discord.startedThreads, 0)
+}
+
+func TestPassiveBot_HandleBufferedMessages_NoResponseMarker(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	backend := &passiveMockBackend{sessionID: "p1", converseResp: "[NO_RESPONSE]"}
+	factory := &passiveMockFactory{backend: backend}
+	discord := &mockDiscordClient{}
+	perms := &mockPassivePermissionChecker{}
+	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
 
 	// when
 	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -110,18 +157,11 @@ func TestPassiveBot_HandleBufferedMessages_RespondsInThread(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	recvChan := make(chan []byte, 2)
-	proc := &botMockProcess{sessionID: "p1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
+	backend := &passiveMockBackend{sessionID: "p1", converseResp: "Here's how to do that in Go..."}
+	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{threadID: "thread-1"}
 	perms := &mockPassivePermissionChecker{}
 	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
-
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Here's how to do that in Go..."}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
 
 	// when
 	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -139,21 +179,15 @@ func TestPassiveBot_HandleBufferedMessages_RespondsInThread(t *testing.T) {
 }
 
 func TestPassiveBot_HandleBufferedMessages_CombinesMultipleMessages(t *testing.T) {
+	a := assert.New(t)
 	r := require.New(t)
 
 	// given
-	recvChan := make(chan []byte, 2)
-	proc := &botMockProcess{sessionID: "p1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
+	backend := &passiveMockBackend{sessionID: "p1", converseResp: "Answer"}
+	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{threadID: "thread-1"}
 	perms := &mockPassivePermissionChecker{}
 	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
-
-	assistant := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Answer"}]}}`
-	result := `{"type":"result","subtype":"success","result":"done"}`
-	recvChan <- []byte(assistant)
-	recvChan <- []byte(result)
-	close(recvChan)
 
 	// when
 	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -163,52 +197,8 @@ func TestPassiveBot_HandleBufferedMessages_CombinesMultipleMessages(t *testing.T
 
 	// then
 	r.NoError(err)
-
-	// verify combined message sent to CLI
-	r.Len(proc.sentMessages, 1)
-	var msg map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[0], &msg))
-	message := msg["message"].(map[string]any)
-	content := message["content"].(string)
-	r.Contains(content, "first question")
-	r.Contains(content, "more context")
-}
-
-func TestPassiveBot_HandleBufferedMessages_UsesReadOnlyPermissions(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	recvChan := make(chan []byte, 4)
-	proc := &botMockProcess{sessionID: "p1", recvChan: recvChan}
-	factory := &botMockFactory{process: proc}
-	discord := &mockDiscordClient{threadID: "thread-1"}
-	perms := &mockPassivePermissionChecker{}
-	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
-
-	// Claude tries to write
-	permReq := `{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Write","tool_use_id":"toolu_123","input":{"file_path":"/tmp/test.txt"}}}`
-	result := `{"type":"result","subtype":"success","result":"denied"}`
-	recvChan <- []byte(permReq)
-	recvChan <- []byte(result)
-	close(recvChan)
-
-	// when
-	_ = bot.HandleBufferedMessages("chan-1", []BufferedMessage{
-		{ChannelID: "chan-1", MessageID: "m1", Content: "test", AuthorID: "u1"},
-	})
-
-	// then
-	r.Len(perms.checks, 1)
-	a.Equal("Write", perms.checks[0].toolName)
-
-	// verify deny response sent
-	r.Len(proc.sentMessages, 2) // user msg + deny
-	var resp map[string]any
-	r.NoError(json.Unmarshal(proc.sentMessages[1], &resp))
-	response := resp["response"].(map[string]any)
-	inner := response["response"].(map[string]any)
-	a.Equal("deny", inner["behavior"])
+	a.Contains(backend.lastMsg, "first question")
+	a.Contains(backend.lastMsg, "more context")
 }
 
 func TestPassiveBot_NewSession_ResetsSession(t *testing.T) {
@@ -216,26 +206,25 @@ func TestPassiveBot_NewSession_ResetsSession(t *testing.T) {
 	r := require.New(t)
 
 	// given
-	proc1 := &botMockProcess{sessionID: "p1", recvChan: make(chan []byte)}
-	proc2 := &botMockProcess{sessionID: "p2", recvChan: make(chan []byte)}
-	factory := &botMockFactory{process: proc1}
+	backend1 := &passiveMockBackend{sessionID: "p1", converseResp: ""}
+	backend2 := &passiveMockBackend{sessionID: "p2", converseResp: ""}
+	factory := &passiveMockFactory{backend: backend1}
 	discord := &mockDiscordClient{threadID: "thread-1"}
 	perms := &mockPassivePermissionChecker{}
 	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
 
 	// trigger session creation
-	close(proc1.recvChan)
 	_ = bot.HandleBufferedMessages("chan-1", []BufferedMessage{
 		{ChannelID: "chan-1", MessageID: "m1", Content: "test", AuthorID: "u1"},
 	})
-	factory.process = proc2
+	factory.backend = backend2
 
 	// when
 	err := bot.NewSession()
 
 	// then
 	r.NoError(err)
-	a.True(proc1.closed)
+	a.True(backend1.closed)
 }
 
 type mockPassivePermissionChecker struct {
