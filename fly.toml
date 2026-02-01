@@ -25,7 +25,7 @@ primary_region = 'jnb'
 
 [mounts]
   source = 'claude_config'
-  destination = '/root/.claude'
+  destination = '/root'
 
 [[vm]]
   memory = '1gb'
