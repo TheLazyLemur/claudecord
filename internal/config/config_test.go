@@ -126,3 +126,28 @@ func TestLoad_ClaudeCWDOverride(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/path", cfg.ClaudeCWD)
 }
+
+func TestLoad_DefaultHistoryDir(t *testing.T) {
+	cfg, err := Load(map[string]string{
+		"DISCORD_TOKEN":   "mytoken",
+		"ALLOWED_DIRS":    "/home/user",
+		"ALLOWED_USERS":   "123",
+		"CLAUDECORD_MODE": "cli",
+	})
+	require.NoError(t, err)
+	// Should contain .claudecord/history
+	assert.Contains(t, cfg.HistoryBaseDir, ".claudecord")
+	assert.Contains(t, cfg.HistoryBaseDir, "history")
+}
+
+func TestLoad_CustomHistoryDir(t *testing.T) {
+	cfg, err := Load(map[string]string{
+		"DISCORD_TOKEN":          "mytoken",
+		"ALLOWED_DIRS":           "/home/user",
+		"ALLOWED_USERS":          "123",
+		"CLAUDECORD_MODE":        "cli",
+		"CLAUDECORD_HISTORY_DIR": "/custom/history/path",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/history/path", cfg.HistoryBaseDir)
+}

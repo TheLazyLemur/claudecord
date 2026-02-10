@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -30,6 +31,8 @@ type Config struct {
 	BaseURL string
 	// Resend API key for email skills
 	ResendAPIKey string
+	// HistoryBaseDir is the directory for storing session history
+	HistoryBaseDir string
 }
 
 // Load reads config from env map. For production use LoadFromEnv.
@@ -84,31 +87,44 @@ func Load(env map[string]string) (*Config, error) {
 	baseURL := env["CLAUDECORD_BASE_URL"]
 	resendAPIKey := env["RESEND_API_KEY"]
 
+	// History base directory defaults to ~/.claudecord/history
+	historyBaseDir := env["CLAUDECORD_HISTORY_DIR"]
+	if historyBaseDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			historyBaseDir = filepath.Join("/tmp", ".claudecord", "history")
+		} else {
+			historyBaseDir = filepath.Join(home, ".claudecord", "history")
+		}
+	}
+
 	return &Config{
-		DiscordToken: discordToken,
-		AllowedDirs:  allowedDirs,
-		AllowedUsers: allowedUsers,
-		ClaudeCWD:    claudeCwd,
-		WebhookPort:  webhookPort,
-		Mode:         mode,
-		APIKey:       apiKey,
-		BaseURL:      baseURL,
-		ResendAPIKey: resendAPIKey,
+		DiscordToken:   discordToken,
+		AllowedDirs:    allowedDirs,
+		AllowedUsers:   allowedUsers,
+		ClaudeCWD:      claudeCwd,
+		WebhookPort:    webhookPort,
+		Mode:           mode,
+		APIKey:         apiKey,
+		BaseURL:        baseURL,
+		ResendAPIKey:   resendAPIKey,
+		HistoryBaseDir: historyBaseDir,
 	}, nil
 }
 
 // LoadFromEnv loads config from os environment variables.
 func LoadFromEnv() (*Config, error) {
 	env := map[string]string{
-		"DISCORD_TOKEN":       os.Getenv("DISCORD_TOKEN"),
-		"ALLOWED_DIRS":        os.Getenv("ALLOWED_DIRS"),
-		"ALLOWED_USERS":       os.Getenv("ALLOWED_USERS"),
-		"CLAUDE_CWD":          os.Getenv("CLAUDE_CWD"),
-		"WEBHOOK_PORT":        os.Getenv("WEBHOOK_PORT"),
-		"CLAUDECORD_MODE":     os.Getenv("CLAUDECORD_MODE"),
-		"CLAUDECORD_API_KEY":  os.Getenv("CLAUDECORD_API_KEY"),
-		"CLAUDECORD_BASE_URL": os.Getenv("CLAUDECORD_BASE_URL"),
-		"RESEND_API_KEY":      os.Getenv("RESEND_API_KEY"),
+		"DISCORD_TOKEN":          os.Getenv("DISCORD_TOKEN"),
+		"ALLOWED_DIRS":           os.Getenv("ALLOWED_DIRS"),
+		"ALLOWED_USERS":          os.Getenv("ALLOWED_USERS"),
+		"CLAUDE_CWD":             os.Getenv("CLAUDE_CWD"),
+		"WEBHOOK_PORT":           os.Getenv("WEBHOOK_PORT"),
+		"CLAUDECORD_MODE":        os.Getenv("CLAUDECORD_MODE"),
+		"CLAUDECORD_API_KEY":     os.Getenv("CLAUDECORD_API_KEY"),
+		"CLAUDECORD_BASE_URL":    os.Getenv("CLAUDECORD_BASE_URL"),
+		"RESEND_API_KEY":         os.Getenv("RESEND_API_KEY"),
+		"CLAUDECORD_HISTORY_DIR": os.Getenv("CLAUDECORD_HISTORY_DIR"),
 	}
 	return Load(env)
 }
