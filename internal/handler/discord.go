@@ -292,6 +292,11 @@ func (h *Handler) OnInteractionCreate(s DiscordSession, i *discordgo.Interaction
 
 	slog.Info("slash command", "name", data.Name)
 
+	// Try history commands first
+	if h.HandleHistoryCommand(s, i, data) {
+		return
+	}
+
 	switch data.Name {
 	case "ping":
 		// Unrestricted: ping is a health check that doesn't perform any actions
@@ -398,7 +403,7 @@ func ExtractClaudeMention(content string, mentions []*discordgo.User, botID stri
 
 // SlashCommands returns the slash commands to register
 func SlashCommands() []*discordgo.ApplicationCommand {
-	return []*discordgo.ApplicationCommand{
+	commands := []*discordgo.ApplicationCommand{
 		{
 			Name:        "new-session",
 			Description: "Start a fresh Claude session",
@@ -416,4 +421,9 @@ func SlashCommands() []*discordgo.ApplicationCommand {
 			Description: "Check if bot is responding",
 		},
 	}
+
+	// Add history commands
+	commands = append(commands, HistorySlashCommands()...)
+
+	return commands
 }
