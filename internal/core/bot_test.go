@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -71,6 +72,7 @@ type botMockBackend struct {
 	converseResp    string
 	converseErr     error
 	converseCalled  bool
+	converseFunc    func() (string, error)
 	lastMsg         string
 	lastResponder   Responder
 	lastPerms       PermissionChecker
@@ -81,6 +83,9 @@ func (m *botMockBackend) Converse(ctx context.Context, msg string, responder Res
 	m.lastMsg = msg
 	m.lastResponder = responder
 	m.lastPerms = perms
+	if m.converseFunc != nil {
+		return m.converseFunc()
+	}
 	return m.converseResp, m.converseErr
 }
 
@@ -239,5 +244,57 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 
 	// then
 	r.NoError(err)
+	a.True(backend1.closed)
+}
+
+func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a backend that blocks in Converse until we signal
+	converseStarted := make(chan struct{})
+	converseUnblock := make(chan struct{})
+	backend1 := &botMockBackend{sessionID: "s1"}
+	backend1.converseFunc = func() (string, error) {
+		close(converseStarted)
+		<-converseUnblock
+		return "done", nil
+	}
+	backend2 := &botMockBackend{sessionID: "s2"}
+	factory := &botMockFactory{backend: backend1}
+	perms := &mockPermissionChecker{}
+	bot := NewBot(NewSessionManager(factory), perms)
+	responder := &mockResponder{}
+
+	// when
+	// ... HandleMessage is in-flight (blocked in Converse)
+	handleDone := make(chan error, 1)
+	go func() {
+		handleDone <- bot.HandleMessage(responder, "hello")
+	}()
+	<-converseStarted
+
+	// ... NewSession is called concurrently
+	factory.backend = backend2
+	newSessionDone := make(chan error, 1)
+	go func() {
+		newSessionDone <- bot.NewSession("")
+	}()
+
+	// then
+	// ... backend must NOT be closed while Converse is running
+	select {
+	case <-newSessionDone:
+		t.Fatal("NewSession returned before HandleMessage finished")
+	case <-time.After(50 * time.Millisecond):
+		// expected: NewSession is blocked waiting for HandleMessage
+	}
+	a.False(backend1.closed, "backend closed while Converse in-flight")
+
+	// ... unblock Converse, both should complete
+	close(converseUnblock)
+	r.NoError(<-handleDone)
+	r.NoError(<-newSessionDone)
 	a.True(backend1.closed)
 }

@@ -53,7 +53,11 @@ func (b *Bot) HandleMessage(responder Responder, userMessage string) error {
 	return nil
 }
 
-// NewSession starts a fresh session with optional working directory
+// NewSession starts a fresh session with optional working directory.
+// Waits for any in-flight HandleMessage to finish before closing the old backend.
 func (b *Bot) NewSession(workDir string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	return b.sessions.NewSession(workDir)
 }
