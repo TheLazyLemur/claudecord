@@ -12,6 +12,7 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/api"
 	"github.com/TheLazyLemur/claudecord/internal/cli"
 	"github.com/TheLazyLemur/claudecord/internal/config"
+	"github.com/TheLazyLemur/claudecord/internal/permission"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
@@ -89,8 +90,8 @@ func run() error {
 	}
 
 	// Create permission checkers
-	permChecker := cli.NewPermissionChecker(cfg.AllowedDirs)
-	roPermChecker := cli.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
+	permChecker := permission.NewPermissionChecker(cfg.AllowedDirs)
+	roPermChecker := permission.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
 
 	// Create session managers
 	sessionMgr := core.NewSessionManager(backendFactory)
