@@ -17,6 +17,13 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 )
 
+func truncateOutput(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen] + "\n... (truncated)"
+	}
+	return s
+}
+
 // Deps holds all dependencies needed by tool executors.
 type Deps struct {
 	Responder     core.Responder
@@ -86,13 +93,7 @@ func executeRead(input map[string]any) (string, bool) {
 		return "error reading file: " + err.Error(), true
 	}
 
-	const maxLen = 50000
-	if len(content) > maxLen {
-		content = content[:maxLen]
-		return string(content) + "\n... (truncated)", false
-	}
-
-	return string(content), false
+	return truncateOutput(string(content), 50000), false
 }
 
 func executeBash(input map[string]any) (string, bool) {
@@ -129,13 +130,7 @@ func executeBash(input map[string]any) (string, bool) {
 		return result.String(), true
 	}
 
-	output := result.String()
-	const maxLen = 50000
-	if len(output) > maxLen {
-		output = output[:maxLen] + "\n... (truncated)"
-	}
-
-	return output, false
+	return truncateOutput(result.String(), 50000), false
 }
 
 func executeSkill(input map[string]any, store skills.SkillStore) (string, bool) {
@@ -221,13 +216,7 @@ func executeFetch(input map[string]any) (string, bool) {
 		return "error reading response: " + err.Error(), true
 	}
 
-	const maxLen = 50000
-	result := string(respBody)
-	if len(result) > maxLen {
-		result = result[:maxLen] + "\n... (truncated)"
-	}
-
-	return result, resp.StatusCode >= 400
+	return truncateOutput(string(respBody), 50000), resp.StatusCode >= 400
 }
 
 func executeWebSearch(input map[string]any, apiKey string) (string, bool) {

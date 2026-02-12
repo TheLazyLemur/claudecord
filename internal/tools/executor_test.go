@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/TheLazyLemur/claudecord/internal/skills"
@@ -130,5 +131,19 @@ func TestExecute_UnknownTool(t *testing.T) {
 
 	a.Equal("unknown tool: bogus", result)
 	a.True(isErr)
+}
+
+func TestTruncateOutput(t *testing.T) {
+	a := assert.New(t)
+
+	long := strings.Repeat("x", 100)
+	a.Equal(strings.Repeat("x", 10)+"\n... (truncated)", truncateOutput(long, 10))
+}
+
+func TestTruncateOutput_NoTruncation(t *testing.T) {
+	a := assert.New(t)
+
+	a.Equal("short", truncateOutput("short", 100))
+	a.Equal("exact", truncateOutput("exact", 5))
 }
 
