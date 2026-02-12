@@ -63,21 +63,18 @@ func run() error {
 
 	switch cfg.Mode {
 	case config.ModeCLI:
-		backendFactory = &cli.BackendFactory{
+		base := cli.BackendFactory{
 			DefaultWorkDir: cfg.ClaudeCWD,
 			AllowedDirs:    cfg.AllowedDirs,
 			InitTimeout:    initTimeout,
 			SkillStore:     skillStore,
 		}
-		passiveFactory = &cli.BackendFactory{
-			DefaultWorkDir: cfg.ClaudeCWD,
-			AllowedDirs:    cfg.AllowedDirs,
-			InitTimeout:    initTimeout,
-			SkillStore:     skillStore,
-			Passive:        true,
-		}
+		passive := base
+		passive.Passive = true
+		backendFactory = &base
+		passiveFactory = &passive
 	case config.ModeAPI:
-		backendFactory = &api.BackendFactory{
+		base := api.BackendFactory{
 			APIKey:         cfg.APIKey,
 			BaseURL:        cfg.BaseURL,
 			AllowedDirs:    cfg.AllowedDirs,
@@ -85,15 +82,10 @@ func run() error {
 			SkillStore:     skillStore,
 			MinimaxAPIKey:  cfg.MinimaxAPIKey,
 		}
-		passiveFactory = &api.BackendFactory{
-			APIKey:         cfg.APIKey,
-			BaseURL:        cfg.BaseURL,
-			AllowedDirs:    cfg.AllowedDirs,
-			DefaultWorkDir: cfg.ClaudeCWD,
-			SkillStore:     skillStore,
-			MinimaxAPIKey:  cfg.MinimaxAPIKey,
-			Passive:        true,
-		}
+		passive := base
+		passive.Passive = true
+		backendFactory = &base
+		passiveFactory = &passive
 	}
 
 	// Create permission checkers
