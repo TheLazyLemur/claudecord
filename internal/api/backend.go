@@ -166,17 +166,10 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 		}
 
 		// Check permissions
-		allow, reason := perms.Check(tu.Name, input)
+		allow, reason := tools.CheckPermission(tu.Name, input, perms, responder)
 		if !allow {
-			prompt := tools.FormatPermissionPrompt(tu.Name, input)
-			userApproved, err := responder.AskPermission(prompt)
-			if err != nil {
-				slog.Warn("asking permission", "error", err)
-			}
-			if !userApproved {
-				results = append(results, anthropic.NewToolResultBlock(tu.ID, "Permission denied: "+reason, true))
-				continue
-			}
+			results = append(results, anthropic.NewToolResultBlock(tu.ID, "Permission denied: "+reason, true))
+			continue
 		}
 
 		// Execute the tool
@@ -196,6 +189,7 @@ type BackendFactory struct {
 	DefaultWorkDir string
 	SkillStore     skills.SkillStore
 	MinimaxAPIKey  string
+	Passive        bool
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
@@ -210,19 +204,18 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 
 	client := anthropic.NewClient(opts...)
 
-	// Build tools
-	tools := buildTools()
-
-	// Build system prompt with skills
-	systemPrompt := "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates."
-	if f.SkillStore != nil {
-		skillList, _ := f.SkillStore.List()
-		if len(skillList) > 0 {
-			systemPrompt += "\n\n" + skills.GenerateSkillsXML(skillList)
-		}
+	var base string
+	var apiTools []anthropic.ToolUnionParam
+	if f.Passive {
+		base = core.PassiveSystemPrompt()
+		apiTools = buildPassiveTools()
+	} else {
+		base = "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates."
+		apiTools = buildTools()
 	}
+	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
-	return NewBackend(client, systemPrompt, tools, f.SkillStore, f.MinimaxAPIKey), nil
+	return NewBackend(client, systemPrompt, apiTools, f.SkillStore, f.MinimaxAPIKey), nil
 }
 
 func buildTools() []anthropic.ToolUnionParam {
@@ -242,52 +235,7 @@ func buildTools() []anthropic.ToolUnionParam {
 	return tools
 }
 
-func convertInputSchema(schema map[string]any) anthropic.ToolInputSchemaParam {
-	return anthropic.ToolInputSchemaParam{
-		Type:       "object",
-		Properties: schema["properties"],
-	}
-}
-
-// PassiveBackendFactory creates API backends with passive system prompt
-type PassiveBackendFactory struct {
-	APIKey         string
-	BaseURL        string
-	AllowedDirs    []string
-	DefaultWorkDir string
-	SkillStore     skills.SkillStore
-	MinimaxAPIKey  string
-}
-
-var _ core.BackendFactory = (*PassiveBackendFactory)(nil)
-
-func (f *PassiveBackendFactory) Create(workDir string) (core.Backend, error) {
-	opts := []option.RequestOption{
-		option.WithAPIKey(f.APIKey),
-	}
-	if f.BaseURL != "" {
-		opts = append(opts, option.WithBaseURL(f.BaseURL))
-	}
-
-	client := anthropic.NewClient(opts...)
-
-	// Passive bot uses read-only file tools only
-	tools := buildPassiveTools()
-
-	// Use passive system prompt
-	systemPrompt := core.PassiveSystemPrompt()
-	if f.SkillStore != nil {
-		skillList, _ := f.SkillStore.List()
-		if len(skillList) > 0 {
-			systemPrompt += "\n\n" + skills.GenerateSkillsXML(skillList)
-		}
-	}
-
-	return NewBackend(client, systemPrompt, tools, f.SkillStore, f.MinimaxAPIKey), nil
-}
-
 func buildPassiveTools() []anthropic.ToolUnionParam {
-	// Passive bot only gets read-only file tools
 	var tools []anthropic.ToolUnionParam
 	for _, t := range core.FileTools() {
 		tool := anthropic.ToolParam{
@@ -298,4 +246,11 @@ func buildPassiveTools() []anthropic.ToolUnionParam {
 		tools = append(tools, anthropic.ToolUnionParam{OfTool: &tool})
 	}
 	return tools
+}
+
+func convertInputSchema(schema map[string]any) anthropic.ToolInputSchemaParam {
+	return anthropic.ToolInputSchemaParam{
+		Type:       "object",
+		Properties: schema["properties"],
+	}
 }

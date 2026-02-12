@@ -132,20 +132,3 @@ func TestExecute_UnknownTool(t *testing.T) {
 	a.True(isErr)
 }
 
-func TestFormatPermissionPrompt_Command(t *testing.T) {
-	a := assert.New(t)
-
-	prompt := FormatPermissionPrompt("Bash", map[string]any{"command": "rm -rf /"})
-
-	a.Contains(prompt, "**Bash**")
-	a.Contains(prompt, "rm -rf /")
-}
-
-func TestFormatPermissionPrompt_FilePath(t *testing.T) {
-	a := assert.New(t)
-
-	prompt := FormatPermissionPrompt("Read", map[string]any{"file_path": "/etc/passwd"})
-
-	a.Contains(prompt, "**Read**")
-	a.Contains(prompt, "/etc/passwd")
-}

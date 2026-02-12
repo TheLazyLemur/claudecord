@@ -48,21 +48,6 @@ func Execute(name string, input map[string]any, deps Deps) (string, bool) {
 	}
 }
 
-// FormatPermissionPrompt builds a human-readable permission prompt for a tool call.
-func FormatPermissionPrompt(toolName string, input map[string]any) string {
-	prompt := "Allow **" + toolName + "**?"
-	if cmd, ok := input["command"].(string); ok {
-		if len(cmd) > 100 {
-			cmd = cmd[:100] + "..."
-		}
-		prompt += "\n`" + cmd + "`"
-	}
-	if path, ok := input["file_path"].(string); ok {
-		prompt += "\n`" + path + "`"
-	}
-	return prompt
-}
-
 func executeReactEmoji(input map[string]any, responder core.Responder) (string, bool) {
 	emoji, ok := input["emoji"].(string)
 	if !ok || emoji == "" {

@@ -69,10 +69,12 @@ func run() error {
 			InitTimeout:    initTimeout,
 			SkillStore:     skillStore,
 		}
-		passiveFactory = &cli.PassiveBackendFactory{
+		passiveFactory = &cli.BackendFactory{
 			DefaultWorkDir: cfg.ClaudeCWD,
+			AllowedDirs:    cfg.AllowedDirs,
 			InitTimeout:    initTimeout,
 			SkillStore:     skillStore,
+			Passive:        true,
 		}
 	case config.ModeAPI:
 		backendFactory = &api.BackendFactory{
@@ -83,13 +85,14 @@ func run() error {
 			SkillStore:     skillStore,
 			MinimaxAPIKey:  cfg.MinimaxAPIKey,
 		}
-		passiveFactory = &api.PassiveBackendFactory{
+		passiveFactory = &api.BackendFactory{
 			APIKey:         cfg.APIKey,
 			BaseURL:        cfg.BaseURL,
 			AllowedDirs:    cfg.AllowedDirs,
 			DefaultWorkDir: cfg.ClaudeCWD,
 			SkillStore:     skillStore,
 			MinimaxAPIKey:  cfg.MinimaxAPIKey,
+			Passive:        true,
 		}
 	}
 

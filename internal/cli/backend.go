@@ -165,20 +165,7 @@ func (b *Backend) handleCanUseTool(requestID string, request map[string]any, res
 	toolName, _ := request["tool_name"].(string)
 	toolUseID, _ := request["tool_use_id"].(string)
 	input, _ := request["input"].(map[string]any)
-	allow, reason := perms.Check(toolName, input)
-
-	// if auto-check denies, ask user for approval
-	if !allow {
-		prompt := tools.FormatPermissionPrompt(toolName, input)
-		userApproved, err := responder.AskPermission(prompt)
-		if err != nil {
-			slog.Warn("asking permission", "error", err)
-		}
-		if userApproved {
-			allow = true
-			reason = ""
-		}
-	}
+	allow, reason := tools.CheckPermission(toolName, input, perms, responder)
 
 	return b.sendPermissionResponse(requestID, toolUseID, allow, reason, input)
 }
@@ -300,6 +287,7 @@ type BackendFactory struct {
 	AllowedDirs    []string
 	InitTimeout    time.Duration
 	SkillStore     skills.SkillStore
+	Passive        bool
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
@@ -309,44 +297,11 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 		workDir = f.DefaultWorkDir
 	}
 
-	// Build system prompt with skills
-	systemPrompt := ""
-	if f.SkillStore != nil {
-		skillList, _ := f.SkillStore.List()
-		if len(skillList) > 0 {
-			systemPrompt = skills.GenerateSkillsXML(skillList)
-		}
+	var base string
+	if f.Passive {
+		base = core.PassiveSystemPrompt()
 	}
-
-	proc, err := NewProcessWithSystemPrompt(workDir, "", f.InitTimeout, systemPrompt)
-	if err != nil {
-		return nil, err
-	}
-	return NewBackend(proc, f.SkillStore), nil
-}
-
-// PassiveBackendFactory creates CLI backends with passive system prompt
-type PassiveBackendFactory struct {
-	DefaultWorkDir string
-	InitTimeout    time.Duration
-	SkillStore     skills.SkillStore
-}
-
-var _ core.BackendFactory = (*PassiveBackendFactory)(nil)
-
-func (f *PassiveBackendFactory) Create(workDir string) (core.Backend, error) {
-	if workDir == "" {
-		workDir = f.DefaultWorkDir
-	}
-
-	// Build system prompt with skills
-	systemPrompt := core.PassiveSystemPrompt()
-	if f.SkillStore != nil {
-		skillList, _ := f.SkillStore.List()
-		if len(skillList) > 0 {
-			systemPrompt += "\n\n" + skills.GenerateSkillsXML(skillList)
-		}
-	}
+	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
 	proc, err := NewProcessWithSystemPrompt(workDir, "", f.InitTimeout, systemPrompt)
 	if err != nil {
