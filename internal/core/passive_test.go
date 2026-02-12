@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,15 +78,19 @@ func (m *mockDiscordClient) WaitForReaction(channelID, messageID string, emojis 
 }
 
 type passiveMockBackend struct {
-	sessionID     string
-	closed        bool
-	converseResp  string
-	converseErr   error
-	lastMsg       string
+	sessionID    string
+	closed       bool
+	converseResp string
+	converseErr  error
+	converseFunc func(ctx context.Context) (string, error)
+	lastMsg      string
 }
 
 func (m *passiveMockBackend) Converse(ctx context.Context, msg string, responder Responder, perms PermissionChecker) (string, error) {
 	m.lastMsg = msg
+	if m.converseFunc != nil {
+		return m.converseFunc(ctx)
+	}
 	return m.converseResp, m.converseErr
 }
 
@@ -240,4 +245,29 @@ func (m *mockPassivePermissionChecker) Check(toolName string, input map[string]a
 	default:
 		return false, "passive mode: read-only"
 	}
+}
+
+func TestPassiveBot_HandleBufferedMessages_ConverseTimeout(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	backend := &passiveMockBackend{sessionID: "p1"}
+	backend.converseFunc = func(ctx context.Context) (string, error) {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	factory := &passiveMockFactory{backend: backend}
+	discord := &mockDiscordClient{}
+	perms := &mockPassivePermissionChecker{}
+	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
+	bot.converseTimeout = 50 * time.Millisecond
+
+	// when
+	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
+		{ChannelID: "chan-1", MessageID: "m1", Content: "test", AuthorID: "u1"},
+	})
+
+	// then
+	a.Error(err)
+	a.Contains(err.Error(), "context deadline exceeded")
 }

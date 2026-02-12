@@ -4,22 +4,25 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 )
 
 // Bot orchestrates backend sessions
 type Bot struct {
-	sessions *SessionManager
-	perms    PermissionChecker
-	mu       sync.Mutex
+	sessions        *SessionManager
+	perms           PermissionChecker
+	mu              sync.Mutex
+	converseTimeout time.Duration
 }
 
 // NewBot creates a bot with the given dependencies
 func NewBot(sessions *SessionManager, perms PermissionChecker) *Bot {
 	return &Bot{
-		sessions: sessions,
-		perms:    perms,
+		sessions:        sessions,
+		perms:           perms,
+		converseTimeout: 10 * time.Minute,
 	}
 }
 
@@ -38,7 +41,8 @@ func (b *Bot) HandleMessage(responder Responder, userMessage string) error {
 	}
 	slog.Info("got session", "sessionID", backend.SessionID())
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), b.converseTimeout)
+	defer cancel()
 	response, err := backend.Converse(ctx, userMessage, responder, b.perms)
 	if err != nil {
 		return errors.Wrap(err, "conversing")

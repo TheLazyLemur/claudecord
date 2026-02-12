@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/stretchr/testify/assert"
@@ -176,5 +177,21 @@ func TestTruncateOutput_NoTruncation(t *testing.T) {
 
 	a.Equal("short", truncateOutput("short", 100))
 	a.Equal("exact", truncateOutput("exact", 5))
+}
+
+func TestExecuteBash_Timeout(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	old := bashTimeout
+	bashTimeout = 100 * time.Millisecond
+	defer func() { bashTimeout = old }()
+
+	// when
+	result, isErr := executeBash(map[string]any{"command": "sleep 10"})
+
+	// then
+	a.True(isErr)
+	a.Contains(result, "signal: killed")
 }
 

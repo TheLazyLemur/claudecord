@@ -72,7 +72,7 @@ type botMockBackend struct {
 	converseResp    string
 	converseErr     error
 	converseCalled  bool
-	converseFunc    func() (string, error)
+	converseFunc    func(ctx context.Context) (string, error)
 	lastMsg         string
 	lastResponder   Responder
 	lastPerms       PermissionChecker
@@ -84,7 +84,7 @@ func (m *botMockBackend) Converse(ctx context.Context, msg string, responder Res
 	m.lastResponder = responder
 	m.lastPerms = perms
 	if m.converseFunc != nil {
-		return m.converseFunc()
+		return m.converseFunc(ctx)
 	}
 	return m.converseResp, m.converseErr
 }
@@ -256,7 +256,7 @@ func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
 	converseStarted := make(chan struct{})
 	converseUnblock := make(chan struct{})
 	backend1 := &botMockBackend{sessionID: "s1"}
-	backend1.converseFunc = func() (string, error) {
+	backend1.converseFunc = func(ctx context.Context) (string, error) {
 		close(converseStarted)
 		<-converseUnblock
 		return "done", nil
@@ -297,4 +297,27 @@ func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
 	r.NoError(<-handleDone)
 	r.NoError(<-newSessionDone)
 	a.True(backend1.closed)
+}
+
+func TestBot_HandleMessage_ConverseTimeout(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	backend := &botMockBackend{sessionID: "s1"}
+	backend.converseFunc = func(ctx context.Context) (string, error) {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	factory := &botMockFactory{backend: backend}
+	perms := &mockPermissionChecker{allowAll: true}
+	bot := NewBot(NewSessionManager(factory), perms)
+	bot.converseTimeout = 50 * time.Millisecond
+	responder := &mockResponder{}
+
+	// when
+	err := bot.HandleMessage(responder, "hello")
+
+	// then
+	a.Error(err)
+	a.Contains(err.Error(), "context deadline exceeded")
 }

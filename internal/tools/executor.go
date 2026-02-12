@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 const maxOutputLen = 50000
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
+var bashTimeout = 2 * time.Minute
 
 func requireString(input map[string]any, key string) (string, string, bool) {
 	val, ok := input[key].(string)
@@ -114,7 +116,9 @@ func executeBash(input map[string]any) (string, bool) {
 		return errMsg, true
 	}
 
-	cmd := exec.Command("sh", "-c", command)
+	ctx, cancel := context.WithTimeout(context.Background(), bashTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

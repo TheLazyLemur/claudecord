@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -26,17 +27,19 @@ If you decide to respond, provide a helpful answer. If not, respond with [NO_RES
 const noResponseMarker = "[NO_RESPONSE]"
 
 type PassiveBot struct {
-	sessions *SessionManager
-	discord  DiscordClient
-	perms    PermissionChecker
-	mu       sync.Mutex
+	sessions        *SessionManager
+	discord         DiscordClient
+	perms           PermissionChecker
+	mu              sync.Mutex
+	converseTimeout time.Duration
 }
 
 func NewPassiveBot(sessions *SessionManager, discord DiscordClient, perms PermissionChecker) *PassiveBot {
 	return &PassiveBot{
-		sessions: sessions,
-		discord:  discord,
-		perms:    perms,
+		sessions:        sessions,
+		discord:         discord,
+		perms:           perms,
+		converseTimeout: 10 * time.Minute,
 	}
 }
 
@@ -59,7 +62,8 @@ func (b *PassiveBot) HandleBufferedMessages(channelID string, msgs []BufferedMes
 
 	// Use a no-op responder since passive bot doesn't support discord tools
 	responder := &noopResponder{}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), b.converseTimeout)
+	defer cancel()
 
 	response, err := backend.Converse(ctx, combined, responder, b.perms)
 	if err != nil {
