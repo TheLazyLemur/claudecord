@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
 )
@@ -19,15 +17,11 @@ var readOnlyTools = map[string]bool{
 }
 
 type ReadOnlyPermissionChecker struct {
-	allowedDirs []string
+	PathValidator
 }
 
 func NewReadOnlyPermissionChecker(allowedDirs []string) *ReadOnlyPermissionChecker {
-	cleaned := make([]string, len(allowedDirs))
-	for i, dir := range allowedDirs {
-		cleaned[i] = filepath.Clean(dir)
-	}
-	return &ReadOnlyPermissionChecker{allowedDirs: cleaned}
+	return &ReadOnlyPermissionChecker{PathValidator: NewPathValidator(allowedDirs)}
 }
 
 func (p *ReadOnlyPermissionChecker) Check(toolName string, input map[string]any) (allow bool, reason string) {
@@ -35,33 +29,11 @@ func (p *ReadOnlyPermissionChecker) Check(toolName string, input map[string]any)
 		return false, fmt.Sprintf("read-only mode: %s not allowed", toolName)
 	}
 
-	paths := p.extractPaths(input)
+	paths := p.ExtractPaths(input)
 	for _, path := range paths {
-		if !p.isAllowed(path) {
+		if !p.IsAllowed(path) {
 			return false, fmt.Sprintf("path %s is outside allowed directories", path)
 		}
 	}
 	return true, ""
-}
-
-func (p *ReadOnlyPermissionChecker) extractPaths(input map[string]any) []string {
-	var paths []string
-	for _, field := range pathFields {
-		if val, ok := input[field]; ok {
-			if s, ok := val.(string); ok && s != "" {
-				paths = append(paths, s)
-			}
-		}
-	}
-	return paths
-}
-
-func (p *ReadOnlyPermissionChecker) isAllowed(path string) bool {
-	cleanPath := filepath.Clean(path)
-	for _, allowed := range p.allowedDirs {
-		if cleanPath == allowed || strings.HasPrefix(cleanPath, allowed+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
 }
