@@ -17,6 +17,14 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 )
 
+func requireString(input map[string]any, key string) (string, string, bool) {
+	val, ok := input[key].(string)
+	if !ok || val == "" {
+		return "", "missing " + key + " argument", true
+	}
+	return val, "", false
+}
+
 func truncateOutput(s string, maxLen int) string {
 	if len(s) > maxLen {
 		return s[:maxLen] + "\n... (truncated)"
@@ -56,9 +64,9 @@ func Execute(name string, input map[string]any, deps Deps) (string, bool) {
 }
 
 func executeReactEmoji(input map[string]any, responder core.Responder) (string, bool) {
-	emoji, ok := input["emoji"].(string)
-	if !ok || emoji == "" {
-		return "missing emoji argument", true
+	emoji, errMsg, isErr := requireString(input, "emoji")
+	if isErr {
+		return errMsg, true
 	}
 	slog.Info("AddReaction", "emoji", emoji)
 	if err := responder.AddReaction(emoji); err != nil {
@@ -69,9 +77,9 @@ func executeReactEmoji(input map[string]any, responder core.Responder) (string, 
 }
 
 func executeSendUpdate(input map[string]any, responder core.Responder) (string, bool) {
-	msg, ok := input["message"].(string)
-	if !ok || msg == "" {
-		return "missing message argument", true
+	msg, errMsg, isErr := requireString(input, "message")
+	if isErr {
+		return errMsg, true
 	}
 	if err := responder.SendUpdate(msg); err != nil {
 		slog.Error("SendUpdate failed", "error", err)
@@ -81,9 +89,9 @@ func executeSendUpdate(input map[string]any, responder core.Responder) (string, 
 }
 
 func executeRead(input map[string]any) (string, bool) {
-	filePath, ok := input["file_path"].(string)
-	if !ok || filePath == "" {
-		return "missing file_path argument", true
+	filePath, errMsg, isErr := requireString(input, "file_path")
+	if isErr {
+		return errMsg, true
 	}
 
 	filePath = filepath.Clean(filePath)
@@ -97,9 +105,9 @@ func executeRead(input map[string]any) (string, bool) {
 }
 
 func executeBash(input map[string]any) (string, bool) {
-	command, ok := input["command"].(string)
-	if !ok || command == "" {
-		return "missing command argument", true
+	command, errMsg, isErr := requireString(input, "command")
+	if isErr {
+		return errMsg, true
 	}
 
 	cmd := exec.Command("sh", "-c", command)
@@ -134,9 +142,9 @@ func executeBash(input map[string]any) (string, bool) {
 }
 
 func executeSkill(input map[string]any, store skills.SkillStore) (string, bool) {
-	name, ok := input["name"].(string)
-	if !ok || name == "" {
-		return "missing name argument", true
+	name, errMsg, isErr := requireString(input, "name")
+	if isErr {
+		return errMsg, true
 	}
 
 	if store == nil {
@@ -152,14 +160,13 @@ func executeSkill(input map[string]any, store skills.SkillStore) (string, bool) 
 }
 
 func executeLoadSkillSupporting(input map[string]any, store skills.SkillStore) (string, bool) {
-	name, ok := input["name"].(string)
-	if !ok || name == "" {
-		return "missing name argument", true
+	name, errMsg, isErr := requireString(input, "name")
+	if isErr {
+		return errMsg, true
 	}
-
-	path, ok := input["path"].(string)
-	if !ok || path == "" {
-		return "missing path argument", true
+	path, errMsg, isErr := requireString(input, "path")
+	if isErr {
+		return errMsg, true
 	}
 
 	if store == nil {
@@ -175,9 +182,9 @@ func executeLoadSkillSupporting(input map[string]any, store skills.SkillStore) (
 }
 
 func executeFetch(input map[string]any) (string, bool) {
-	url, ok := input["url"].(string)
-	if !ok || url == "" {
-		return "missing url argument", true
+	url, errMsg, isErr := requireString(input, "url")
+	if isErr {
+		return errMsg, true
 	}
 
 	method, _ := input["method"].(string)
@@ -220,9 +227,9 @@ func executeFetch(input map[string]any) (string, bool) {
 }
 
 func executeWebSearch(input map[string]any, apiKey string) (string, bool) {
-	query, ok := input["query"].(string)
-	if !ok || query == "" {
-		return "missing query argument", true
+	query, errMsg, isErr := requireString(input, "query")
+	if isErr {
+		return errMsg, true
 	}
 
 	if apiKey == "" {

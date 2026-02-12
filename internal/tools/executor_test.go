@@ -133,6 +133,37 @@ func TestExecute_UnknownTool(t *testing.T) {
 	a.True(isErr)
 }
 
+func TestRequireString(t *testing.T) {
+	a := assert.New(t)
+
+	val, errMsg, isErr := requireString(map[string]any{"key": "hello"}, "key")
+	a.Equal("hello", val)
+	a.Empty(errMsg)
+	a.False(isErr)
+}
+
+func TestRequireString_Missing(t *testing.T) {
+	a := assert.New(t)
+
+	// missing key
+	val, errMsg, isErr := requireString(map[string]any{}, "key")
+	a.Empty(val)
+	a.Equal("missing key argument", errMsg)
+	a.True(isErr)
+
+	// empty string
+	val, errMsg, isErr = requireString(map[string]any{"key": ""}, "key")
+	a.Empty(val)
+	a.Equal("missing key argument", errMsg)
+	a.True(isErr)
+
+	// wrong type
+	val, errMsg, isErr = requireString(map[string]any{"key": 123}, "key")
+	a.Empty(val)
+	a.Equal("missing key argument", errMsg)
+	a.True(isErr)
+}
+
 func TestTruncateOutput(t *testing.T) {
 	a := assert.New(t)
 
