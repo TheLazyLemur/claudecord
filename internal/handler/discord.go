@@ -9,6 +9,7 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
+	"slices"
 )
 
 // DiscordSession abstracts the discordgo.Session methods we need
@@ -204,12 +205,7 @@ func NewHandler(bot BotInterface, botID string, allowedUsers []string, discordCl
 
 // isUserAllowed checks if a user is in the allowed users list
 func (h *Handler) isUserAllowed(userID string) bool {
-	for _, allowedID := range h.allowedUsers {
-		if allowedID == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(h.allowedUsers, userID)
 }
 
 // getInteractionUser extracts user from interaction (guild or DM)
