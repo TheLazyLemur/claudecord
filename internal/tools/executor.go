@@ -17,6 +17,10 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 )
 
+const maxOutputLen = 50000
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 func requireString(input map[string]any, key string) (string, string, bool) {
 	val, ok := input[key].(string)
 	if !ok || val == "" {
@@ -101,7 +105,7 @@ func executeRead(input map[string]any) (string, bool) {
 		return "error reading file: " + err.Error(), true
 	}
 
-	return truncateOutput(string(content), 50000), false
+	return truncateOutput(string(content), maxOutputLen), false
 }
 
 func executeBash(input map[string]any) (string, bool) {
@@ -138,7 +142,7 @@ func executeBash(input map[string]any) (string, bool) {
 		return result.String(), true
 	}
 
-	return truncateOutput(result.String(), 50000), false
+	return truncateOutput(result.String(), maxOutputLen), false
 }
 
 func executeSkill(input map[string]any, store skills.SkillStore) (string, bool) {
@@ -211,8 +215,7 @@ func executeFetch(input map[string]any) (string, bool) {
 		}
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "error making request: " + err.Error(), true
 	}
@@ -223,7 +226,7 @@ func executeFetch(input map[string]any) (string, bool) {
 		return "error reading response: " + err.Error(), true
 	}
 
-	return truncateOutput(string(respBody), 50000), resp.StatusCode >= 400
+	return truncateOutput(string(respBody), maxOutputLen), resp.StatusCode >= 400
 }
 
 func executeWebSearch(input map[string]any, apiKey string) (string, bool) {
@@ -246,8 +249,7 @@ func executeWebSearch(input map[string]any, apiKey string) (string, bool) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "error making request: " + err.Error(), true
 	}

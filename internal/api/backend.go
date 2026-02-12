@@ -218,12 +218,9 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	return NewBackend(client, systemPrompt, apiTools, f.SkillStore, f.MinimaxAPIKey), nil
 }
 
-func buildTools() []anthropic.ToolUnionParam {
-	allTools := append(core.DiscordTools(), core.FileTools()...)
-	allTools = append(allTools, core.SkillTools()...)
-
+func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
 	var tools []anthropic.ToolUnionParam
-	for _, t := range allTools {
+	for _, t := range defs {
 		tool := anthropic.ToolParam{
 			Name:        t.Name,
 			Description: anthropic.String(t.Description),
@@ -231,21 +228,17 @@ func buildTools() []anthropic.ToolUnionParam {
 		}
 		tools = append(tools, anthropic.ToolUnionParam{OfTool: &tool})
 	}
-
 	return tools
 }
 
+func buildTools() []anthropic.ToolUnionParam {
+	allTools := append(core.DiscordTools(), core.FileTools()...)
+	allTools = append(allTools, core.SkillTools()...)
+	return buildToolParams(allTools)
+}
+
 func buildPassiveTools() []anthropic.ToolUnionParam {
-	var tools []anthropic.ToolUnionParam
-	for _, t := range core.FileTools() {
-		tool := anthropic.ToolParam{
-			Name:        t.Name,
-			Description: anthropic.String(t.Description),
-			InputSchema: convertInputSchema(t.InputSchema),
-		}
-		tools = append(tools, anthropic.ToolUnionParam{OfTool: &tool})
-	}
-	return tools
+	return buildToolParams(core.FileTools())
 }
 
 func convertInputSchema(schema map[string]any) anthropic.ToolInputSchemaParam {
