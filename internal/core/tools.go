@@ -72,6 +72,48 @@ func FileTools() []ToolDef {
 				"required": []string{"command"},
 			},
 		},
+		{
+			Name:        "Fetch",
+			Description: "Make HTTP request. GET auto-approved, POST/PATCH/DELETE require approval.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"url": map[string]any{
+						"type":        "string",
+						"description": "URL to fetch",
+					},
+					"method": map[string]any{
+						"type":        "string",
+						"enum":        []string{"GET", "POST", "PATCH", "DELETE"},
+						"default":     "GET",
+						"description": "HTTP method",
+					},
+					"body": map[string]any{
+						"type":        "string",
+						"description": "Request body (for POST/PATCH)",
+					},
+					"headers": map[string]any{
+						"type":        "object",
+						"description": "Request headers",
+					},
+				},
+				"required": []string{"url"},
+			},
+		},
+		{
+			Name:        "WebSearch",
+			Description: "Search the web. Returns titles, links, snippets. Use 3-5 keywords.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "Search query (3-5 keywords)",
+					},
+				},
+				"required": []string{"query"},
+			},
+		},
 	}
 }
 

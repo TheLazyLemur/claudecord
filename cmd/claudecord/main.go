@@ -13,6 +13,7 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/cli"
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/claudecord/internal/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/bwmarrin/discordgo"
@@ -33,6 +34,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
+	// Create dashboard hub and wrap slog handler
+	hub := dashboard.NewHub()
+	go hub.Run()
+
+	baseHandler := slog.NewTextHandler(os.Stdout, nil)
+	broadcastHandler := dashboard.NewBroadcastHandler(hub, baseHandler)
+	slog.SetDefault(slog.New(broadcastHandler))
 
 	slog.Info("starting", "mode", cfg.Mode)
 
@@ -72,6 +81,7 @@ func run() error {
 			AllowedDirs:    cfg.AllowedDirs,
 			DefaultWorkDir: cfg.ClaudeCWD,
 			SkillStore:     skillStore,
+			MinimaxAPIKey:  cfg.MinimaxAPIKey,
 		}
 		passiveFactory = &api.PassiveBackendFactory{
 			APIKey:         cfg.APIKey,
@@ -79,6 +89,7 @@ func run() error {
 			AllowedDirs:    cfg.AllowedDirs,
 			DefaultWorkDir: cfg.ClaudeCWD,
 			SkillStore:     skillStore,
+			MinimaxAPIKey:  cfg.MinimaxAPIKey,
 		}
 	}
 
@@ -143,14 +154,18 @@ func run() error {
 
 	slog.Info("bot started", "user", dg.State.User.Username)
 
-	// Start webhook server
+	// Create dashboard server (shares session with Discord bot)
+	dashboardServer := dashboard.NewServer(hub, sessionMgr, permChecker, skillStore, skillsDir, cfg.DashboardPassword)
+
+	// Start webhook + dashboard server
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())
+	mux.Handle("/", dashboardServer.Handler())
 	srv := &http.Server{Addr: ":" + cfg.WebhookPort, Handler: mux}
 	go func() {
-		slog.Info("webhook server starting", "addr", srv.Addr)
+		slog.Info("server starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("webhook server error", "error", err)
+			slog.Error("server error", "error", err)
 		}
 	}()
 

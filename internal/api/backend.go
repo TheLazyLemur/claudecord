@@ -20,24 +20,26 @@ const defaultModel = "claude-sonnet-4-20250514"
 
 // Backend implements core.Backend using Anthropic API
 type Backend struct {
-	client       anthropic.Client
-	sessionID    string
-	history      []anthropic.MessageParam
-	tools        []anthropic.ToolUnionParam
-	systemPrompt string
-	skillStore   skills.SkillStore
-	mu           sync.Mutex
+	client        anthropic.Client
+	sessionID     string
+	history       []anthropic.MessageParam
+	tools         []anthropic.ToolUnionParam
+	systemPrompt  string
+	skillStore    skills.SkillStore
+	minimaxAPIKey string
+	mu            sync.Mutex
 }
 
 // NewBackend creates an API backend
-func NewBackend(client anthropic.Client, systemPrompt string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore) *Backend {
+func NewBackend(client anthropic.Client, systemPrompt string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string) *Backend {
 	return &Backend{
-		client:       client,
-		sessionID:    generateSessionID(),
-		history:      []anthropic.MessageParam{},
-		tools:        tools,
-		systemPrompt: systemPrompt,
-		skillStore:   skillStore,
+		client:        client,
+		sessionID:     generateSessionID(),
+		history:       []anthropic.MessageParam{},
+		tools:         tools,
+		systemPrompt:  systemPrompt,
+		skillStore:    skillStore,
+		minimaxAPIKey: minimaxAPIKey,
 	}
 }
 
@@ -93,7 +95,7 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 		}
 
 		// Execute tools
-		toolResults, err := b.executeTools(ctx, toolUses, responder, perms, b.skillStore)
+		toolResults, err := b.executeTools(ctx, toolUses, responder, perms, b.skillStore, b.minimaxAPIKey)
 		if err != nil {
 			return finalResponse, errors.Wrap(err, "tool execution failed")
 		}
@@ -149,7 +151,7 @@ func extractToolUses(resp *anthropic.Message) []anthropic.ToolUseBlock {
 	return tools
 }
 
-func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, responder core.Responder, perms core.PermissionChecker, store skills.SkillStore) ([]anthropic.ContentBlockParamUnion, error) {
+func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, responder core.Responder, perms core.PermissionChecker, store skills.SkillStore, minimaxAPIKey string) ([]anthropic.ContentBlockParamUnion, error) {
 	var results []anthropic.ContentBlockParamUnion
 
 	for _, tu := range toolUses {
@@ -177,7 +179,7 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 		}
 
 		// Execute the tool
-		result, isError := executeToolByName(tu.Name, input, responder, store)
+		result, isError := executeToolByName(tu.Name, input, responder, store, minimaxAPIKey)
 		results = append(results, anthropic.NewToolResultBlock(tu.ID, result, isError))
 	}
 
@@ -205,6 +207,7 @@ type BackendFactory struct {
 	AllowedDirs    []string
 	DefaultWorkDir string
 	SkillStore     skills.SkillStore
+	MinimaxAPIKey  string
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
@@ -231,7 +234,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 		}
 	}
 
-	return NewBackend(client, systemPrompt, tools, f.SkillStore), nil
+	return NewBackend(client, systemPrompt, tools, f.SkillStore, f.MinimaxAPIKey), nil
 }
 
 func buildTools() []anthropic.ToolUnionParam {
@@ -265,6 +268,7 @@ type PassiveBackendFactory struct {
 	AllowedDirs    []string
 	DefaultWorkDir string
 	SkillStore     skills.SkillStore
+	MinimaxAPIKey  string
 }
 
 var _ core.BackendFactory = (*PassiveBackendFactory)(nil)
@@ -291,7 +295,7 @@ func (f *PassiveBackendFactory) Create(workDir string) (core.Backend, error) {
 		}
 	}
 
-	return NewBackend(client, systemPrompt, tools, f.SkillStore), nil
+	return NewBackend(client, systemPrompt, tools, f.SkillStore, f.MinimaxAPIKey), nil
 }
 
 func buildPassiveTools() []anthropic.ToolUnionParam {

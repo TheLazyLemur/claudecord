@@ -30,6 +30,10 @@ type Config struct {
 	BaseURL string
 	// Resend API key for email skills
 	ResendAPIKey string
+	// Optional password for dashboard auth
+	DashboardPassword string
+	// Minimax API key for WebSearch tool
+	MinimaxAPIKey string
 }
 
 // Load reads config from env map. For production use LoadFromEnv.
@@ -83,6 +87,8 @@ func Load(env map[string]string) (*Config, error) {
 
 	baseURL := env["CLAUDECORD_BASE_URL"]
 	resendAPIKey := env["RESEND_API_KEY"]
+	dashboardPassword := env["DASHBOARD_PASSWORD"]
+	minimaxAPIKey := env["MINIMAX_API_KEY"]
 
 	return &Config{
 		DiscordToken: discordToken,
@@ -92,8 +98,10 @@ func Load(env map[string]string) (*Config, error) {
 		WebhookPort:  webhookPort,
 		Mode:         mode,
 		APIKey:       apiKey,
-		BaseURL:      baseURL,
-		ResendAPIKey: resendAPIKey,
+		BaseURL:           baseURL,
+		ResendAPIKey:      resendAPIKey,
+		DashboardPassword: dashboardPassword,
+		MinimaxAPIKey:     minimaxAPIKey,
 	}, nil
 }
 
@@ -109,6 +117,8 @@ func LoadFromEnv() (*Config, error) {
 		"CLAUDECORD_API_KEY":  os.Getenv("CLAUDECORD_API_KEY"),
 		"CLAUDECORD_BASE_URL": os.Getenv("CLAUDECORD_BASE_URL"),
 		"RESEND_API_KEY":      os.Getenv("RESEND_API_KEY"),
+		"DASHBOARD_PASSWORD":  os.Getenv("DASHBOARD_PASSWORD"),
+		"MINIMAX_API_KEY":     os.Getenv("MINIMAX_API_KEY"),
 	}
 	return Load(env)
 }

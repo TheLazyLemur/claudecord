@@ -37,6 +37,25 @@ func (p *PermissionChecker) Check(toolName string, input map[string]any) (allow 
 		return true, ""
 	}
 
+	// Skill tools always auto-approve
+	if toolName == "Skill" || toolName == "LoadSkillSupporting" {
+		return true, ""
+	}
+
+	// WebSearch auto-approves (read-only)
+	if toolName == "WebSearch" {
+		return true, ""
+	}
+
+	// Fetch auto-approves for GET, requires approval for mutating methods
+	if toolName == "Fetch" {
+		method, _ := input["method"].(string)
+		if method == "" || strings.ToUpper(method) == "GET" {
+			return true, ""
+		}
+		return false, "requires approval"
+	}
+
 	// everything else requires user approval
 	return false, "requires approval"
 }

@@ -117,12 +117,58 @@ func TestLoad_InvalidMode(t *testing.T) {
 
 func TestLoad_ClaudeCWDOverride(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDE_CWD":         "/custom/path",
-		"CLAUDECORD_MODE":    "cli",
+		"DISCORD_TOKEN":   "mytoken",
+		"ALLOWED_DIRS":    "/home/user",
+		"ALLOWED_USERS":   "123",
+		"CLAUDE_CWD":      "/custom/path",
+		"CLAUDECORD_MODE": "cli",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/path", cfg.ClaudeCWD)
+}
+
+func TestLoad_DashboardPassword(t *testing.T) {
+	cfg, err := Load(map[string]string{
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user",
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_MODE":    "cli",
+		"DASHBOARD_PASSWORD": "secret123",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "secret123", cfg.DashboardPassword)
+}
+
+func TestLoad_DashboardPasswordOptional(t *testing.T) {
+	cfg, err := Load(map[string]string{
+		"DISCORD_TOKEN":   "mytoken",
+		"ALLOWED_DIRS":    "/home/user",
+		"ALLOWED_USERS":   "123",
+		"CLAUDECORD_MODE": "cli",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, cfg.DashboardPassword)
+}
+
+func TestLoad_MinimaxAPIKey(t *testing.T) {
+	cfg, err := Load(map[string]string{
+		"DISCORD_TOKEN":   "mytoken",
+		"ALLOWED_DIRS":    "/home/user",
+		"ALLOWED_USERS":   "123",
+		"CLAUDECORD_MODE": "cli",
+		"MINIMAX_API_KEY": "minimax-test-key",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "minimax-test-key", cfg.MinimaxAPIKey)
+}
+
+func TestLoad_MinimaxAPIKeyOptional(t *testing.T) {
+	cfg, err := Load(map[string]string{
+		"DISCORD_TOKEN":   "mytoken",
+		"ALLOWED_DIRS":    "/home/user",
+		"ALLOWED_USERS":   "123",
+		"CLAUDECORD_MODE": "cli",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, cfg.MinimaxAPIKey)
 }
