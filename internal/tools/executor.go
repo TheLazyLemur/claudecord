@@ -1,4 +1,4 @@
-package api
+package tools
 
 import (
 	"bytes"
@@ -17,13 +17,20 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 )
 
-// executeToolByName dispatches to the appropriate tool executor
-func executeToolByName(name string, input map[string]any, responder core.Responder, store skills.SkillStore, minimaxAPIKey string) (string, bool) {
+// Deps holds all dependencies needed by tool executors.
+type Deps struct {
+	Responder     core.Responder
+	SkillStore    skills.SkillStore
+	MinimaxAPIKey string
+}
+
+// Execute dispatches to the appropriate tool executor. Returns (result, isError).
+func Execute(name string, input map[string]any, deps Deps) (string, bool) {
 	switch name {
 	case "react_emoji":
-		return executeReactEmoji(input, responder)
+		return executeReactEmoji(input, deps.Responder)
 	case "send_update":
-		return executeSendUpdate(input, responder)
+		return executeSendUpdate(input, deps.Responder)
 	case "Read":
 		return executeRead(input)
 	case "Bash":
@@ -31,14 +38,29 @@ func executeToolByName(name string, input map[string]any, responder core.Respond
 	case "Fetch":
 		return executeFetch(input)
 	case "Skill":
-		return executeSkill(input, store)
+		return executeSkill(input, deps.SkillStore)
 	case "LoadSkillSupporting":
-		return executeLoadSkillSupporting(input, store)
+		return executeLoadSkillSupporting(input, deps.SkillStore)
 	case "WebSearch":
-		return executeWebSearch(input, minimaxAPIKey)
+		return executeWebSearch(input, deps.MinimaxAPIKey)
 	default:
 		return "unknown tool: " + name, true
 	}
+}
+
+// FormatPermissionPrompt builds a human-readable permission prompt for a tool call.
+func FormatPermissionPrompt(toolName string, input map[string]any) string {
+	prompt := "Allow **" + toolName + "**?"
+	if cmd, ok := input["command"].(string); ok {
+		if len(cmd) > 100 {
+			cmd = cmd[:100] + "..."
+		}
+		prompt += "\n`" + cmd + "`"
+	}
+	if path, ok := input["file_path"].(string); ok {
+		prompt += "\n`" + path + "`"
+	}
+	return prompt
 }
 
 func executeReactEmoji(input map[string]any, responder core.Responder) (string, bool) {
@@ -72,7 +94,6 @@ func executeRead(input map[string]any) (string, bool) {
 		return "missing file_path argument", true
 	}
 
-	// Clean the path
 	filePath = filepath.Clean(filePath)
 
 	content, err := os.ReadFile(filePath)
@@ -80,7 +101,6 @@ func executeRead(input map[string]any) (string, bool) {
 		return "error reading file: " + err.Error(), true
 	}
 
-	// Truncate if too long
 	const maxLen = 50000
 	if len(content) > maxLen {
 		content = content[:maxLen]
@@ -96,7 +116,6 @@ func executeBash(input map[string]any) (string, bool) {
 		return "missing command argument", true
 	}
 
-	// Execute via sh -c
 	cmd := exec.Command("sh", "-c", command)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -125,7 +144,6 @@ func executeBash(input map[string]any) (string, bool) {
 		return result.String(), true
 	}
 
-	// Truncate if too long
 	output := result.String()
 	const maxLen = 50000
 	if len(output) > maxLen {
@@ -237,7 +255,6 @@ func executeWebSearch(input map[string]any, apiKey string) (string, bool) {
 		return "MINIMAX_API_KEY not configured", true
 	}
 
-	// Build request body
 	reqBody := `{"q":"` + strings.ReplaceAll(query, `"`, `\"`) + `"}`
 
 	req, err := http.NewRequest("POST", "https://api.minimax.io/v1/coding_plan/search", strings.NewReader(reqBody))
@@ -264,7 +281,6 @@ func executeWebSearch(input map[string]any, apiKey string) (string, bool) {
 		return "search failed: " + string(respBody), true
 	}
 
-	// Parse and format response
 	var searchResp struct {
 		Organic []struct {
 			Title   string `json:"title"`

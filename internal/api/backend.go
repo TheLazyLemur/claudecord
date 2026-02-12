@@ -9,6 +9,7 @@ import (
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/TheLazyLemur/claudecord/internal/tools"
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/pkg/errors"
@@ -167,7 +168,7 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 		// Check permissions
 		allow, reason := perms.Check(tu.Name, input)
 		if !allow {
-			prompt := formatPermissionPrompt(tu.Name, input)
+			prompt := tools.FormatPermissionPrompt(tu.Name, input)
 			userApproved, err := responder.AskPermission(prompt)
 			if err != nil {
 				slog.Warn("asking permission", "error", err)
@@ -179,25 +180,12 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 		}
 
 		// Execute the tool
-		result, isError := executeToolByName(tu.Name, input, responder, store, minimaxAPIKey)
+		deps := tools.Deps{Responder: responder, SkillStore: store, MinimaxAPIKey: minimaxAPIKey}
+		result, isError := tools.Execute(tu.Name, input, deps)
 		results = append(results, anthropic.NewToolResultBlock(tu.ID, result, isError))
 	}
 
 	return results, nil
-}
-
-func formatPermissionPrompt(toolName string, input map[string]any) string {
-	prompt := "Allow **" + toolName + "**?"
-	if cmd, ok := input["command"].(string); ok {
-		if len(cmd) > 100 {
-			cmd = cmd[:100] + "..."
-		}
-		prompt += "\n`" + cmd + "`"
-	}
-	if path, ok := input["file_path"].(string); ok {
-		prompt += "\n`" + path + "`"
-	}
-	return prompt
 }
 
 // BackendFactory creates API backends

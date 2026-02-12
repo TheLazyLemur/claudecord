@@ -9,6 +9,7 @@ import (
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/TheLazyLemur/claudecord/internal/tools"
 	"github.com/pkg/errors"
 )
 
@@ -168,7 +169,7 @@ func (b *Backend) handleCanUseTool(requestID string, request map[string]any, res
 
 	// if auto-check denies, ask user for approval
 	if !allow {
-		prompt := formatPermissionPrompt(toolName, input)
+		prompt := tools.FormatPermissionPrompt(toolName, input)
 		userApproved, err := responder.AskPermission(prompt)
 		if err != nil {
 			slog.Warn("asking permission", "error", err)
@@ -180,20 +181,6 @@ func (b *Backend) handleCanUseTool(requestID string, request map[string]any, res
 	}
 
 	return b.sendPermissionResponse(requestID, toolUseID, allow, reason, input)
-}
-
-func formatPermissionPrompt(toolName string, input map[string]any) string {
-	prompt := "Allow **" + toolName + "**?"
-	if cmd, ok := input["command"].(string); ok {
-		if len(cmd) > 100 {
-			cmd = cmd[:100] + "..."
-		}
-		prompt += "\n`" + cmd + "`"
-	}
-	if path, ok := input["file_path"].(string); ok {
-		prompt += "\n`" + path + "`"
-	}
-	return prompt
 }
 
 func (b *Backend) sendPermissionResponse(requestID, toolUseID string, allow bool, reason string, input map[string]any) error {
@@ -267,73 +254,15 @@ func (b *Backend) handleMCPToolCall(requestID string, jsonrpcID any, params map[
 	toolName, _ := params["name"].(string)
 	args, _ := params["arguments"].(map[string]any)
 
-	switch toolName {
-	case "react_emoji":
-		emoji, ok := args["emoji"].(string)
-		if !ok || emoji == "" {
-			return b.sendMCPToolError(requestID, jsonrpcID, "missing emoji argument")
-		}
-		slog.Info("AddReaction", "emoji", emoji)
-		if err := responder.AddReaction(emoji); err != nil {
-			slog.Error("AddReaction failed", "error", err)
-			return b.sendMCPToolError(requestID, jsonrpcID, err.Error())
-		}
-		return b.sendMCPResult(requestID, jsonrpcID, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": "reaction added"}},
-		})
+	deps := tools.Deps{Responder: responder, SkillStore: store}
+	result, isErr := tools.Execute(toolName, args, deps)
 
-	case "send_update":
-		msg, ok := args["message"].(string)
-		if !ok || msg == "" {
-			return b.sendMCPToolError(requestID, jsonrpcID, "missing message argument")
-		}
-		if err := responder.SendUpdate(msg); err != nil {
-			slog.Error("SendUpdate failed", "error", err)
-			return b.sendMCPToolError(requestID, jsonrpcID, err.Error())
-		}
-		return b.sendMCPResult(requestID, jsonrpcID, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": "update sent"}},
-		})
-
-	case "Skill":
-		name, ok := args["name"].(string)
-		if !ok || name == "" {
-			return b.sendMCPToolError(requestID, jsonrpcID, "missing name argument")
-		}
-		if store == nil {
-			return b.sendMCPToolError(requestID, jsonrpcID, "skill store not configured")
-		}
-		skill, err := store.Load(name)
-		if err != nil {
-			return b.sendMCPToolError(requestID, jsonrpcID, "skill not found: "+name)
-		}
-		return b.sendMCPResult(requestID, jsonrpcID, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": skill.Instructions}},
-		})
-
-	case "LoadSkillSupporting":
-		name, ok := args["name"].(string)
-		if !ok || name == "" {
-			return b.sendMCPToolError(requestID, jsonrpcID, "missing name argument")
-		}
-		path, ok := args["path"].(string)
-		if !ok || path == "" {
-			return b.sendMCPToolError(requestID, jsonrpcID, "missing path argument")
-		}
-		if store == nil {
-			return b.sendMCPToolError(requestID, jsonrpcID, "skill store not configured")
-		}
-		content, err := store.LoadSupporting(name, path)
-		if err != nil {
-			return b.sendMCPToolError(requestID, jsonrpcID, "error loading supporting file: "+err.Error())
-		}
-		return b.sendMCPResult(requestID, jsonrpcID, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": string(content)}},
-		})
-
-	default:
-		return b.sendMCPToolError(requestID, jsonrpcID, "unknown tool: "+toolName)
+	if isErr {
+		return b.sendMCPToolError(requestID, jsonrpcID, result)
 	}
+	return b.sendMCPResult(requestID, jsonrpcID, map[string]any{
+		"content": []map[string]any{{"type": "text", "text": result}},
+	})
 }
 
 func (b *Backend) sendMCPResult(requestID string, jsonrpcID any, result any) error {
