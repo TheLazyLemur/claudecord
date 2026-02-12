@@ -92,23 +92,12 @@ func (b *PassiveBot) maybePostResponse(channelID, firstMessageID, response strin
 		return errors.Wrap(err, "starting thread")
 	}
 
-	if len(response) > maxDiscordMessageLen {
-		for len(response) > 0 {
-			chunk := response
-			if len(chunk) > maxDiscordMessageLen {
-				chunk = response[:maxDiscordMessageLen]
-				response = response[maxDiscordMessageLen:]
-			} else {
-				response = ""
-			}
-			if err := b.discord.SendMessage(threadID, chunk); err != nil {
-				return errors.Wrap(err, "sending to thread")
-			}
+	for _, chunk := range ChunkMessage(response, MaxDiscordMessageLen) {
+		if err := b.discord.SendMessage(threadID, chunk); err != nil {
+			return errors.Wrap(err, "sending to thread")
 		}
-		return nil
 	}
-
-	return b.discord.SendMessage(threadID, response)
+	return nil
 }
 
 func (b *PassiveBot) NewSession() error {

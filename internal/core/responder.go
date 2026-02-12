@@ -1,6 +1,25 @@
 package core
 
-const maxDiscordMessageLen = 2000
+const MaxDiscordMessageLen = 2000
+
+// ChunkMessage splits content into chunks of at most maxLen bytes.
+func ChunkMessage(content string, maxLen int) []string {
+	if content == "" {
+		return nil
+	}
+	var chunks []string
+	for len(content) > 0 {
+		chunk := content
+		if len(chunk) > maxLen {
+			chunk = content[:maxLen]
+			content = content[maxLen:]
+		} else {
+			content = ""
+		}
+		chunks = append(chunks, chunk)
+	}
+	return chunks
+}
 
 // DiscordResponder sends responses to Discord
 type DiscordResponder struct {
@@ -24,7 +43,7 @@ func (r *DiscordResponder) SendTyping() error {
 }
 
 func (r *DiscordResponder) PostResponse(content string) error {
-	if len(content) > maxDiscordMessageLen {
+	if len(content) > MaxDiscordMessageLen {
 		_, err := r.client.CreateThread(r.channelID, content)
 		return err
 	}

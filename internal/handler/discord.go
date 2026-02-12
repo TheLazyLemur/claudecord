@@ -11,8 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const maxMessageLen = 2000
-
 // DiscordSession abstracts the discordgo.Session methods we need
 type DiscordSession interface {
 	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
@@ -148,14 +146,7 @@ func (c *DiscordClientWrapper) CreateThread(channelID, content string) (string, 
 	}
 
 	// post actual content in thread (chunked if needed)
-	for len(content) > 0 {
-		chunk := content
-		if len(chunk) > maxMessageLen {
-			chunk = content[:maxMessageLen]
-			content = content[maxMessageLen:]
-		} else {
-			content = ""
-		}
+	for _, chunk := range core.ChunkMessage(content, core.MaxDiscordMessageLen) {
 		_, err = c.session.ChannelMessageSend(thread.ID, chunk)
 		if err != nil {
 			return "", errors.Wrap(err, "sending thread content")
