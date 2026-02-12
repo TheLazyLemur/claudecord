@@ -104,3 +104,32 @@ func TestServer_WS_Unauthenticated(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
+
+func TestServer_CheckOrigin_RejectsCrossOrigin(t *testing.T) {
+	s := NewServer(nil, nil, nil, nil, "", "testpass")
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://evil.com")
+
+	assert.False(t, s.upgrader.CheckOrigin(req))
+}
+
+func TestServer_CheckOrigin_AllowsSameOrigin(t *testing.T) {
+	s := NewServer(nil, nil, nil, nil, "", "testpass")
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://localhost:8080")
+
+	assert.True(t, s.upgrader.CheckOrigin(req))
+}
+
+func TestServer_CheckOrigin_RejectsEmptyOrigin(t *testing.T) {
+	s := NewServer(nil, nil, nil, nil, "", "testpass")
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "localhost:8080"
+
+	assert.False(t, s.upgrader.CheckOrigin(req))
+}

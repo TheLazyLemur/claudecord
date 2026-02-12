@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,7 +51,17 @@ func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.Permi
 		password:    password,
 		sessions:    make(map[string]time.Time),
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					return false
+				}
+				u, err := url.Parse(origin)
+				if err != nil {
+					return false
+				}
+				return u.Host == r.Host
+			},
 		},
 	}
 }
