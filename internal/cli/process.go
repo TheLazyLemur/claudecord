@@ -135,7 +135,6 @@ func newProcessWithSpawner(spawner ProcessSpawner, initTimeout time.Duration, sy
 
 func (p *Process) initialize(timeout time.Duration, systemPrompt string) error {
 	slog.Info("CLI initialize: sending init request")
-	// Send initialize request
 	reqID := fmt.Sprintf("init-%d", time.Now().UnixNano())
 	initMsg := buildInitializeRequest(reqID, systemPrompt)
 	if _, err := p.stdin.Write(append(initMsg, '\n')); err != nil {
@@ -143,9 +142,8 @@ func (p *Process) initialize(timeout time.Duration, systemPrompt string) error {
 	}
 	slog.Info("CLI initialize: sent, waiting for control_response")
 
-	// Read until we get control_response or system.init with session_id
 	scanner := bufio.NewScanner(p.stdout)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB buffer for large responses
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
@@ -159,16 +157,13 @@ func (p *Process) initialize(timeout time.Duration, systemPrompt string) error {
 		line := scanner.Bytes()
 		slog.Info("CLI initialize: got line", "len", len(line))
 
-		// Check if it's control_response (init ack) or system.init
-		var msg map[string]any
+		var msg CLIMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
 			continue
 		}
 
-		msgType, _ := msg["type"].(string)
-
 		// Handle MCP setup messages during init
-		if msgType == "control_request" {
+		if msg.Type == "control_request" {
 			if err := p.handleInitMCP(msg); err != nil {
 				slog.Error("MCP init error", "error", err)
 			}
@@ -176,18 +171,18 @@ func (p *Process) initialize(timeout time.Duration, systemPrompt string) error {
 		}
 
 		// If we get control_response for our init, we're ready
-		if msgType == "control_response" {
+		if msg.Type == "control_response" {
 			slog.Info("CLI initialize: got control_response, ready")
 			p.stdout = &prefixReader{scanner: scanner}
 			return nil
 		}
 
 		// Also check for system.init which has session_id
-		if msgType == "system" {
-			if subtype, _ := msg["subtype"].(string); subtype == "init" {
-				if sid, _ := msg["session_id"].(string); sid != "" {
-					slog.Info("CLI initialize: got session", "sessionID", sid)
-					p.sessionID = sid
+		if msg.Type == "system" {
+			if msg.Subtype == "init" {
+				if msg.SessionID != "" {
+					slog.Info("CLI initialize: got session", "sessionID", msg.SessionID)
+					p.sessionID = msg.SessionID
 					p.stdout = &prefixReader{scanner: scanner}
 					return nil
 				}
@@ -199,47 +194,44 @@ func (p *Process) initialize(timeout time.Duration, systemPrompt string) error {
 }
 
 // handleInitMCP handles MCP setup messages during initialization
-func (p *Process) handleInitMCP(msg map[string]any) error {
-	requestID, _ := msg["request_id"].(string)
-	request, _ := msg["request"].(map[string]any)
-	subtype, _ := request["subtype"].(string)
-
-	if subtype != "mcp_message" {
+func (p *Process) handleInitMCP(msg CLIMessage) error {
+	var req MCPMessageRequest
+	if err := json.Unmarshal(msg.Request, &req); err != nil {
 		return nil
 	}
 
-	message, _ := request["message"].(map[string]any)
-	method, _ := message["method"].(string)
-	jsonrpcID := message["id"]
-
-	slog.Info("MCP init", "method", method)
-
-	var result any
-	switch method {
-	case "initialize":
-		result = map[string]any{
-			"protocolVersion": "2024-11-05",
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "discord-tools", "version": "1.0.0"},
-		}
-	case "notifications/initialized":
-		result = map[string]any{}
-	case "tools/list":
-		result = map[string]any{"tools": core.MCPTools}
-	default:
-		result = map[string]any{}
+	if req.Subtype != "mcp_message" {
+		return nil
 	}
 
-	resp := map[string]any{
-		"type": "control_response",
-		"response": map[string]any{
-			"subtype":    "success",
-			"request_id": requestID,
-			"response": map[string]any{
-				"mcp_response": map[string]any{
-					"jsonrpc": "2.0",
-					"id":      jsonrpcID,
-					"result":  result,
+	slog.Info("MCP init", "method", req.Message.Method)
+
+	var result any
+	switch req.Message.Method {
+	case "initialize":
+		result = MCPInitResult{
+			ProtocolVersion: "2024-11-05",
+			Capabilities:    MCPCapability{Tools: map[string]any{}},
+			ServerInfo:      MCPServerInfo{Name: "discord-tools", Version: "1.0.0"},
+		}
+	case "notifications/initialized":
+		result = struct{}{}
+	case "tools/list":
+		result = MCPToolListResult{Tools: core.MCPTools}
+	default:
+		result = struct{}{}
+	}
+
+	resp := MCPResponseWrapper{
+		Type: "control_response",
+		Response: MCPResponseWrapperInner{
+			Subtype:   "success",
+			RequestID: msg.RequestID,
+			Response: MCPResponse{
+				MCPResponse: MCPJSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.Message.ID,
+					Result:  result,
 				},
 			},
 		},
@@ -256,14 +248,12 @@ type prefixReader struct {
 }
 
 func (r *prefixReader) Read(p []byte) (int, error) {
-	// Drain remaining from previous partial read first
 	if len(r.remaining) > 0 {
 		n := copy(p, r.remaining)
 		r.remaining = r.remaining[n:]
 		return n, nil
 	}
 
-	// The scanner may have buffered data, continue using it
 	if r.scanner.Scan() {
 		line := append(r.scanner.Bytes(), '\n')
 		n := copy(p, line)
@@ -291,7 +281,7 @@ func (p *Process) Send(msg []byte) error {
 
 func (p *Process) Receive() (<-chan []byte, error) {
 	p.recvOnce.Do(func() {
-		p.recvChan = make(chan []byte, 100) // buffered to avoid blocking
+		p.recvChan = make(chan []byte, 100)
 		go p.readLoop(p.recvChan)
 	})
 	return p.recvChan, nil
@@ -355,13 +345,13 @@ func buildInitializeRequest(requestID, systemPrompt string) []byte {
 	if prompt == "" {
 		prompt = "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates to a thread."
 	}
-	req := map[string]any{
-		"type":       "control_request",
-		"request_id": requestID,
-		"request": map[string]any{
-			"subtype":       "initialize",
-			"systemPrompt":  prompt,
-			"sdkMcpServers": []string{"discord-tools"},
+	req := ControlRequest{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request: ControlRequestInner{
+			Subtype:       "initialize",
+			SystemPrompt:  prompt,
+			SDKMcpServers: []string{"discord-tools"},
 		},
 	}
 	data, _ := json.Marshal(req)

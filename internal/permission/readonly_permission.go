@@ -6,6 +6,7 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/core"
 )
 
+
 var _ core.PermissionChecker = (*ReadOnlyPermissionChecker)(nil)
 
 var readOnlyTools = map[string]bool{
@@ -24,7 +25,7 @@ func NewReadOnlyPermissionChecker(allowedDirs []string) *ReadOnlyPermissionCheck
 	return &ReadOnlyPermissionChecker{PathValidator: NewPathValidator(allowedDirs)}
 }
 
-func (p *ReadOnlyPermissionChecker) Check(toolName string, input map[string]any) (allow bool, reason string) {
+func (p *ReadOnlyPermissionChecker) Check(toolName string, input core.ToolInput) (allow bool, reason string) {
 	if !readOnlyTools[toolName] {
 		return false, fmt.Sprintf("read-only mode: %s not allowed", toolName)
 	}

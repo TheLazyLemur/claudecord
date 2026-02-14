@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/stretchr/testify/assert"
 )
@@ -50,7 +51,7 @@ func TestExecute_ReactEmoji(t *testing.T) {
 	a := assert.New(t)
 	r := &mockResponder{}
 
-	result, isErr := Execute("react_emoji", map[string]any{"emoji": "👀"}, Deps{Responder: r})
+	result, isErr := Execute("react_emoji", core.ToolInput{Emoji: "👀"}, Deps{Responder: r})
 
 	a.Equal("reaction added", result)
 	a.False(isErr)
@@ -60,7 +61,7 @@ func TestExecute_ReactEmoji(t *testing.T) {
 func TestExecute_ReactEmoji_MissingArg(t *testing.T) {
 	a := assert.New(t)
 
-	result, isErr := Execute("react_emoji", map[string]any{}, Deps{Responder: &mockResponder{}})
+	result, isErr := Execute("react_emoji", core.ToolInput{}, Deps{Responder: &mockResponder{}})
 
 	a.Equal("missing emoji argument", result)
 	a.True(isErr)
@@ -70,7 +71,7 @@ func TestExecute_SendUpdate(t *testing.T) {
 	a := assert.New(t)
 	r := &mockResponder{}
 
-	result, isErr := Execute("send_update", map[string]any{"message": "working on it"}, Deps{Responder: r})
+	result, isErr := Execute("send_update", core.ToolInput{Message: "working on it"}, Deps{Responder: r})
 
 	a.Equal("update sent", result)
 	a.False(isErr)
@@ -80,7 +81,7 @@ func TestExecute_SendUpdate(t *testing.T) {
 func TestExecute_SendUpdate_MissingArg(t *testing.T) {
 	a := assert.New(t)
 
-	result, isErr := Execute("send_update", map[string]any{}, Deps{Responder: &mockResponder{}})
+	result, isErr := Execute("send_update", core.ToolInput{}, Deps{Responder: &mockResponder{}})
 
 	a.Equal("missing message argument", result)
 	a.True(isErr)
@@ -90,7 +91,7 @@ func TestExecute_Skill(t *testing.T) {
 	a := assert.New(t)
 	store := &mockSkillStore{skills: map[string]string{"greet": "say hello"}}
 
-	result, isErr := Execute("Skill", map[string]any{"name": "greet"}, Deps{SkillStore: store})
+	result, isErr := Execute("Skill", core.ToolInput{Name: "greet"}, Deps{SkillStore: store})
 
 	a.Equal("say hello", result)
 	a.False(isErr)
@@ -100,7 +101,7 @@ func TestExecute_Skill_NotFound(t *testing.T) {
 	a := assert.New(t)
 	store := &mockSkillStore{skills: map[string]string{}}
 
-	result, isErr := Execute("Skill", map[string]any{"name": "missing"}, Deps{SkillStore: store})
+	result, isErr := Execute("Skill", core.ToolInput{Name: "missing"}, Deps{SkillStore: store})
 
 	a.Equal("skill not found: missing", result)
 	a.True(isErr)
@@ -109,7 +110,7 @@ func TestExecute_Skill_NotFound(t *testing.T) {
 func TestExecute_Skill_NilStore(t *testing.T) {
 	a := assert.New(t)
 
-	result, isErr := Execute("Skill", map[string]any{"name": "x"}, Deps{})
+	result, isErr := Execute("Skill", core.ToolInput{Name: "x"}, Deps{})
 
 	a.Equal("skill store not configured", result)
 	a.True(isErr)
@@ -119,7 +120,7 @@ func TestExecute_LoadSkillSupporting(t *testing.T) {
 	a := assert.New(t)
 	store := &mockSkillStore{supporting: map[string][]byte{"greet/refs.md": []byte("ref content")}}
 
-	result, isErr := Execute("LoadSkillSupporting", map[string]any{"name": "greet", "path": "refs.md"}, Deps{SkillStore: store})
+	result, isErr := Execute("LoadSkillSupporting", core.ToolInput{Name: "greet", Path: "refs.md"}, Deps{SkillStore: store})
 
 	a.Equal("ref content", result)
 	a.False(isErr)
@@ -128,40 +129,9 @@ func TestExecute_LoadSkillSupporting(t *testing.T) {
 func TestExecute_UnknownTool(t *testing.T) {
 	a := assert.New(t)
 
-	result, isErr := Execute("bogus", map[string]any{}, Deps{})
+	result, isErr := Execute("bogus", core.ToolInput{}, Deps{})
 
 	a.Equal("unknown tool: bogus", result)
-	a.True(isErr)
-}
-
-func TestRequireString(t *testing.T) {
-	a := assert.New(t)
-
-	val, errMsg, isErr := requireString(map[string]any{"key": "hello"}, "key")
-	a.Equal("hello", val)
-	a.Empty(errMsg)
-	a.False(isErr)
-}
-
-func TestRequireString_Missing(t *testing.T) {
-	a := assert.New(t)
-
-	// missing key
-	val, errMsg, isErr := requireString(map[string]any{}, "key")
-	a.Empty(val)
-	a.Equal("missing key argument", errMsg)
-	a.True(isErr)
-
-	// empty string
-	val, errMsg, isErr = requireString(map[string]any{"key": ""}, "key")
-	a.Empty(val)
-	a.Equal("missing key argument", errMsg)
-	a.True(isErr)
-
-	// wrong type
-	val, errMsg, isErr = requireString(map[string]any{"key": 123}, "key")
-	a.Empty(val)
-	a.Equal("missing key argument", errMsg)
 	a.True(isErr)
 }
 
@@ -188,10 +158,9 @@ func TestExecuteBash_Timeout(t *testing.T) {
 	defer func() { bashTimeout = old }()
 
 	// when
-	result, isErr := executeBash(map[string]any{"command": "sleep 10"})
+	result, isErr := executeBash(core.ToolInput{Command: "sleep 10"})
 
 	// then
 	a.True(isErr)
 	a.Contains(result, "signal: killed")
 }
-

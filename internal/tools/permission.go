@@ -7,7 +7,7 @@ import (
 )
 
 // CheckPermission runs the auto-check, falls back to asking user.
-func CheckPermission(toolName string, input map[string]any, perms core.PermissionChecker, responder core.Responder) (bool, string) {
+func CheckPermission(toolName string, input core.ToolInput, perms core.PermissionChecker, responder core.Responder) (bool, string) {
 	allow, reason := perms.Check(toolName, input)
 	if allow {
 		return true, ""
@@ -25,16 +25,17 @@ func CheckPermission(toolName string, input map[string]any, perms core.Permissio
 }
 
 // FormatPermissionPrompt builds a human-readable permission prompt for a tool call.
-func FormatPermissionPrompt(toolName string, input map[string]any) string {
+func FormatPermissionPrompt(toolName string, input core.ToolInput) string {
 	prompt := "Allow **" + toolName + "**?"
-	if cmd, ok := input["command"].(string); ok {
+	if input.Command != "" {
+		cmd := input.Command
 		if len(cmd) > 100 {
 			cmd = cmd[:100] + "..."
 		}
 		prompt += "\n`" + cmd + "`"
 	}
-	if path, ok := input["file_path"].(string); ok {
-		prompt += "\n`" + path + "`"
+	if input.FilePath != "" {
+		prompt += "\n`" + input.FilePath + "`"
 	}
 	return prompt
 }

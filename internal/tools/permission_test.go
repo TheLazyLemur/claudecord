@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -12,7 +13,7 @@ type mockPerms struct {
 	reason string
 }
 
-func (m *mockPerms) Check(string, map[string]any) (bool, string) {
+func (m *mockPerms) Check(string, core.ToolInput) (bool, string) {
 	return m.allow, m.reason
 }
 
@@ -36,7 +37,7 @@ func TestCheckPermission_AutoAllow(t *testing.T) {
 	perms := &mockPerms{allow: true}
 	resp := &permResponder{}
 
-	allow, reason := CheckPermission("Bash", map[string]any{"command": "ls"}, perms, resp)
+	allow, reason := CheckPermission("Bash", core.ToolInput{Command: "ls"}, perms, resp)
 
 	a.True(allow)
 	a.Empty(reason)
@@ -48,7 +49,7 @@ func TestCheckPermission_DenyThenUserApproves(t *testing.T) {
 	perms := &mockPerms{allow: false, reason: "not in allowed dirs"}
 	resp := &permResponder{approved: true}
 
-	allow, reason := CheckPermission("Bash", map[string]any{"command": "rm -rf /"}, perms, resp)
+	allow, reason := CheckPermission("Bash", core.ToolInput{Command: "rm -rf /"}, perms, resp)
 
 	a.True(allow)
 	a.Empty(reason)
@@ -60,7 +61,7 @@ func TestCheckPermission_DenyThenUserDenies(t *testing.T) {
 	perms := &mockPerms{allow: false, reason: "not in allowed dirs"}
 	resp := &permResponder{approved: false}
 
-	allow, reason := CheckPermission("Bash", map[string]any{"command": "rm -rf /"}, perms, resp)
+	allow, reason := CheckPermission("Bash", core.ToolInput{Command: "rm -rf /"}, perms, resp)
 
 	a.False(allow)
 	a.Equal("not in allowed dirs", reason)
@@ -71,7 +72,7 @@ func TestCheckPermission_AskPermissionError_StillDenies(t *testing.T) {
 	perms := &mockPerms{allow: false, reason: "blocked"}
 	resp := &permResponder{approved: false, err: fmt.Errorf("discord timeout")}
 
-	allow, reason := CheckPermission("Read", nil, perms, resp)
+	allow, reason := CheckPermission("Read", core.ToolInput{}, perms, resp)
 
 	a.False(allow)
 	a.Equal("blocked", reason)
@@ -80,7 +81,7 @@ func TestCheckPermission_AskPermissionError_StillDenies(t *testing.T) {
 func TestFormatPermissionPrompt_Command(t *testing.T) {
 	a := assert.New(t)
 
-	prompt := FormatPermissionPrompt("Bash", map[string]any{"command": "rm -rf /"})
+	prompt := FormatPermissionPrompt("Bash", core.ToolInput{Command: "rm -rf /"})
 
 	a.Contains(prompt, "**Bash**")
 	a.Contains(prompt, "rm -rf /")
@@ -89,7 +90,7 @@ func TestFormatPermissionPrompt_Command(t *testing.T) {
 func TestFormatPermissionPrompt_FilePath(t *testing.T) {
 	a := assert.New(t)
 
-	prompt := FormatPermissionPrompt("Read", map[string]any{"file_path": "/etc/passwd"})
+	prompt := FormatPermissionPrompt("Read", core.ToolInput{FilePath: "/etc/passwd"})
 
 	a.Contains(prompt, "**Read**")
 	a.Contains(prompt, "/etc/passwd")

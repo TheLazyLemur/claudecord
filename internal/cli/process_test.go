@@ -143,14 +143,12 @@ func TestBuildInitializeRequest(t *testing.T) {
 	msg := buildInitializeRequest("req-123", "")
 
 	// then
-	var parsed map[string]any
+	var parsed ControlRequest
 	err := json.Unmarshal(msg, &parsed)
 	r.NoError(err)
-	a.Equal("control_request", parsed["type"])
-	a.Equal("req-123", parsed["request_id"])
-
-	req := parsed["request"].(map[string]any)
-	a.Equal("initialize", req["subtype"])
+	a.Equal("control_request", parsed.Type)
+	a.Equal("req-123", parsed.RequestID)
+	a.Equal("initialize", parsed.Request.Subtype)
 }
 
 func TestBuildInitializeRequest_CustomPrompt(t *testing.T) {
@@ -161,12 +159,10 @@ func TestBuildInitializeRequest_CustomPrompt(t *testing.T) {
 	msg := buildInitializeRequest("req-456", "custom prompt")
 
 	// then
-	var parsed map[string]any
+	var parsed ControlRequest
 	err := json.Unmarshal(msg, &parsed)
 	r.NoError(err)
-
-	req := parsed["request"].(map[string]any)
-	a.Equal("custom prompt", req["systemPrompt"])
+	a.Equal("custom prompt", parsed.Request.SystemPrompt)
 }
 
 // ProcessSpawner interface for testing

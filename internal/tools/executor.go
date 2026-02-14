@@ -23,14 +23,6 @@ const maxOutputLen = 50000
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 var bashTimeout = 2 * time.Minute
 
-func requireString(input map[string]any, key string) (string, string, bool) {
-	val, ok := input[key].(string)
-	if !ok || val == "" {
-		return "", "missing " + key + " argument", true
-	}
-	return val, "", false
-}
-
 func truncateOutput(s string, maxLen int) string {
 	if len(s) > maxLen {
 		return s[:maxLen] + "\n... (truncated)"
@@ -46,7 +38,7 @@ type Deps struct {
 }
 
 // Execute dispatches to the appropriate tool executor. Returns (result, isError).
-func Execute(name string, input map[string]any, deps Deps) (string, bool) {
+func Execute(name string, input core.ToolInput, deps Deps) (string, bool) {
 	switch name {
 	case "react_emoji":
 		return executeReactEmoji(input, deps.Responder)
@@ -69,38 +61,35 @@ func Execute(name string, input map[string]any, deps Deps) (string, bool) {
 	}
 }
 
-func executeReactEmoji(input map[string]any, responder core.Responder) (string, bool) {
-	emoji, errMsg, isErr := requireString(input, "emoji")
-	if isErr {
-		return errMsg, true
+func executeReactEmoji(input core.ToolInput, responder core.Responder) (string, bool) {
+	if input.Emoji == "" {
+		return "missing emoji argument", true
 	}
-	slog.Info("AddReaction", "emoji", emoji)
-	if err := responder.AddReaction(emoji); err != nil {
+	slog.Info("AddReaction", "emoji", input.Emoji)
+	if err := responder.AddReaction(input.Emoji); err != nil {
 		slog.Error("AddReaction failed", "error", err)
 		return err.Error(), true
 	}
 	return "reaction added", false
 }
 
-func executeSendUpdate(input map[string]any, responder core.Responder) (string, bool) {
-	msg, errMsg, isErr := requireString(input, "message")
-	if isErr {
-		return errMsg, true
+func executeSendUpdate(input core.ToolInput, responder core.Responder) (string, bool) {
+	if input.Message == "" {
+		return "missing message argument", true
 	}
-	if err := responder.SendUpdate(msg); err != nil {
+	if err := responder.SendUpdate(input.Message); err != nil {
 		slog.Error("SendUpdate failed", "error", err)
 		return err.Error(), true
 	}
 	return "update sent", false
 }
 
-func executeRead(input map[string]any) (string, bool) {
-	filePath, errMsg, isErr := requireString(input, "file_path")
-	if isErr {
-		return errMsg, true
+func executeRead(input core.ToolInput) (string, bool) {
+	if input.FilePath == "" {
+		return "missing file_path argument", true
 	}
 
-	filePath = filepath.Clean(filePath)
+	filePath := filepath.Clean(input.FilePath)
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -110,15 +99,14 @@ func executeRead(input map[string]any) (string, bool) {
 	return truncateOutput(string(content), maxOutputLen), false
 }
 
-func executeBash(input map[string]any) (string, bool) {
-	command, errMsg, isErr := requireString(input, "command")
-	if isErr {
-		return errMsg, true
+func executeBash(input core.ToolInput) (string, bool) {
+	if input.Command == "" {
+		return "missing command argument", true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), bashTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd := exec.CommandContext(ctx, "sh", "-c", input.Command)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -149,39 +137,36 @@ func executeBash(input map[string]any) (string, bool) {
 	return truncateOutput(result.String(), maxOutputLen), false
 }
 
-func executeSkill(input map[string]any, store skills.SkillStore) (string, bool) {
-	name, errMsg, isErr := requireString(input, "name")
-	if isErr {
-		return errMsg, true
+func executeSkill(input core.ToolInput, store skills.SkillStore) (string, bool) {
+	if input.Name == "" {
+		return "missing name argument", true
 	}
 
 	if store == nil {
 		return "skill store not configured", true
 	}
 
-	skill, err := store.Load(name)
+	skill, err := store.Load(input.Name)
 	if err != nil {
-		return "skill not found: " + name, true
+		return "skill not found: " + input.Name, true
 	}
 
 	return skill.Instructions, false
 }
 
-func executeLoadSkillSupporting(input map[string]any, store skills.SkillStore) (string, bool) {
-	name, errMsg, isErr := requireString(input, "name")
-	if isErr {
-		return errMsg, true
+func executeLoadSkillSupporting(input core.ToolInput, store skills.SkillStore) (string, bool) {
+	if input.Name == "" {
+		return "missing name argument", true
 	}
-	path, errMsg, isErr := requireString(input, "path")
-	if isErr {
-		return errMsg, true
+	if input.Path == "" {
+		return "missing path argument", true
 	}
 
 	if store == nil {
 		return "skill store not configured", true
 	}
 
-	content, err := store.LoadSupporting(name, path)
+	content, err := store.LoadSupporting(input.Name, input.Path)
 	if err != nil {
 		return "error loading supporting file: " + err.Error(), true
 	}
@@ -189,34 +174,29 @@ func executeLoadSkillSupporting(input map[string]any, store skills.SkillStore) (
 	return string(content), false
 }
 
-func executeFetch(input map[string]any) (string, bool) {
-	url, errMsg, isErr := requireString(input, "url")
-	if isErr {
-		return errMsg, true
+func executeFetch(input core.ToolInput) (string, bool) {
+	if input.URL == "" {
+		return "missing url argument", true
 	}
 
-	method, _ := input["method"].(string)
+	method := input.Method
 	if method == "" {
 		method = "GET"
 	}
 	method = strings.ToUpper(method)
 
 	var bodyReader io.Reader
-	if body, ok := input["body"].(string); ok && body != "" {
-		bodyReader = strings.NewReader(body)
+	if input.Body != "" {
+		bodyReader = strings.NewReader(input.Body)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequest(method, input.URL, bodyReader)
 	if err != nil {
 		return "error creating request: " + err.Error(), true
 	}
 
-	if headers, ok := input["headers"].(map[string]any); ok {
-		for k, v := range headers {
-			if s, ok := v.(string); ok {
-				req.Header.Set(k, s)
-			}
-		}
+	for k, v := range input.Headers {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := httpClient.Do(req)
@@ -233,17 +213,16 @@ func executeFetch(input map[string]any) (string, bool) {
 	return truncateOutput(string(respBody), maxOutputLen), resp.StatusCode >= 400
 }
 
-func executeWebSearch(input map[string]any, apiKey string) (string, bool) {
-	query, errMsg, isErr := requireString(input, "query")
-	if isErr {
-		return errMsg, true
+func executeWebSearch(input core.ToolInput, apiKey string) (string, bool) {
+	if input.Query == "" {
+		return "missing query argument", true
 	}
 
 	if apiKey == "" {
 		return "MINIMAX_API_KEY not configured", true
 	}
 
-	reqBody := `{"q":"` + strings.ReplaceAll(query, `"`, `\"`) + `"}`
+	reqBody := `{"q":"` + strings.ReplaceAll(input.Query, `"`, `\"`) + `"}`
 
 	req, err := http.NewRequest("POST", "https://api.minimax.io/v1/coding_plan/search", strings.NewReader(reqBody))
 	if err != nil {

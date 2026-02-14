@@ -58,10 +58,10 @@ type mockPermissionChecker struct {
 
 type permCheck struct {
 	toolName string
-	input    map[string]any
+	input    ToolInput
 }
 
-func (m *mockPermissionChecker) Check(toolName string, input map[string]any) (bool, string) {
+func (m *mockPermissionChecker) Check(toolName string, input ToolInput) (bool, string) {
 	m.checks = append(m.checks, permCheck{toolName, input})
 	return m.allowAll, m.reason
 }

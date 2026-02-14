@@ -236,7 +236,7 @@ type mockPassivePermissionChecker struct {
 	checks []permCheck
 }
 
-func (m *mockPassivePermissionChecker) Check(toolName string, input map[string]any) (bool, string) {
+func (m *mockPassivePermissionChecker) Check(toolName string, input ToolInput) (bool, string) {
 	m.checks = append(m.checks, permCheck{toolName, input})
 	// passive bot denies all writes
 	switch toolName {

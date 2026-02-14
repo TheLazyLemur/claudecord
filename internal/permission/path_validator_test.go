@@ -3,6 +3,7 @@ package permission
 import (
 	"testing"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -12,15 +13,15 @@ func TestPathValidator_ExtractPaths(t *testing.T) {
 	v := NewPathValidator([]string{"/home"})
 
 	// extracts all known path fields
-	paths := v.ExtractPaths(map[string]any{
-		"file_path": "/home/a.go",
-		"path":      "/home/b.go",
-		"directory": "/home/c",
+	paths := v.ExtractPaths(core.ToolInput{
+		FilePath:  "/home/a.go",
+		Path:      "/home/b.go",
+		Directory: "/home/c",
 	})
 	a.ElementsMatch([]string{"/home/a.go", "/home/b.go", "/home/c"}, paths)
 
 	// skips empty/missing
-	paths = v.ExtractPaths(map[string]any{"file_path": "", "other": "val"})
+	paths = v.ExtractPaths(core.ToolInput{})
 	a.Empty(paths)
 }
 

@@ -158,21 +158,18 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 	for _, tu := range toolUses {
 		slog.Info("executing tool", "name", tu.Name, "id", tu.ID)
 
-		// Convert input to map
-		var input map[string]any
+		var input core.ToolInput
 		if err := json.Unmarshal(tu.Input, &input); err != nil {
 			results = append(results, anthropic.NewToolResultBlock(tu.ID, "Invalid input: "+err.Error(), true))
 			continue
 		}
 
-		// Check permissions
 		allow, reason := tools.CheckPermission(tu.Name, input, perms, responder)
 		if !allow {
 			results = append(results, anthropic.NewToolResultBlock(tu.ID, "Permission denied: "+reason, true))
 			continue
 		}
 
-		// Execute the tool
 		deps := tools.Deps{Responder: responder, SkillStore: store, MinimaxAPIKey: minimaxAPIKey}
 		result, isError := tools.Execute(tu.Name, input, deps)
 		results = append(results, anthropic.NewToolResultBlock(tu.ID, result, isError))

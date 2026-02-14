@@ -44,6 +44,7 @@ Env vars:
 - Minimal comments - only when logic isn't obvious
 - Unit tests only - mock CLI interface, no integration tests against real CLI
 - Interfaces for all external dependencies (CLI, Discord, etc)
+- No `map[string]any` for tool inputs or protocol messages — use typed structs (`core.ToolInput`, `cli.CLIMessage`, etc). `map[string]any` only for JSON Schema literals (`InputSchema`)
 
 ## CLI Protocol Rules
 

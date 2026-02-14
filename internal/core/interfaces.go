@@ -1,7 +1,7 @@
 package core
 
 type PermissionChecker interface {
-	Check(toolName string, input map[string]any) (allow bool, reason string)
+	Check(toolName string, input ToolInput) (allow bool, reason string)
 }
 
 type DiscordClient interface {

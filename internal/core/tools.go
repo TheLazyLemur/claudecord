@@ -117,12 +117,19 @@ func FileTools() []ToolDef {
 	}
 }
 
+// MCPTool is the typed MCP tool representation sent to CLI
+type MCPTool struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	InputSchema map[string]any `json:"inputSchema"`
+}
+
 // ToMCP converts a ToolDef to MCP format for CLI mode
-func (t ToolDef) ToMCP() map[string]any {
-	return map[string]any{
-		"name":        t.Name,
-		"description": t.Description,
-		"inputSchema": t.InputSchema,
+func (t ToolDef) ToMCP() MCPTool {
+	return MCPTool{
+		Name:        t.Name,
+		Description: t.Description,
+		InputSchema: t.InputSchema,
 	}
 }
 
@@ -165,9 +172,9 @@ func SkillTools() []ToolDef {
 }
 
 // MCPTools returns MCP-formatted tools for CLI mode (Discord + Skill tools)
-var MCPTools = func() []map[string]any {
+var MCPTools = func() []MCPTool {
 	tools := append(DiscordTools(), SkillTools()...)
-	result := make([]map[string]any, len(tools))
+	result := make([]MCPTool, len(tools))
 	for i, t := range tools {
 		result[i] = t.ToMCP()
 	}

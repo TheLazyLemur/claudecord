@@ -3,6 +3,7 @@ package permission
 import (
 	"testing"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -11,7 +12,7 @@ func TestPermissionChecker_ReadAllowedInAllowedDir(t *testing.T) {
 
 	// given
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
-	input := map[string]any{"file_path": "/home/user/projects/myapp/main.go"}
+	input := core.ToolInput{FilePath: "/home/user/projects/myapp/main.go"}
 
 	// when
 	allow, reason := checker.Check("Read", input)
@@ -26,7 +27,7 @@ func TestPermissionChecker_ReadDeniedOutsideAllowedDir(t *testing.T) {
 
 	// given
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
-	input := map[string]any{"file_path": "/etc/passwd"}
+	input := core.ToolInput{FilePath: "/etc/passwd"}
 
 	// when
 	allow, reason := checker.Check("Read", input)
@@ -42,7 +43,7 @@ func TestPermissionChecker_ReadAllowsSubdirectories(t *testing.T) {
 
 	// given
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
-	input := map[string]any{"file_path": "/home/user/projects/deep/nested/file.go"}
+	input := core.ToolInput{FilePath: "/home/user/projects/deep/nested/file.go"}
 
 	// when
 	allow, reason := checker.Check("Read", input)
@@ -57,7 +58,7 @@ func TestPermissionChecker_ReadDeniesPathTraversal(t *testing.T) {
 
 	// given
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
-	input := map[string]any{"file_path": "/home/user/projects/../../../etc/passwd"}
+	input := core.ToolInput{FilePath: "/home/user/projects/../../../etc/passwd"}
 
 	// when
 	allow, reason := checker.Check("Read", input)
@@ -72,7 +73,7 @@ func TestPermissionChecker_NonReadToolRequiresApproval(t *testing.T) {
 
 	// given - Write tool requires approval even in allowed dir
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
-	input := map[string]any{"file_path": "/home/user/projects/test.txt"}
+	input := core.ToolInput{FilePath: "/home/user/projects/test.txt"}
 
 	// when
 	allow, reason := checker.Check("Write", input)
@@ -87,7 +88,7 @@ func TestPermissionChecker_BashRequiresApproval(t *testing.T) {
 
 	// given
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
-	input := map[string]any{"command": "ls -la"}
+	input := core.ToolInput{Command: "ls -la"}
 
 	// when
 	allow, reason := checker.Check("Bash", input)
@@ -102,7 +103,7 @@ func TestPermissionChecker_EditRequiresApproval(t *testing.T) {
 
 	// given
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
-	input := map[string]any{"file_path": "/home/user/projects/main.go"}
+	input := core.ToolInput{FilePath: "/home/user/projects/main.go"}
 
 	// when
 	allow, reason := checker.Check("Edit", input)
@@ -119,17 +120,12 @@ func TestPermissionChecker_FetchGETAutoApproves(t *testing.T) {
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
 
 	// when/then - explicit GET
-	allow, reason := checker.Check("Fetch", map[string]any{"url": "https://example.com", "method": "GET"})
+	allow, reason := checker.Check("Fetch", core.ToolInput{URL: "https://example.com", Method: "GET"})
 	a.True(allow)
 	a.Empty(reason)
 
 	// when/then - missing method defaults to GET
-	allow, reason = checker.Check("Fetch", map[string]any{"url": "https://example.com"})
-	a.True(allow)
-	a.Empty(reason)
-
-	// when/then - empty string method defaults to GET
-	allow, reason = checker.Check("Fetch", map[string]any{"url": "https://example.com", "method": ""})
+	allow, reason = checker.Check("Fetch", core.ToolInput{URL: "https://example.com"})
 	a.True(allow)
 	a.Empty(reason)
 }
@@ -143,7 +139,7 @@ func TestPermissionChecker_FetchMutatingMethodsRequireApproval(t *testing.T) {
 	methods := []string{"POST", "PATCH", "DELETE"}
 	for _, method := range methods {
 		// when
-		allow, reason := checker.Check("Fetch", map[string]any{"url": "https://example.com", "method": method})
+		allow, reason := checker.Check("Fetch", core.ToolInput{URL: "https://example.com", Method: method})
 
 		// then
 		a.False(allow, "method %s should require approval", method)
@@ -158,12 +154,12 @@ func TestPermissionChecker_SkillToolsAutoApprove(t *testing.T) {
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
 
 	// when/then - Skill auto-approves
-	allow, reason := checker.Check("Skill", map[string]any{"name": "test-skill"})
+	allow, reason := checker.Check("Skill", core.ToolInput{Name: "test-skill"})
 	a.True(allow)
 	a.Empty(reason)
 
 	// when/then - LoadSkillSupporting auto-approves
-	allow, reason = checker.Check("LoadSkillSupporting", map[string]any{"name": "test-skill", "path": "scripts/run.sh"})
+	allow, reason = checker.Check("LoadSkillSupporting", core.ToolInput{Name: "test-skill", Path: "scripts/run.sh"})
 	a.True(allow)
 	a.Empty(reason)
 }
@@ -175,7 +171,7 @@ func TestPermissionChecker_WebSearchAutoApproves(t *testing.T) {
 	checker := NewPermissionChecker([]string{"/home/user/projects"})
 
 	// when
-	allow, reason := checker.Check("WebSearch", map[string]any{"query": "golang http client"})
+	allow, reason := checker.Check("WebSearch", core.ToolInput{Query: "golang http client"})
 
 	// then
 	a.True(allow)

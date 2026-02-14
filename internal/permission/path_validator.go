@@ -3,9 +3,9 @@ package permission
 import (
 	"path/filepath"
 	"strings"
-)
 
-var pathFields = []string{"file_path", "path", "directory"}
+	"github.com/TheLazyLemur/claudecord/internal/core"
+)
 
 type PathValidator struct {
 	allowedDirs []string
@@ -19,14 +19,16 @@ func NewPathValidator(allowedDirs []string) PathValidator {
 	return PathValidator{allowedDirs: cleaned}
 }
 
-func (v PathValidator) ExtractPaths(input map[string]any) []string {
+func (v PathValidator) ExtractPaths(input core.ToolInput) []string {
 	var paths []string
-	for _, field := range pathFields {
-		if val, ok := input[field]; ok {
-			if s, ok := val.(string); ok && s != "" {
-				paths = append(paths, s)
-			}
-		}
+	if input.FilePath != "" {
+		paths = append(paths, input.FilePath)
+	}
+	if input.Path != "" {
+		paths = append(paths, input.Path)
+	}
+	if input.Directory != "" {
+		paths = append(paths, input.Directory)
 	}
 	return paths
 }

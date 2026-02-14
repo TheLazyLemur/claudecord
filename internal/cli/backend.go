@@ -48,12 +48,12 @@ func (b *Backend) Converse(ctx context.Context, msg string, responder core.Respo
 }
 
 func (b *Backend) sendUserMessage(content string) error {
-	msg := map[string]any{
-		"type":       "user",
-		"session_id": b.proc.SessionID(),
-		"message": map[string]any{
-			"role":    "user",
-			"content": content,
+	msg := UserMessage{
+		Type:      "user",
+		SessionID: b.proc.SessionID(),
+		Message: UserMessageInner{
+			Role:    "user",
+			Content: content,
 		},
 	}
 	data, err := json.Marshal(msg)
@@ -80,20 +80,18 @@ func (b *Backend) processResponses(ctx context.Context, responder core.Responder
 				return responseText, nil
 			}
 
-			var msg map[string]any
+			var msg CLIMessage
 			if err := json.Unmarshal(data, &msg); err != nil {
 				continue
 			}
 
-			// skip replay messages
-			if isReplay, ok := msg["isReplay"].(bool); ok && isReplay {
+			if msg.IsReplay {
 				continue
 			}
 
-			msgType, _ := msg["type"].(string)
-			slog.Info("CLI response", "type", msgType)
+			slog.Info("CLI response", "type", msg.Type)
 
-			switch msgType {
+			switch msg.Type {
 			case "assistant":
 				text := extractTextFromAssistant(msg)
 				if text != "" {
@@ -116,83 +114,80 @@ func (b *Backend) processResponses(ctx context.Context, responder core.Responder
 	}
 }
 
-func extractTextFromAssistant(msg map[string]any) string {
-	message, ok := msg["message"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	content, ok := message["content"].([]any)
-	if !ok {
+func extractTextFromAssistant(msg CLIMessage) string {
+	var am AssistantMessage
+	if err := json.Unmarshal(msg.Message, &am); err != nil {
 		return ""
 	}
 
 	var text string
-	for _, block := range content {
-		b, ok := block.(map[string]any)
-		if !ok {
-			continue
-		}
-		if b["type"] == "text" {
-			if t, ok := b["text"].(string); ok {
-				text += t
-			}
+	for _, block := range am.Content {
+		if block.Type == "text" {
+			text += block.Text
 		}
 	}
 	return text
 }
 
-func (b *Backend) handleControlRequest(msg map[string]any, responder core.Responder, perms core.PermissionChecker) error {
-	requestID, _ := msg["request_id"].(string)
-	request, ok := msg["request"].(map[string]any)
-	if !ok {
+func (b *Backend) handleControlRequest(msg CLIMessage, responder core.Responder, perms core.PermissionChecker) error {
+	// peek at subtype to route
+	var peek struct {
+		Subtype string `json:"subtype"`
+	}
+	if err := json.Unmarshal(msg.Request, &peek); err != nil {
 		return nil
 	}
 
-	subtype, _ := request["subtype"].(string)
-	slog.Info("control_request", "subtype", subtype, "request_id", requestID)
+	slog.Info("control_request", "subtype", peek.Subtype, "request_id", msg.RequestID)
 
-	switch subtype {
+	switch peek.Subtype {
 	case "can_use_tool":
-		return b.handleCanUseTool(requestID, request, responder, perms)
+		return b.handleCanUseTool(msg, responder, perms)
 	case "mcp_message":
-		return b.handleMCPMessage(requestID, request, responder, b.skillStore)
+		return b.handleMCPMessage(msg, responder, b.skillStore)
 	}
 
 	return nil
 }
 
-func (b *Backend) handleCanUseTool(requestID string, request map[string]any, responder core.Responder, perms core.PermissionChecker) error {
-	toolName, _ := request["tool_name"].(string)
-	toolUseID, _ := request["tool_use_id"].(string)
-	input, _ := request["input"].(map[string]any)
-	allow, reason := tools.CheckPermission(toolName, input, perms, responder)
+func (b *Backend) handleCanUseTool(msg CLIMessage, responder core.Responder, perms core.PermissionChecker) error {
+	var req CanUseToolRequest
+	if err := json.Unmarshal(msg.Request, &req); err != nil {
+		return errors.Wrap(err, "unmarshaling can_use_tool request")
+	}
 
-	return b.sendPermissionResponse(requestID, toolUseID, allow, reason, input)
+	var input core.ToolInput
+	if err := json.Unmarshal(req.Input, &input); err != nil {
+		return errors.Wrap(err, "unmarshaling tool input")
+	}
+
+	allow, reason := tools.CheckPermission(req.ToolName, input, perms, responder)
+	return b.sendPermissionResponse(msg.RequestID, req.ToolUseID, allow, reason, input)
 }
 
-func (b *Backend) sendPermissionResponse(requestID, toolUseID string, allow bool, reason string, input map[string]any) error {
-	var innerResp map[string]any
+func (b *Backend) sendPermissionResponse(requestID, toolUseID string, allow bool, reason string, input core.ToolInput) error {
+	var innerResp any
 	if allow {
-		innerResp = map[string]any{
-			"behavior":     "allow",
-			"toolUseID":    toolUseID,
-			"updatedInput": input,
+		innerResp = PermissionAllow{
+			Behavior:     "allow",
+			ToolUseID:    toolUseID,
+			UpdatedInput: input,
 		}
 	} else {
-		innerResp = map[string]any{
-			"behavior":  "deny",
-			"toolUseID": toolUseID,
-			"message":   reason,
-			"interrupt": false,
+		innerResp = PermissionDeny{
+			Behavior:  "deny",
+			ToolUseID: toolUseID,
+			Message:   reason,
+			Interrupt: false,
 		}
 	}
 
-	resp := map[string]any{
-		"type": "control_response",
-		"response": map[string]any{
-			"subtype":    "success",
-			"request_id": requestID,
-			"response":   innerResp,
+	resp := ControlResponse{
+		Type: "control_response",
+		Response: ControlResponseInner{
+			Subtype:   "success",
+			RequestID: requestID,
+			Response:  innerResp,
 		},
 	}
 
@@ -203,66 +198,74 @@ func (b *Backend) sendPermissionResponse(requestID, toolUseID string, allow bool
 	return b.proc.Send(data)
 }
 
-func (b *Backend) handleMCPMessage(requestID string, request map[string]any, responder core.Responder, store skills.SkillStore) error {
-	serverName, _ := request["server_name"].(string)
-	message, _ := request["message"].(map[string]any)
-	jsonrpcID := message["id"]
-	method, _ := message["method"].(string)
-
-	if serverName != "discord-tools" {
-		return b.sendMCPResult(requestID, jsonrpcID, map[string]any{})
+func (b *Backend) handleMCPMessage(msg CLIMessage, responder core.Responder, store skills.SkillStore) error {
+	var req MCPMessageRequest
+	if err := json.Unmarshal(msg.Request, &req); err != nil {
+		return errors.Wrap(err, "unmarshaling mcp_message request")
 	}
 
-	slog.Info("MCP message", "server", serverName, "method", method)
+	if req.ServerName != "discord-tools" {
+		return b.sendMCPResult(msg.RequestID, req.Message.ID, struct{}{})
+	}
+
+	slog.Info("MCP message", "server", req.ServerName, "method", req.Message.Method)
 
 	var result any
-	switch method {
+	switch req.Message.Method {
 	case "initialize":
-		result = map[string]any{
-			"protocolVersion": "2024-11-05",
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "discord-tools", "version": "1.0.0"},
+		result = MCPInitResult{
+			ProtocolVersion: "2024-11-05",
+			Capabilities:    MCPCapability{Tools: map[string]any{}},
+			ServerInfo:      MCPServerInfo{Name: "discord-tools", Version: "1.0.0"},
 		}
 	case "notifications/initialized":
-		result = map[string]any{}
+		result = struct{}{}
 	case "tools/list":
-		result = map[string]any{"tools": core.MCPTools}
+		result = MCPToolListResult{Tools: core.MCPTools}
 	case "tools/call":
-		params, _ := message["params"].(map[string]any)
-		return b.handleMCPToolCall(requestID, jsonrpcID, params, responder, store)
+		return b.handleMCPToolCall(msg.RequestID, req.Message.ID, req.Message.Params, responder, store)
 	default:
-		result = map[string]any{}
+		result = struct{}{}
 	}
 
-	return b.sendMCPResult(requestID, jsonrpcID, result)
+	return b.sendMCPResult(msg.RequestID, req.Message.ID, result)
 }
 
-func (b *Backend) handleMCPToolCall(requestID string, jsonrpcID any, params map[string]any, responder core.Responder, store skills.SkillStore) error {
-	toolName, _ := params["name"].(string)
-	args, _ := params["arguments"].(map[string]any)
+func (b *Backend) handleMCPToolCall(requestID string, jsonrpcID any, paramsRaw json.RawMessage, responder core.Responder, store skills.SkillStore) error {
+	var params MCPToolCallParams
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		return errors.Wrap(err, "unmarshaling tool call params")
+	}
+
+	var input core.ToolInput
+	if len(params.Arguments) > 0 {
+		if err := json.Unmarshal(params.Arguments, &input); err != nil {
+			return b.sendMCPToolError(requestID, jsonrpcID, "invalid arguments: "+err.Error())
+		}
+	}
 
 	deps := tools.Deps{Responder: responder, SkillStore: store}
-	result, isErr := tools.Execute(toolName, args, deps)
+	result, isErr := tools.Execute(params.Name, input, deps)
 
 	if isErr {
 		return b.sendMCPToolError(requestID, jsonrpcID, result)
 	}
-	return b.sendMCPResult(requestID, jsonrpcID, map[string]any{
-		"content": []map[string]any{{"type": "text", "text": result}},
+	return b.sendMCPResult(requestID, jsonrpcID, MCPToolCallResult{
+		Content: []MCPTextContent{{Type: "text", Text: result}},
 	})
 }
 
 func (b *Backend) sendMCPResult(requestID string, jsonrpcID any, result any) error {
-	resp := map[string]any{
-		"type": "control_response",
-		"response": map[string]any{
-			"subtype":    "success",
-			"request_id": requestID,
-			"response": map[string]any{
-				"mcp_response": map[string]any{
-					"jsonrpc": "2.0",
-					"id":      jsonrpcID,
-					"result":  result,
+	resp := MCPResponseWrapper{
+		Type: "control_response",
+		Response: MCPResponseWrapperInner{
+			Subtype:   "success",
+			RequestID: requestID,
+			Response: MCPResponse{
+				MCPResponse: MCPJSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      jsonrpcID,
+					Result:  result,
 				},
 			},
 		},
@@ -275,9 +278,9 @@ func (b *Backend) sendMCPResult(requestID string, jsonrpcID any, result any) err
 }
 
 func (b *Backend) sendMCPToolError(requestID string, jsonrpcID any, errMsg string) error {
-	return b.sendMCPResult(requestID, jsonrpcID, map[string]any{
-		"content": []map[string]any{{"type": "text", "text": errMsg}},
-		"isError": true,
+	return b.sendMCPResult(requestID, jsonrpcID, MCPToolCallResult{
+		Content: []MCPTextContent{{Type: "text", Text: errMsg}},
+		IsError: true,
 	})
 }
 

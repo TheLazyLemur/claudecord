@@ -17,7 +17,7 @@ func NewPermissionChecker(allowedDirs []string) *PermissionChecker {
 	return &PermissionChecker{PathValidator: NewPathValidator(allowedDirs)}
 }
 
-func (p *PermissionChecker) Check(toolName string, input map[string]any) (allow bool, reason string) {
+func (p *PermissionChecker) Check(toolName string, input core.ToolInput) (allow bool, reason string) {
 	// Read auto-approves if path in allowed dirs
 	if toolName == "Read" {
 		paths := p.ExtractPaths(input)
@@ -41,8 +41,7 @@ func (p *PermissionChecker) Check(toolName string, input map[string]any) (allow 
 
 	// Fetch auto-approves for GET, requires approval for mutating methods
 	if toolName == "Fetch" {
-		method, _ := input["method"].(string)
-		if method == "" || strings.ToUpper(method) == "GET" {
+		if input.Method == "" || strings.ToUpper(input.Method) == "GET" {
 			return true, ""
 		}
 		return false, "requires approval"
