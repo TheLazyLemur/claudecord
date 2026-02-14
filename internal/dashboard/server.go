@@ -237,10 +237,10 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 
 func (s *Server) handleChat(content string) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	backend, err := s.sessionMgr.GetOrCreateSession()
 	if err != nil {
-		s.mu.Unlock()
 		slog.Error("get session", "error", err)
 		s.hub.Broadcast(Message{
 			Type:    "chat",
@@ -263,7 +263,6 @@ func (s *Server) handleChat(content string) {
 	}
 
 	responder := s.responder
-	s.mu.Unlock()
 
 	// Broadcast user message
 	s.hub.Broadcast(Message{
@@ -272,7 +271,7 @@ func (s *Server) handleChat(content string) {
 		Content: content,
 	})
 
-	// Converse
+	// Converse — lock held to prevent handleNewSession from closing backend mid-conversation
 	ctx := context.Background()
 	response, err := backend.Converse(ctx, content, responder, s.permChecker)
 	if err != nil {

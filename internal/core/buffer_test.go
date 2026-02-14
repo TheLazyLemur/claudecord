@@ -1,6 +1,7 @@
 package core
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -156,9 +157,9 @@ func TestDebouncedBuffer_ClearsAfterFiring(t *testing.T) {
 	a := assert.New(t)
 
 	// given
-	firedCount := 0
+	var firedCount atomic.Int32
 	callback := func(channelID string, msgs []BufferedMessage) {
-		firedCount++
+		firedCount.Add(1)
 		a.Len(msgs, 1)
 	}
 	db := NewDebouncedBuffer(30*time.Millisecond, callback)
@@ -171,7 +172,7 @@ func TestDebouncedBuffer_ClearsAfterFiring(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// then - should have fired twice, each time with 1 message
-	a.Equal(2, firedCount)
+	a.Equal(int32(2), firedCount.Load())
 }
 
 func TestDebouncedBuffer_ClearChannel_CancelsTimer(t *testing.T) {
