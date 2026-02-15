@@ -3,7 +3,7 @@ package handler
 import (
 	"context"
 	"log/slog"
-	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -125,6 +125,27 @@ func NewWAHandler(bot BotInterface, allowedSenders []string, client WAClient) *W
 	}
 }
 
+// isSenderAllowed checks if a sender matches the allowed list.
+// Matches against full JID string or just the User (number) part of Sender and SenderAlt.
+func (h *WAHandler) isSenderAllowed(sender, senderAlt types.JID) bool {
+	for _, allowed := range h.allowedSenders {
+		if sender.String() == allowed || senderAlt.String() == allowed {
+			return true
+		}
+		if sender.User == allowed || senderAlt.User == allowed {
+			return true
+		}
+		// strip @suffix from allowed entry for comparison
+		if idx := strings.IndexByte(allowed, '@'); idx > 0 {
+			num := allowed[:idx]
+			if sender.User == num || senderAlt.User == num {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (h *WAHandler) HandleEvent(evt interface{}) {
 	v, ok := evt.(*events.Message)
 	if !ok {
@@ -139,14 +160,9 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 	senderJID := v.Info.Sender.String()
 	chatJID := v.Info.Chat.String()
 
-	// check sender against allowed list (try both Sender and SenderAlt)
-	allowed := slices.Contains(h.allowedSenders, senderJID)
-	if !allowed {
-		altJID := v.Info.SenderAlt.String()
-		allowed = slices.Contains(h.allowedSenders, altJID)
-	}
-	if !allowed {
-		slog.Info("unauthorized whatsapp sender", "sender", senderJID)
+	// check sender against allowed list — match full JID or just the user/number part
+	if !h.isSenderAllowed(v.Info.Sender, v.Info.SenderAlt) {
+		slog.Info("unauthorized whatsapp sender", "sender", senderJID, "alt", v.Info.SenderAlt.String())
 		return
 	}
 

@@ -147,6 +147,43 @@ func TestWAHandler_SenderAltMatch_Allowed(t *testing.T) {
 	a.Equal("hello", bot.handledMessages[0].message)
 }
 
+func TestWAHandler_PhoneNumberOnly_MatchesSenderUser(t *testing.T) {
+	r := require.New(t)
+
+	// given — allowed list has phone number with @s.whatsapp.net, sender comes as LID
+	bot := &mockBot{}
+	client := &mockWAClient{}
+	client.On("HandleIncomingReply", "12345@lid", "hello").Return(false)
+	h := NewWAHandler(bot, []string{"27123456789@s.whatsapp.net"}, client)
+
+	// sender is LID, alt is the phone number JID
+	evt := makeMessageEventWithAlt("12345@lid", "27123456789@s.whatsapp.net", "chat-1@g.us", "hello")
+
+	// when
+	h.HandleEvent(evt)
+
+	// then
+	r.Len(bot.handledMessages, 1)
+}
+
+func TestWAHandler_BarePhoneNumber_MatchesSenderAltUser(t *testing.T) {
+	r := require.New(t)
+
+	// given — allowed list has bare phone number, sender comes as LID with phone in alt
+	bot := &mockBot{}
+	client := &mockWAClient{}
+	client.On("HandleIncomingReply", "12345@lid", "hello").Return(false)
+	h := NewWAHandler(bot, []string{"27123456789"}, client)
+
+	evt := makeMessageEventWithAlt("12345@lid", "27123456789@s.whatsapp.net", "chat-1@g.us", "hello")
+
+	// when
+	h.HandleEvent(evt)
+
+	// then
+	r.Len(bot.handledMessages, 1)
+}
+
 func TestWAHandler_NonMessageEvent_Ignored(t *testing.T) {
 	// given
 	bot := &mockBot{}
