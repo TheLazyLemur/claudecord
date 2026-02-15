@@ -34,31 +34,58 @@ type Config struct {
 	DashboardPassword string
 	// Minimax API key for WebSearch tool
 	MinimaxAPIKey string
+
+	// WhatsApp
+	WhatsAppAllowedSenders []string
+	WhatsAppDBPath         string
+}
+
+func (c *Config) DiscordEnabled() bool {
+	return c.DiscordToken != ""
+}
+
+func (c *Config) WhatsAppEnabled() bool {
+	return len(c.WhatsAppAllowedSenders) > 0
 }
 
 // Load reads config from env map. For production use LoadFromEnv.
 func Load(env map[string]string) (*Config, error) {
 	discordToken := env["DISCORD_TOKEN"]
-	if discordToken == "" {
-		return nil, errors.New("DISCORD_TOKEN required")
+
+	// WhatsApp config
+	var whatsAppSenders []string
+	if s := env["WHATSAPP_ALLOWED_SENDERS"]; s != "" {
+		whatsAppSenders = splitAndTrim(s)
+	}
+
+	whatsAppDBPath := env["WHATSAPP_DB_PATH"]
+	if whatsAppDBPath == "" {
+		whatsAppDBPath = "whatsapp.db"
+	}
+
+	// At least one platform required
+	if discordToken == "" && len(whatsAppSenders) == 0 {
+		return nil, errors.New("at least one platform required: set DISCORD_TOKEN or WHATSAPP_ALLOWED_SENDERS")
 	}
 
 	allowedDirsStr := env["ALLOWED_DIRS"]
 	if allowedDirsStr == "" {
 		return nil, errors.New("ALLOWED_DIRS required")
 	}
-
 	allowedDirs := splitAndTrim(allowedDirsStr)
 
-	allowedUsersStr := env["ALLOWED_USERS"]
-	if allowedUsersStr == "" {
-		return nil, errors.New("ALLOWED_USERS required")
-	}
-
-	allowedUsers := splitAndTrim(allowedUsersStr)
-	for _, u := range allowedUsers {
-		if _, err := strconv.ParseUint(u, 10, 64); err != nil {
-			return nil, errors.Errorf("invalid user ID %q: must be numeric", u)
+	// Discord requires ALLOWED_USERS with numeric IDs
+	var allowedUsers []string
+	if discordToken != "" {
+		allowedUsersStr := env["ALLOWED_USERS"]
+		if allowedUsersStr == "" {
+			return nil, errors.New("ALLOWED_USERS required when DISCORD_TOKEN is set")
+		}
+		allowedUsers = splitAndTrim(allowedUsersStr)
+		for _, u := range allowedUsers {
+			if _, err := strconv.ParseUint(u, 10, 64); err != nil {
+				return nil, errors.Errorf("invalid user ID %q: must be numeric", u)
+			}
 		}
 	}
 
@@ -91,34 +118,38 @@ func Load(env map[string]string) (*Config, error) {
 	minimaxAPIKey := env["MINIMAX_API_KEY"]
 
 	return &Config{
-		DiscordToken: discordToken,
-		AllowedDirs:  allowedDirs,
-		AllowedUsers: allowedUsers,
-		ClaudeCWD:    claudeCwd,
-		WebhookPort:  webhookPort,
-		Mode:         mode,
-		APIKey:       apiKey,
-		BaseURL:           baseURL,
-		ResendAPIKey:      resendAPIKey,
-		DashboardPassword: dashboardPassword,
-		MinimaxAPIKey:     minimaxAPIKey,
+		DiscordToken:           discordToken,
+		AllowedDirs:            allowedDirs,
+		AllowedUsers:           allowedUsers,
+		ClaudeCWD:              claudeCwd,
+		WebhookPort:            webhookPort,
+		Mode:                   mode,
+		APIKey:                 apiKey,
+		BaseURL:                baseURL,
+		ResendAPIKey:           resendAPIKey,
+		DashboardPassword:      dashboardPassword,
+		MinimaxAPIKey:          minimaxAPIKey,
+		WhatsAppAllowedSenders: whatsAppSenders,
+		WhatsAppDBPath:         whatsAppDBPath,
 	}, nil
 }
 
 // LoadFromEnv loads config from os environment variables.
 func LoadFromEnv() (*Config, error) {
 	env := map[string]string{
-		"DISCORD_TOKEN":       os.Getenv("DISCORD_TOKEN"),
-		"ALLOWED_DIRS":        os.Getenv("ALLOWED_DIRS"),
-		"ALLOWED_USERS":       os.Getenv("ALLOWED_USERS"),
-		"CLAUDE_CWD":          os.Getenv("CLAUDE_CWD"),
-		"WEBHOOK_PORT":        os.Getenv("WEBHOOK_PORT"),
-		"CLAUDECORD_MODE":     os.Getenv("CLAUDECORD_MODE"),
-		"CLAUDECORD_API_KEY":  os.Getenv("CLAUDECORD_API_KEY"),
-		"CLAUDECORD_BASE_URL": os.Getenv("CLAUDECORD_BASE_URL"),
-		"RESEND_API_KEY":      os.Getenv("RESEND_API_KEY"),
-		"DASHBOARD_PASSWORD":  os.Getenv("DASHBOARD_PASSWORD"),
-		"MINIMAX_API_KEY":     os.Getenv("MINIMAX_API_KEY"),
+		"DISCORD_TOKEN":            os.Getenv("DISCORD_TOKEN"),
+		"ALLOWED_DIRS":             os.Getenv("ALLOWED_DIRS"),
+		"ALLOWED_USERS":            os.Getenv("ALLOWED_USERS"),
+		"CLAUDE_CWD":               os.Getenv("CLAUDE_CWD"),
+		"WEBHOOK_PORT":             os.Getenv("WEBHOOK_PORT"),
+		"CLAUDECORD_MODE":          os.Getenv("CLAUDECORD_MODE"),
+		"CLAUDECORD_API_KEY":       os.Getenv("CLAUDECORD_API_KEY"),
+		"CLAUDECORD_BASE_URL":      os.Getenv("CLAUDECORD_BASE_URL"),
+		"RESEND_API_KEY":           os.Getenv("RESEND_API_KEY"),
+		"DASHBOARD_PASSWORD":       os.Getenv("DASHBOARD_PASSWORD"),
+		"MINIMAX_API_KEY":          os.Getenv("MINIMAX_API_KEY"),
+		"WHATSAPP_ALLOWED_SENDERS": os.Getenv("WHATSAPP_ALLOWED_SENDERS"),
+		"WHATSAPP_DB_PATH":         os.Getenv("WHATSAPP_DB_PATH"),
 	}
 	return Load(env)
 }
