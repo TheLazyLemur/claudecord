@@ -104,6 +104,21 @@ func (s *Server) Handler() http.Handler {
 		w.Write(data)
 	})
 
+	// QR code (protected) — returns current QR or 204
+	mux.HandleFunc("/api/qr", func(w http.ResponseWriter, r *http.Request) {
+		if !s.isAuthenticated(r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		data := s.hub.Sticky()
+		if data == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+	})
+
 	// WebSocket (protected)
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		if !s.isAuthenticated(r) {

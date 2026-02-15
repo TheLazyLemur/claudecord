@@ -47,30 +47,22 @@ func TestHub_Broadcast_EvictsSlowClient(t *testing.T) {
 	a.False(open)
 }
 
-func TestHub_BroadcastSticky_ReplaysToLateClient(t *testing.T) {
+func TestHub_BroadcastSticky_CachesMessage(t *testing.T) {
 	a := assert.New(t)
 
 	hub := NewHub()
 	go hub.Run()
 
-	// broadcast sticky before any clients exist
+	a.Nil(hub.Sticky())
+
 	hub.BroadcastSticky(Message{Type: "whatsapp_qr", Content: "qr-code-data"})
 	time.Sleep(10 * time.Millisecond)
 
-	// late-joining client should receive the cached message
-	late := &Client{hub: hub, send: make(chan []byte, 8)}
-	hub.register <- late
-
-	select {
-	case msg := <-late.send:
-		a.Contains(string(msg), "whatsapp_qr")
-		a.Contains(string(msg), "qr-code-data")
-	case <-time.After(time.Second):
-		t.Fatal("late client did not receive sticky message")
-	}
+	a.NotNil(hub.Sticky())
+	a.Contains(string(hub.Sticky()), "qr-code-data")
 }
 
-func TestHub_ClearSticky_StopsReplay(t *testing.T) {
+func TestHub_ClearSticky(t *testing.T) {
 	a := assert.New(t)
 
 	hub := NewHub()
@@ -78,20 +70,10 @@ func TestHub_ClearSticky_StopsReplay(t *testing.T) {
 
 	hub.BroadcastSticky(Message{Type: "whatsapp_qr", Content: "qr-code-data"})
 	time.Sleep(10 * time.Millisecond)
+	a.NotNil(hub.Sticky())
 
 	hub.ClearSticky()
-	time.Sleep(10 * time.Millisecond)
-
-	late := &Client{hub: hub, send: make(chan []byte, 8)}
-	hub.register <- late
-	time.Sleep(10 * time.Millisecond)
-
-	select {
-	case <-late.send:
-		a.Fail("should not receive sticky after clear")
-	default:
-		// expected — no message
-	}
+	a.Nil(hub.Sticky())
 }
 
 func TestHub_Broadcast_ConcurrentDoesNotDeadlock(t *testing.T) {

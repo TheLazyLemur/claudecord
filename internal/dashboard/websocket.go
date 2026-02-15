@@ -91,14 +91,7 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
-			sticky := h.sticky
 			h.mu.Unlock()
-			if sticky != nil {
-				select {
-				case client.send <- sticky:
-				default:
-				}
-			}
 			slog.Debug("ws client registered", "clients", len(h.clients))
 
 		case client := <-h.unregister:
@@ -164,6 +157,13 @@ func (h *Hub) ClearSticky() {
 	h.mu.Lock()
 	h.sticky = nil
 	h.mu.Unlock()
+}
+
+// Sticky returns the cached sticky message, or nil.
+func (h *Hub) Sticky() []byte {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.sticky
 }
 
 // BroadcastRaw sends raw bytes to all clients.

@@ -474,3 +474,11 @@ skillModal.onclick = (e) => {
 
 // Start
 connect();
+
+// Fetch cached QR on load
+fetch('/api/qr').then(r => {
+  if (!r.ok) return;
+  return r.json();
+}).then(msg => {
+  if (msg) handleWhatsAppQR(msg.content);
+}).catch(() => {});
