@@ -32,6 +32,11 @@ const permissionPrompt = document.getElementById('permissionPrompt');
 const permApproveBtn = document.getElementById('permApproveBtn');
 const permDenyBtn = document.getElementById('permDenyBtn');
 
+// WhatsApp QR
+const whatsappQR = document.getElementById('whatsappQR');
+const qrCanvas = document.getElementById('qrCanvas');
+const qrStatus = document.getElementById('qrStatus');
+
 // Skill modal
 const skillModal = document.getElementById('skillModal');
 const skillModalTitle = document.getElementById('skillModalTitle');
@@ -122,6 +127,10 @@ function handleMessage(msg) {
 
     case 'skill_detail':
       showSkillEditor(msg.name, msg.content, msg.files || []);
+      break;
+
+    case 'whatsapp_qr':
+      handleWhatsAppQR(msg.content);
       break;
   }
 }
@@ -370,6 +379,26 @@ function handleFileUpload(files) {
     };
     reader.readAsText(file);
   }
+}
+
+// WhatsApp QR
+function handleWhatsAppQR(content) {
+  if (content === 'success') {
+    qrStatus.textContent = 'Paired';
+    qrCanvas.classList.add('hidden');
+    setTimeout(() => whatsappQR.classList.add('hidden'), 2000);
+    return;
+  }
+  if (content === 'timeout') {
+    qrStatus.textContent = 'QR expired';
+    qrCanvas.classList.add('hidden');
+    return;
+  }
+  // Render QR code
+  whatsappQR.classList.remove('hidden');
+  qrCanvas.classList.remove('hidden');
+  qrStatus.textContent = '';
+  QRCode.toCanvas(qrCanvas, content, { width: 256, margin: 1 });
 }
 
 // Utility
