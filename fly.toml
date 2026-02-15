@@ -12,6 +12,7 @@ primary_region = 'jnb'
   ALLOWED_DIRS = '/workspace'
   CLAUDE_CWD = '/workspace'
   WEBHOOK_PORT = '8080'
+  WHATSAPP_DB_PATH = '/root/whatsapp.db'
 
 [http_service]
   internal_port = 8080
