@@ -403,8 +403,10 @@ function handleWhatsAppQR(content) {
   whatsappQR.classList.remove('hidden');
   qrCanvas.classList.remove('hidden');
   qrStatus.textContent = '';
+  const ctx = qrCanvas.getContext('2d');
+  ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
   QRCode.toCanvas(qrCanvas, content, { width: 256, margin: 1 })
-    .catch(() => { qrStatus.textContent = 'QR render error'; });
+    .catch((e) => { qrStatus.textContent = 'QR render error: ' + e.message; });
 }
 
 // Utility

@@ -182,9 +182,10 @@ func run() error {
 					if evt.Event == "code" {
 						fmt.Println("Scan this QR code in WhatsApp > Linked Devices:")
 						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-						hub.Broadcast(dashboard.Message{Type: "whatsapp_qr", Content: evt.Code})
+						hub.BroadcastSticky(dashboard.Message{Type: "whatsapp_qr", Content: evt.Code})
 					} else {
 						slog.Info("whatsapp qr event", "event", evt.Event)
+						hub.ClearSticky()
 						hub.Broadcast(dashboard.Message{Type: "whatsapp_qr", Content: evt.Event})
 					}
 				}

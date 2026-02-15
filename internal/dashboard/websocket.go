@@ -71,6 +71,7 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
+	sticky     []byte // last sticky message, replayed to new clients
 }
 
 // NewHub creates a new Hub.
@@ -90,7 +91,14 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			sticky := h.sticky
 			h.mu.Unlock()
+			if sticky != nil {
+				select {
+				case client.send <- sticky:
+				default:
+				}
+			}
 			slog.Debug("ws client registered", "clients", len(h.clients))
 
 		case client := <-h.unregister:
@@ -136,6 +144,26 @@ func (h *Hub) Broadcast(msg Message) {
 		return
 	}
 	h.broadcast <- data
+}
+
+// BroadcastSticky caches the message and broadcasts it. Late-joining clients receive the cached copy.
+func (h *Hub) BroadcastSticky(msg Message) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		slog.Error("marshal broadcast", "error", err)
+		return
+	}
+	h.mu.Lock()
+	h.sticky = data
+	h.mu.Unlock()
+	h.broadcast <- data
+}
+
+// ClearSticky removes the cached sticky message.
+func (h *Hub) ClearSticky() {
+	h.mu.Lock()
+	h.sticky = nil
+	h.mu.Unlock()
 }
 
 // BroadcastRaw sends raw bytes to all clients.
