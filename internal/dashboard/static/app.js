@@ -394,11 +394,17 @@ function handleWhatsAppQR(content) {
     qrCanvas.classList.add('hidden');
     return;
   }
+  if (content.startsWith('err')) {
+    qrStatus.textContent = content;
+    qrCanvas.classList.add('hidden');
+    return;
+  }
   // Render QR code
   whatsappQR.classList.remove('hidden');
   qrCanvas.classList.remove('hidden');
   qrStatus.textContent = '';
-  QRCode.toCanvas(qrCanvas, content, { width: 256, margin: 1 });
+  QRCode.toCanvas(qrCanvas, content, { width: 256, margin: 1 })
+    .catch(() => { qrStatus.textContent = 'QR render error'; });
 }
 
 // Utility
