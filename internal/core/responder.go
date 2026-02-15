@@ -1,6 +1,9 @@
 package core
 
+import "strings"
+
 const MaxDiscordMessageLen = 2000
+const MaxWhatsAppMessageLen = 65536
 
 // ChunkMessage splits content into chunks of at most maxLen bytes.
 func ChunkMessage(content string, maxLen int) []string {
@@ -121,4 +124,53 @@ func (r *EmailResponder) SendUpdate(message string) error {
 
 func (r *EmailResponder) AskPermission(prompt string) (bool, error) {
 	return false, nil // auto-deny for email (no interactive channel)
+}
+
+// WhatsAppResponder sends responses via WhatsApp
+type WhatsAppResponder struct {
+	client    WhatsAppMessenger
+	chatJID   string
+	senderJID string
+}
+
+func NewWhatsAppResponder(client WhatsAppMessenger, chatJID, senderJID string) *WhatsAppResponder {
+	return &WhatsAppResponder{
+		client:    client,
+		chatJID:   chatJID,
+		senderJID: senderJID,
+	}
+}
+
+func (r *WhatsAppResponder) SendTyping() error {
+	return r.client.SendTyping(r.chatJID)
+}
+
+func (r *WhatsAppResponder) PostResponse(content string) error {
+	chunks := ChunkMessage(content, MaxWhatsAppMessageLen)
+	for _, chunk := range chunks {
+		if err := r.client.SendText(r.chatJID, chunk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *WhatsAppResponder) AddReaction(emoji string) error {
+	return nil
+}
+
+func (r *WhatsAppResponder) SendUpdate(message string) error {
+	return r.client.SendText(r.chatJID, message)
+}
+
+func (r *WhatsAppResponder) AskPermission(prompt string) (bool, error) {
+	if err := r.client.SendText(r.chatJID, prompt+"\nReply yes/no"); err != nil {
+		return false, err
+	}
+	reply, err := r.client.WaitForReply(r.senderJID)
+	if err != nil {
+		return false, err
+	}
+	lower := strings.ToLower(strings.TrimSpace(reply))
+	return lower == "y" || lower == "yes", nil
 }

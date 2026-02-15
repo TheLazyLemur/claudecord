@@ -25,3 +25,9 @@ type Responder interface {
 type EmailClient interface {
 	Send(to, subject, body string) error
 }
+
+type WhatsAppMessenger interface {
+	SendText(chatJID, text string) error
+	SendTyping(chatJID string) error
+	WaitForReply(senderJID string) (string, error)
+}
