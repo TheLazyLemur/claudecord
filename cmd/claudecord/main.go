@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -9,16 +10,21 @@ import (
 	"syscall"
 	"time"
 
+	_ "modernc.org/sqlite"
+
 	"github.com/TheLazyLemur/claudecord/internal/api"
 	"github.com/TheLazyLemur/claudecord/internal/cli"
 	"github.com/TheLazyLemur/claudecord/internal/config"
-	"github.com/TheLazyLemur/claudecord/internal/permission"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
+	"github.com/TheLazyLemur/claudecord/internal/permission"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/bwmarrin/discordgo"
+	"github.com/mdp/qrterminal/v3"
 	"github.com/pkg/errors"
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/store/sqlstore"
 )
 
 const initTimeout = 30 * time.Second
@@ -93,67 +99,106 @@ func run() error {
 	permChecker := permission.NewPermissionChecker(cfg.AllowedDirs)
 	roPermChecker := permission.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
 
-	// Create session managers
+	// Create session manager + bot (shared across platforms)
 	sessionMgr := core.NewSessionManager(backendFactory)
-	passiveSessionMgr := core.NewSessionManager(passiveFactory)
-
-	// Create discord session
-	dg, err := discordgo.New("Bot " + cfg.DiscordToken)
-	if err != nil {
-		return errors.Wrap(err, "creating discord session")
-	}
-
-	discordClient := handler.NewDiscordClientWrapper(dg)
 	bot := core.NewBot(sessionMgr, permChecker)
-	passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPermChecker)
+	defer sessionMgr.Close()
 
-	// Need intents for message content and reactions
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuildMessageReactions
+	// Discord (optional)
+	if cfg.DiscordToken != "" {
+		passiveSessionMgr := core.NewSessionManager(passiveFactory)
+		defer passiveSessionMgr.Close()
 
-	// Register ready handler
-	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		slog.Info("READY event", "user", r.User.Username, "guilds", len(r.Guilds))
-	})
-
-	// Register raw message handler to debug
-	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		slog.Info("RAW message", "content", m.Content, "author", m.Author.Username)
-	})
-
-	// Open discord connection to get bot ID
-	if err := dg.Open(); err != nil {
-		return errors.Wrap(err, "opening discord connection")
-	}
-	defer dg.Close()
-
-	// Set bot status to online
-	dg.UpdateGameStatus(0, "Ready")
-
-	slog.Info("connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
-
-	// Create handler with botID, allowed users, and passive bot
-	h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
-	dg.AddHandler(h.OnMessageCreate)
-	dg.AddHandler(h.OnReactionAdd)
-	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		h.OnInteractionCreate(s, i)
-	})
-
-	// Register slash commands
-	cmds := handler.SlashCommands()
-	for _, cmd := range cmds {
-		_, err := dg.ApplicationCommandCreate(dg.State.User.ID, "", cmd)
+		dg, err := discordgo.New("Bot " + cfg.DiscordToken)
 		if err != nil {
-			slog.Warn("registering slash command", "name", cmd.Name, "error", err)
+			return errors.Wrap(err, "creating discord session")
 		}
+
+		discordClient := handler.NewDiscordClientWrapper(dg)
+		passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPermChecker)
+
+		dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuildMessageReactions
+
+		dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+			slog.Info("READY event", "user", r.User.Username, "guilds", len(r.Guilds))
+		})
+
+		dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+			slog.Info("RAW message", "content", m.Content, "author", m.Author.Username)
+		})
+
+		if err := dg.Open(); err != nil {
+			return errors.Wrap(err, "opening discord connection")
+		}
+		defer dg.Close()
+
+		dg.UpdateGameStatus(0, "Ready")
+
+		slog.Info("discord connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
+
+		h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
+		dg.AddHandler(h.OnMessageCreate)
+		dg.AddHandler(h.OnReactionAdd)
+		dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			h.OnInteractionCreate(s, i)
+		})
+
+		cmds := handler.SlashCommands()
+		for _, cmd := range cmds {
+			_, err := dg.ApplicationCommandCreate(dg.State.User.ID, "", cmd)
+			if err != nil {
+				slog.Warn("registering slash command", "name", cmd.Name, "error", err)
+			}
+		}
+
+		slog.Info("discord bot started", "user", dg.State.User.Username)
 	}
 
-	slog.Info("bot started", "user", dg.State.User.Username)
+	// WhatsApp (optional)
+	if cfg.WhatsAppEnabled() {
+		container, err := sqlstore.New(context.Background(), "sqlite", "file:"+cfg.WhatsAppDBPath+"?_pragma=foreign_keys(1)", nil)
+		if err != nil {
+			return errors.Wrap(err, "creating whatsapp store")
+		}
+		device, err := container.GetFirstDevice(context.Background())
+		if err != nil {
+			return errors.Wrap(err, "getting whatsapp device")
+		}
+		waClient := whatsmeow.NewClient(device, nil)
+		waWrapper := handler.NewWhatsAppClientWrapper(waClient)
+		waHandler := handler.NewWAHandler(bot, cfg.WhatsAppAllowedSenders, waWrapper)
+		waClient.AddEventHandler(waHandler.HandleEvent)
 
-	// Create dashboard server (shares session with Discord bot)
+		if waClient.Store.ID == nil {
+			qrChan, err := waClient.GetQRChannel(context.Background())
+			if err != nil {
+				return errors.Wrap(err, "getting whatsapp QR channel")
+			}
+			if err := waClient.Connect(); err != nil {
+				return errors.Wrap(err, "connecting whatsapp")
+			}
+			go func() {
+				for evt := range qrChan {
+					if evt.Event == "code" {
+						fmt.Println("Scan this QR code in WhatsApp > Linked Devices:")
+						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+					} else {
+						slog.Info("whatsapp qr event", "event", evt.Event)
+					}
+				}
+			}()
+		} else {
+			if err := waClient.Connect(); err != nil {
+				return errors.Wrap(err, "connecting whatsapp")
+			}
+		}
+		slog.Info("whatsapp connected")
+		defer waClient.Disconnect()
+	}
+
+	// Dashboard server (platform-independent)
 	dashboardServer := dashboard.NewServer(hub, sessionMgr, permChecker, skillStore, skillsDir, cfg.DashboardPassword)
 
-	// Start webhook + dashboard server
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())
 	mux.Handle("/", dashboardServer.Handler())
@@ -174,7 +219,6 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	srv.Shutdown(ctx)
-	sessionMgr.Close()
 
 	return nil
 }
