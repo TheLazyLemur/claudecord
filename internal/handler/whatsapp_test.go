@@ -56,6 +56,7 @@ func TestWAHandler_AllowedSender_CallsHandleMessage(t *testing.T) {
 
 	// when
 	h.HandleEvent(evt)
+	time.Sleep(10 * time.Millisecond) // HandleMessage runs in goroutine
 
 	// then
 	r.Len(bot.handledMessages, 1)
@@ -144,6 +145,7 @@ func TestWAHandler_SenderAltMatch_Allowed(t *testing.T) {
 
 	// when
 	h.HandleEvent(evt)
+	time.Sleep(10 * time.Millisecond) // HandleMessage runs in goroutine
 
 	// then
 	r.Len(bot.handledMessages, 1)
@@ -165,6 +167,7 @@ func TestWAHandler_PhoneNumberOnly_MatchesSenderUser(t *testing.T) {
 
 	// when
 	h.HandleEvent(evt)
+	time.Sleep(10 * time.Millisecond) // HandleMessage runs in goroutine
 
 	// then
 	r.Len(bot.handledMessages, 1)
@@ -184,6 +187,7 @@ func TestWAHandler_BarePhoneNumber_MatchesSenderAltUser(t *testing.T) {
 
 	// when
 	h.HandleEvent(evt)
+	time.Sleep(10 * time.Millisecond) // HandleMessage runs in goroutine
 
 	// then
 	r.Len(bot.handledMessages, 1)

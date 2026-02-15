@@ -178,10 +178,14 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 		return
 	}
 
-	responder := core.NewWhatsAppResponder(h.client, chatJID, senderJID)
-	if err := h.bot.HandleMessage(responder, text); err != nil {
-		slog.Error("handling whatsapp message", "error", err)
-	}
+	// run in goroutine — HandleEvent is called on whatsmeow's single event
+	// dispatch goroutine, so blocking here prevents reply events from arriving
+	go func() {
+		responder := core.NewWhatsAppResponder(h.client, chatJID, senderJID)
+		if err := h.bot.HandleMessage(responder, text); err != nil {
+			slog.Error("handling whatsapp message", "error", err)
+		}
+	}()
 }
 
 func extractText(msg *waE2E.Message) string {
