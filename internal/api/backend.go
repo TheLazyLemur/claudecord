@@ -187,6 +187,7 @@ type BackendFactory struct {
 	SkillStore     skills.SkillStore
 	MinimaxAPIKey  string
 	Passive        bool
+	Discord        bool
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
@@ -206,9 +207,12 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	if f.Passive {
 		base = core.PassiveSystemPrompt()
 		apiTools = buildPassiveTools()
-	} else {
+	} else if f.Discord {
 		base = "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates."
-		apiTools = buildTools()
+		apiTools = buildDiscordTools()
+	} else {
+		base = "Use send_update to post progress updates for longer tasks."
+		apiTools = buildChatTools()
 	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
@@ -228,8 +232,14 @@ func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
 	return tools
 }
 
-func buildTools() []anthropic.ToolUnionParam {
+func buildDiscordTools() []anthropic.ToolUnionParam {
 	allTools := append(core.DiscordTools(), core.FileTools()...)
+	allTools = append(allTools, core.SkillTools()...)
+	return buildToolParams(allTools)
+}
+
+func buildChatTools() []anthropic.ToolUnionParam {
+	allTools := append(core.ChatTools(), core.FileTools()...)
 	allTools = append(allTools, core.SkillTools()...)
 	return buildToolParams(allTools)
 }

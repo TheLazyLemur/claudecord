@@ -64,8 +64,10 @@ func run() error {
 	skillList, _ := skillStore.List()
 	slog.Info("skills loaded", "count", len(skillList))
 
-	// Create backend factory based on mode
+	// Create backend factories based on mode
+	// discordFactory includes react_emoji tool; backendFactory (WA/dashboard) does not
 	var backendFactory core.BackendFactory
+	var discordFactory core.BackendFactory
 	var passiveFactory core.BackendFactory
 
 	switch cfg.Mode {
@@ -79,6 +81,7 @@ func run() error {
 		passive := base
 		passive.Passive = true
 		backendFactory = &base
+		discordFactory = &base
 		passiveFactory = &passive
 	case config.ModeAPI:
 		base := api.BackendFactory{
@@ -89,9 +92,12 @@ func run() error {
 			SkillStore:     skillStore,
 			MinimaxAPIKey:  cfg.MinimaxAPIKey,
 		}
+		discord := base
+		discord.Discord = true
 		passive := base
 		passive.Passive = true
 		backendFactory = &base
+		discordFactory = &discord
 		passiveFactory = &passive
 	}
 
@@ -99,13 +105,17 @@ func run() error {
 	permChecker := permission.NewPermissionChecker(cfg.AllowedDirs)
 	roPermChecker := permission.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
 
-	// Create session manager + bot (shared across platforms)
+	// Create session manager + bot for WA/dashboard (no react_emoji)
 	sessionMgr := core.NewSessionManager(backendFactory)
 	bot := core.NewBot(sessionMgr, permChecker)
 	defer sessionMgr.Close()
 
-	// Discord (optional)
+	// Discord (optional) — separate session manager with react_emoji
 	if cfg.DiscordToken != "" {
+		discordSessionMgr := core.NewSessionManager(discordFactory)
+		defer discordSessionMgr.Close()
+		discordBot := core.NewBot(discordSessionMgr, permChecker)
+
 		passiveSessionMgr := core.NewSessionManager(passiveFactory)
 		defer passiveSessionMgr.Close()
 
@@ -136,7 +146,7 @@ func run() error {
 
 		slog.Info("discord connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
 
-		h := handler.NewHandler(bot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
+		h := handler.NewHandler(discordBot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
 		dg.AddHandler(h.OnMessageCreate)
 		dg.AddHandler(h.OnReactionAdd)
 		dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {

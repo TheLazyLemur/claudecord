@@ -41,6 +41,26 @@ func DiscordTools() []ToolDef {
 	}
 }
 
+// ChatTools returns non-Discord chat tools (send_update only, no react_emoji)
+func ChatTools() []ToolDef {
+	return []ToolDef{
+		{
+			Name:        "send_update",
+			Description: "Send a progress update message. Use this to keep the user informed about what you're doing.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"message": map[string]any{
+						"type":        "string",
+						"description": "The update message to send",
+					},
+				},
+				"required": []string{"message"},
+			},
+		},
+	}
+}
+
 // FileTools returns tool definitions for file/shell operations (API mode only)
 func FileTools() []ToolDef {
 	return []ToolDef{

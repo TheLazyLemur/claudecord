@@ -49,6 +49,7 @@ func TestWAHandler_AllowedSender_CallsHandleMessage(t *testing.T) {
 	bot := &mockBot{}
 	client := &mockWAClient{}
 	client.On("HandleIncomingReply", "sender-1@s.whatsapp.net", "hello").Return(false)
+	client.On("HandleIncomingReply", "", "hello").Return(false) // SenderAlt fallback
 	h := NewWAHandler(bot, []string{"sender-1@s.whatsapp.net"}, client)
 
 	evt := makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "hello")
@@ -83,6 +84,7 @@ func TestWAHandler_NewCommand_CallsNewSession(t *testing.T) {
 	bot := &mockBot{}
 	client := &mockWAClient{}
 	client.On("HandleIncomingReply", "sender-1@s.whatsapp.net", "!new").Return(false)
+	client.On("HandleIncomingReply", "", "!new").Return(false) // SenderAlt fallback
 	h := NewWAHandler(bot, []string{"sender-1@s.whatsapp.net"}, client)
 
 	evt := makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "!new")
@@ -135,6 +137,7 @@ func TestWAHandler_SenderAltMatch_Allowed(t *testing.T) {
 	bot := &mockBot{}
 	client := &mockWAClient{}
 	client.On("HandleIncomingReply", "sender-1@s.whatsapp.net", "hello").Return(false)
+	client.On("HandleIncomingReply", "alt-sender@s.whatsapp.net", "hello").Return(false) // SenderAlt fallback
 	h := NewWAHandler(bot, []string{"alt-sender@s.whatsapp.net"}, client)
 
 	evt := makeMessageEventWithAlt("sender-1@s.whatsapp.net", "alt-sender@s.whatsapp.net", "chat-1@g.us", "hello")
@@ -154,6 +157,7 @@ func TestWAHandler_PhoneNumberOnly_MatchesSenderUser(t *testing.T) {
 	bot := &mockBot{}
 	client := &mockWAClient{}
 	client.On("HandleIncomingReply", "12345@lid", "hello").Return(false)
+	client.On("HandleIncomingReply", "27123456789@s.whatsapp.net", "hello").Return(false) // SenderAlt fallback
 	h := NewWAHandler(bot, []string{"27123456789@s.whatsapp.net"}, client)
 
 	// sender is LID, alt is the phone number JID
@@ -173,6 +177,7 @@ func TestWAHandler_BarePhoneNumber_MatchesSenderAltUser(t *testing.T) {
 	bot := &mockBot{}
 	client := &mockWAClient{}
 	client.On("HandleIncomingReply", "12345@lid", "hello").Return(false)
+	client.On("HandleIncomingReply", "27123456789@s.whatsapp.net", "hello").Return(false) // SenderAlt fallback
 	h := NewWAHandler(bot, []string{"27123456789"}, client)
 
 	evt := makeMessageEventWithAlt("12345@lid", "27123456789@s.whatsapp.net", "chat-1@g.us", "hello")

@@ -166,8 +166,8 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 		return
 	}
 
-	// check if this is a permission flow reply
-	if h.client.HandleIncomingReply(senderJID, text) {
+	// check if this is a permission flow reply (try both JID forms — LID vs phone)
+	if h.client.HandleIncomingReply(senderJID, text) || h.client.HandleIncomingReply(v.Info.SenderAlt.String(), text) {
 		return
 	}
 
