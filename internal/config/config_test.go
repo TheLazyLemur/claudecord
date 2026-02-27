@@ -261,3 +261,59 @@ func TestLoad_MinimaxAPIKeyOptional(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, cfg.MinimaxAPIKey)
 }
+
+// --- Auto-approve tests ---
+
+func TestLoad_AutoApproveDefaultsFalse(t *testing.T) {
+	// given
+	// no AUTO_APPROVE env vars set
+
+	// when
+	cfg, err := Load(validDiscordEnv())
+
+	// then
+	require.NoError(t, err)
+	assert.False(t, cfg.AutoApproveDiscord)
+	assert.False(t, cfg.AutoApproveWhatsApp)
+}
+
+func TestLoad_AutoApproveDiscordTrue(t *testing.T) {
+	// given
+	env := validDiscordEnv()
+	env["AUTO_APPROVE_DISCORD"] = "true"
+
+	// when
+	cfg, err := Load(env)
+
+	// then
+	require.NoError(t, err)
+	assert.True(t, cfg.AutoApproveDiscord)
+}
+
+func TestLoad_AutoApproveWhatsAppTrue(t *testing.T) {
+	// given
+	env := validWhatsAppEnv()
+	env["AUTO_APPROVE_WHATSAPP"] = "true"
+
+	// when
+	cfg, err := Load(env)
+
+	// then
+	require.NoError(t, err)
+	assert.True(t, cfg.AutoApproveWhatsApp)
+}
+
+func TestLoad_AutoApproveCaseInsensitive(t *testing.T) {
+	// given
+	env := validDiscordEnv()
+	env["AUTO_APPROVE_DISCORD"] = "TRUE"
+	env["AUTO_APPROVE_WHATSAPP"] = "True"
+
+	// when
+	cfg, err := Load(env)
+
+	// then
+	require.NoError(t, err)
+	assert.True(t, cfg.AutoApproveDiscord)
+	assert.True(t, cfg.AutoApproveWhatsApp)
+}

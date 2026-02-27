@@ -105,16 +105,26 @@ func run() error {
 	permChecker := permission.NewPermissionChecker(cfg.AllowedDirs)
 	roPermChecker := permission.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
 
+	var discordPermChecker core.PermissionChecker = permChecker
+	if cfg.AutoApproveDiscord {
+		discordPermChecker = permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs)
+	}
+
+	var waPermChecker core.PermissionChecker = permChecker
+	if cfg.AutoApproveWhatsApp {
+		waPermChecker = permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs)
+	}
+
 	// Create session manager + bot for WA/dashboard (no react_emoji)
 	sessionMgr := core.NewSessionManager(backendFactory)
-	bot := core.NewBot(sessionMgr, permChecker)
+	bot := core.NewBot(sessionMgr, waPermChecker)
 	defer sessionMgr.Close()
 
 	// Discord (optional) — separate session manager with react_emoji
 	if cfg.DiscordToken != "" {
 		discordSessionMgr := core.NewSessionManager(discordFactory)
 		defer discordSessionMgr.Close()
-		discordBot := core.NewBot(discordSessionMgr, permChecker)
+		discordBot := core.NewBot(discordSessionMgr, discordPermChecker)
 
 		passiveSessionMgr := core.NewSessionManager(passiveFactory)
 		defer passiveSessionMgr.Close()
@@ -210,7 +220,7 @@ func run() error {
 	}
 
 	// Dashboard server (platform-independent)
-	dashboardServer := dashboard.NewServer(hub, sessionMgr, permChecker, skillStore, skillsDir, cfg.DashboardPassword)
+	dashboardServer := dashboard.NewServer(hub, sessionMgr, waPermChecker, skillStore, skillsDir, cfg.DashboardPassword)
 
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())

@@ -38,6 +38,10 @@ type Config struct {
 	// WhatsApp
 	WhatsAppAllowedSenders []string
 	WhatsAppDBPath         string
+
+	// Per-platform auto-approve (skip interactive permission prompts)
+	AutoApproveDiscord  bool
+	AutoApproveWhatsApp bool
 }
 
 func (c *Config) DiscordEnabled() bool {
@@ -131,6 +135,8 @@ func Load(env map[string]string) (*Config, error) {
 		MinimaxAPIKey:          minimaxAPIKey,
 		WhatsAppAllowedSenders: whatsAppSenders,
 		WhatsAppDBPath:         whatsAppDBPath,
+		AutoApproveDiscord:     strings.EqualFold(env["AUTO_APPROVE_DISCORD"], "true"),
+		AutoApproveWhatsApp:    strings.EqualFold(env["AUTO_APPROVE_WHATSAPP"], "true"),
 	}, nil
 }
 
@@ -150,6 +156,8 @@ func LoadFromEnv() (*Config, error) {
 		"MINIMAX_API_KEY":          os.Getenv("MINIMAX_API_KEY"),
 		"WHATSAPP_ALLOWED_SENDERS": os.Getenv("WHATSAPP_ALLOWED_SENDERS"),
 		"WHATSAPP_DB_PATH":         os.Getenv("WHATSAPP_DB_PATH"),
+		"AUTO_APPROVE_DISCORD":     os.Getenv("AUTO_APPROVE_DISCORD"),
+		"AUTO_APPROVE_WHATSAPP":    os.Getenv("AUTO_APPROVE_WHATSAPP"),
 	}
 	return Load(env)
 }
