@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -16,10 +17,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// WAClient is what WAHandler needs from the WhatsApp client wrapper
+// DefaultBurstDelay is how long the WA handler waits for additional messages
+// in the same chat before dispatching the batch to the bot.
+const DefaultBurstDelay = 3 * time.Second
+
+// WAClient is what WAHandler needs from the WhatsApp client wrapper.
+// Download decrypts a WhatsApp media payload into raw bytes.
 type WAClient interface {
 	core.WhatsAppMessenger
 	HandleIncomingReply(senderJID, text string) bool
+	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
 }
 
 // replyWaiter holds state for a pending reply wait
@@ -41,6 +48,10 @@ func NewWhatsAppClientWrapper(client *whatsmeow.Client) *WhatsAppClientWrapper {
 		client:  client,
 		timeout: 60 * time.Second,
 	}
+}
+
+func (c *WhatsAppClientWrapper) Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error) {
+	return c.client.Download(ctx, msg)
 }
 
 func (c *WhatsAppClientWrapper) SendText(chatJID, text string) error {
@@ -110,18 +121,48 @@ func (c *WhatsAppClientWrapper) HandleIncomingReply(senderJID, text string) bool
 	return true
 }
 
-// WAHandler handles whatsmeow events
+// WAHandler handles whatsmeow events.
+// Inbound messages are debounced per chat JID and dispatched to the bot as a
+// single rendered prompt; attachments are decrypted into mediaDir before the
+// flush fires.
 type WAHandler struct {
 	bot            BotInterface
 	allowedSenders []string
 	client         WAClient
+	mediaDir       string
+	buffer         *core.DebouncedBuffer
+	now            func() time.Time
+
+	// senderByChat tracks which sender should receive the bot's reply for a
+	// given chat. Latest wins (set on each enqueue, read on flush).
+	mu           sync.Mutex
+	senderByChat map[string]string
 }
 
-func NewWAHandler(bot BotInterface, allowedSenders []string, client WAClient) *WAHandler {
-	return &WAHandler{
+func NewWAHandler(bot BotInterface, allowedSenders []string, client WAClient, mediaDir string) *WAHandler {
+	h := &WAHandler{
 		bot:            bot,
 		allowedSenders: allowedSenders,
 		client:         client,
+		mediaDir:       mediaDir,
+		now:            time.Now,
+		senderByChat:   make(map[string]string),
+	}
+	h.buffer = core.NewDebouncedBuffer(DefaultBurstDelay, h.flush)
+	return h
+}
+
+// SetBurstDelay overrides the default 3s debounce. Tests use this to fire
+// flushes synchronously without waiting on real time.
+func (h *WAHandler) SetBurstDelay(d time.Duration) {
+	h.buffer.Stop()
+	h.buffer = core.NewDebouncedBuffer(d, h.flush)
+}
+
+// Stop drains pending timers; called from main on shutdown.
+func (h *WAHandler) Stop() {
+	if h.buffer != nil {
+		h.buffer.Stop()
 	}
 }
 
@@ -152,40 +193,100 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 		return
 	}
 
-	text := extractText(v.Message)
-	if text == "" {
-		return
-	}
-
 	senderJID := v.Info.Sender.String()
 	chatJID := v.Info.Chat.String()
 
-	// check sender against allowed list — match full JID or just the user/number part
 	if !h.isSenderAllowed(v.Info.Sender, v.Info.SenderAlt) {
 		slog.Info("unauthorized whatsapp sender", "sender", senderJID, "alt", v.Info.SenderAlt.String())
 		return
 	}
 
-	// check if this is a permission flow reply (try both JID forms — LID vs phone)
-	if h.client.HandleIncomingReply(senderJID, text) || h.client.HandleIncomingReply(v.Info.SenderAlt.String(), text) {
+	// Permission-reply fast path stays before media + buffer logic.
+	// Known limitation: a single message with both a permission reply *and*
+	// an attachment will consume the reply and drop the attachment.
+	plainText := extractText(v.Message)
+	if plainText != "" {
+		if h.client.HandleIncomingReply(senderJID, plainText) || h.client.HandleIncomingReply(v.Info.SenderAlt.String(), plainText) {
+			return
+		}
+		if plainText == "!new" {
+			if err := h.bot.NewSession(""); err != nil {
+				slog.Error("creating new whatsapp session", "error", err)
+			}
+			return
+		}
+	}
+
+	// Synchronous: ordering of decrypted attachments must match send order
+	// inside the burst, so we don't fan out to per-message goroutines here.
+	// The download blocks the whatsmeow dispatch goroutine briefly; for
+	// realistic single-user traffic that's fine.
+	caption, att, err := extractInbound(context.Background(), v, h.client)
+	if err != nil {
+		slog.Error("extracting inbound whatsapp media", "error", err)
 		return
 	}
 
-	if text == "!new" {
-		if err := h.bot.NewSession(""); err != nil {
-			slog.Error("creating new whatsapp session", "error", err)
+	var attachments []core.AttachmentRef
+	if att != nil {
+		if len(att.Bytes) > SizeCap(att.MIME) {
+			label := att.OriginalName
+			if label == "" {
+				label = att.MIME
+			}
+			if err := h.client.SendText(chatJID, "skipped (too large): "+label); err != nil {
+				slog.Error("sending size-cap skip notice", "error", err)
+			}
+		} else {
+			path, err := saveAttachment(h.mediaDir, att, h.now())
+			if err != nil {
+				slog.Error("saving whatsapp attachment", "error", err)
+				return
+			}
+			attachments = []core.AttachmentRef{{
+				Path:         path,
+				MIME:         att.MIME,
+				OriginalName: att.OriginalName,
+			}}
 		}
+	}
+
+	if caption == "" && len(attachments) == 0 {
 		return
 	}
 
-	// run in goroutine — HandleEvent is called on whatsmeow's single event
-	// dispatch goroutine, so blocking here prevents reply events from arriving
-	go func() {
-		responder := core.NewWhatsAppResponder(h.client, chatJID, senderJID)
-		if err := h.bot.HandleMessage(responder, text); err != nil {
-			slog.Error("handling whatsapp message", "error", err)
-		}
-	}()
+	h.mu.Lock()
+	h.senderByChat[chatJID] = senderJID
+	h.mu.Unlock()
+
+	h.buffer.Add(core.BufferedMessage{
+		ChannelID:   chatJID,
+		Content:     caption,
+		AuthorID:    senderJID,
+		Attachments: attachments,
+	})
+}
+
+// flush is the DebouncedBuffer callback: render → dispatch to bot.
+func (h *WAHandler) flush(chatJID string, msgs []core.BufferedMessage) {
+	h.mu.Lock()
+	senderJID := h.senderByChat[chatJID]
+	delete(h.senderByChat, chatJID)
+	h.mu.Unlock()
+
+	if senderJID == "" && len(msgs) > 0 {
+		senderJID = msgs[len(msgs)-1].AuthorID
+	}
+
+	prompt := core.RenderWhatsAppBatch(msgs)
+	if prompt == "" {
+		return
+	}
+
+	responder := core.NewWhatsAppResponder(h.client, chatJID, senderJID)
+	if err := h.bot.HandleMessage(responder, prompt); err != nil {
+		slog.Error("handling whatsapp batch", "error", err, "chat", chatJID, "msgs", fmt.Sprintf("%d", len(msgs)))
+	}
 }
 
 func extractText(msg *waE2E.Message) string {

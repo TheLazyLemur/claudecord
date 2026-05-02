@@ -5,11 +5,20 @@ import (
 	"time"
 )
 
+// AttachmentRef points at a decrypted media file already on disk.
+// WhatsApp-only today; Discord paths leave Attachments nil.
+type AttachmentRef struct {
+	Path         string
+	MIME         string
+	OriginalName string
+}
+
 type BufferedMessage struct {
-	ChannelID string
-	MessageID string
-	Content   string
-	AuthorID  string
+	ChannelID   string
+	MessageID   string
+	Content     string
+	AuthorID    string
+	Attachments []AttachmentRef
 }
 
 type MessageBuffer struct {

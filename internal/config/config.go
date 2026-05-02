@@ -2,11 +2,14 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 )
+
+const DefaultModel = "claude-sonnet-4-20250514"
 
 type Mode string
 
@@ -35,9 +38,16 @@ type Config struct {
 	// Minimax API key for WebSearch tool
 	MinimaxAPIKey string
 
+	// Model id passed to the API. Required when BaseURL is set, else defaults
+	// to the Sonnet id baked into DefaultModel.
+	Model string
+
 	// WhatsApp
 	WhatsAppAllowedSenders []string
 	WhatsAppDBPath         string
+	// Directory media attachments are decrypted into. Required when WhatsApp
+	// is enabled. Must live under one of AllowedDirs.
+	WhatsAppMediaDir string
 
 	// Per-platform auto-approve (skip interactive permission prompts)
 	AutoApproveDiscord  bool
@@ -121,6 +131,28 @@ func Load(env map[string]string) (*Config, error) {
 	dashboardPassword := env["DASHBOARD_PASSWORD"]
 	minimaxAPIKey := env["MINIMAX_API_KEY"]
 
+	model := env["MODEL"]
+	if model == "" {
+		if baseURL != "" {
+			return nil, errors.New("MODEL required when CLAUDECORD_BASE_URL is set")
+		}
+		model = DefaultModel
+	}
+
+	var mediaDir string
+	if len(whatsAppSenders) > 0 {
+		mediaDir = env["WHATSAPP_MEDIA_DIR"]
+		if mediaDir == "" {
+			return nil, errors.New("WHATSAPP_MEDIA_DIR required when WhatsApp is enabled")
+		}
+		if !pathInsideAllowedDirs(mediaDir, allowedDirs) {
+			return nil, errors.Errorf("WHATSAPP_MEDIA_DIR %q must live under ALLOWED_DIRS", mediaDir)
+		}
+		if err := os.MkdirAll(mediaDir, 0o700); err != nil {
+			return nil, errors.Wrap(err, "creating WHATSAPP_MEDIA_DIR")
+		}
+	}
+
 	return &Config{
 		DiscordToken:           discordToken,
 		AllowedDirs:            allowedDirs,
@@ -133,11 +165,24 @@ func Load(env map[string]string) (*Config, error) {
 		ResendAPIKey:           resendAPIKey,
 		DashboardPassword:      dashboardPassword,
 		MinimaxAPIKey:          minimaxAPIKey,
+		Model:                  model,
 		WhatsAppAllowedSenders: whatsAppSenders,
 		WhatsAppDBPath:         whatsAppDBPath,
+		WhatsAppMediaDir:       mediaDir,
 		AutoApproveDiscord:     strings.EqualFold(env["AUTO_APPROVE_DISCORD"], "true"),
 		AutoApproveWhatsApp:    strings.EqualFold(env["AUTO_APPROVE_WHATSAPP"], "true"),
 	}, nil
+}
+
+func pathInsideAllowedDirs(path string, allowedDirs []string) bool {
+	clean := filepath.Clean(path)
+	for _, dir := range allowedDirs {
+		d := filepath.Clean(dir)
+		if clean == d || strings.HasPrefix(clean, d+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadFromEnv loads config from os environment variables.
@@ -156,6 +201,8 @@ func LoadFromEnv() (*Config, error) {
 		"MINIMAX_API_KEY":          os.Getenv("MINIMAX_API_KEY"),
 		"WHATSAPP_ALLOWED_SENDERS": os.Getenv("WHATSAPP_ALLOWED_SENDERS"),
 		"WHATSAPP_DB_PATH":         os.Getenv("WHATSAPP_DB_PATH"),
+		"WHATSAPP_MEDIA_DIR":       os.Getenv("WHATSAPP_MEDIA_DIR"),
+		"MODEL":                    os.Getenv("MODEL"),
 		"AUTO_APPROVE_DISCORD":     os.Getenv("AUTO_APPROVE_DISCORD"),
 		"AUTO_APPROVE_WHATSAPP":    os.Getenv("AUTO_APPROVE_WHATSAPP"),
 	}

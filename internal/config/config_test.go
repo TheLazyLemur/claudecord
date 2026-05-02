@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,11 +18,21 @@ func validDiscordEnv() map[string]string {
 }
 
 func validWhatsAppEnv() map[string]string {
+	dir := mustTempMediaDir()
 	return map[string]string{
 		"WHATSAPP_ALLOWED_SENDERS": "123456@lid",
-		"ALLOWED_DIRS":             "/home/user",
+		"ALLOWED_DIRS":             dir,
 		"CLAUDECORD_MODE":          "cli",
+		"WHATSAPP_MEDIA_DIR":       dir + "/media",
 	}
+}
+
+func mustTempMediaDir() string {
+	dir, err := os.MkdirTemp("", "claudecord-cfg-test-")
+	if err != nil {
+		panic(err)
+	}
+	return dir
 }
 
 // --- Platform requirement tests ---
@@ -188,6 +199,7 @@ func TestLoad_APIModeWithBaseURL(t *testing.T) {
 		"CLAUDECORD_MODE":     "api",
 		"CLAUDECORD_API_KEY":  "sk-test-key",
 		"CLAUDECORD_BASE_URL": "https://proxy.example.com",
+		"MODEL":               "kimi-k2.6",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "https://proxy.example.com", cfg.BaseURL)
@@ -301,6 +313,72 @@ func TestLoad_AutoApproveWhatsAppTrue(t *testing.T) {
 	// then
 	require.NoError(t, err)
 	assert.True(t, cfg.AutoApproveWhatsApp)
+}
+
+// --- Model tests ---
+
+func TestLoad_ModelDefaultsToSonnetWithoutBaseURL(t *testing.T) {
+	cfg, err := Load(validDiscordEnv())
+	require.NoError(t, err)
+	assert.Equal(t, DefaultModel, cfg.Model)
+}
+
+func TestLoad_ModelRequiredWhenBaseURLSet(t *testing.T) {
+	env := validDiscordEnv()
+	env["CLAUDECORD_MODE"] = "api"
+	env["CLAUDECORD_API_KEY"] = "sk-test"
+	env["CLAUDECORD_BASE_URL"] = "https://kimi.example.com"
+	_, err := Load(env)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "MODEL required")
+}
+
+func TestLoad_ModelExplicitWithBaseURL(t *testing.T) {
+	env := validDiscordEnv()
+	env["CLAUDECORD_MODE"] = "api"
+	env["CLAUDECORD_API_KEY"] = "sk-test"
+	env["CLAUDECORD_BASE_URL"] = "https://kimi.example.com"
+	env["MODEL"] = "kimi-k2.6"
+	cfg, err := Load(env)
+	require.NoError(t, err)
+	assert.Equal(t, "kimi-k2.6", cfg.Model)
+}
+
+// --- WhatsAppMediaDir tests ---
+
+func TestLoad_WhatsAppMediaDirRequired(t *testing.T) {
+	env := validWhatsAppEnv()
+	delete(env, "WHATSAPP_MEDIA_DIR")
+	_, err := Load(env)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "WHATSAPP_MEDIA_DIR")
+}
+
+func TestLoad_WhatsAppMediaDirMustBeInsideAllowedDirs(t *testing.T) {
+	dir := mustTempMediaDir()
+	env := map[string]string{
+		"WHATSAPP_ALLOWED_SENDERS": "123456@lid",
+		"ALLOWED_DIRS":             dir,
+		"CLAUDECORD_MODE":          "cli",
+		"WHATSAPP_MEDIA_DIR":       "/somewhere/else",
+	}
+	_, err := Load(env)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must live under ALLOWED_DIRS")
+}
+
+func TestLoad_WhatsAppMediaDirCreatedOnLoad(t *testing.T) {
+	cfg, err := Load(validWhatsAppEnv())
+	require.NoError(t, err)
+	info, err := os.Stat(cfg.WhatsAppMediaDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestLoad_WhatsAppMediaDirNotRequiredWhenWhatsAppDisabled(t *testing.T) {
+	cfg, err := Load(validDiscordEnv())
+	require.NoError(t, err)
+	assert.Empty(t, cfg.WhatsAppMediaDir)
 }
 
 func TestLoad_AutoApproveCaseInsensitive(t *testing.T) {

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/TheLazyLemur/claudecord/internal/tools"
@@ -17,11 +19,10 @@ import (
 
 var _ core.Backend = (*Backend)(nil)
 
-const defaultModel = "claude-sonnet-4-20250514"
-
 // Backend implements core.Backend using Anthropic API
 type Backend struct {
 	client        anthropic.Client
+	model         string
 	sessionID     string
 	history       []anthropic.MessageParam
 	tools         []anthropic.ToolUnionParam
@@ -32,9 +33,13 @@ type Backend struct {
 }
 
 // NewBackend creates an API backend
-func NewBackend(client anthropic.Client, systemPrompt string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string) *Backend {
+func NewBackend(client anthropic.Client, model, systemPrompt string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string) *Backend {
+	if model == "" {
+		model = config.DefaultModel
+	}
 	return &Backend{
 		client:        client,
+		model:         model,
 		sessionID:     generateSessionID(),
 		history:       []anthropic.MessageParam{},
 		tools:         tools,
@@ -113,7 +118,7 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 
 func (b *Backend) callAPI(ctx context.Context) (*anthropic.Message, error) {
 	params := anthropic.MessageNewParams{
-		Model:     defaultModel,
+		Model:     anthropic.Model(b.model),
 		MaxTokens: 8192,
 		Messages:  b.history,
 	}
@@ -172,22 +177,54 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 
 		deps := tools.Deps{Responder: responder, SkillStore: store, MinimaxAPIKey: minimaxAPIKey}
 		result, isError := tools.Execute(tu.Name, input, deps)
-		results = append(results, anthropic.NewToolResultBlock(tu.ID, result, isError))
+		results = append(results, buildToolResultBlock(tu.ID, result, isError))
 	}
 
 	return results, nil
+}
+
+// buildToolResultBlock turns an Execute result into a ContentBlockParamUnion.
+// When the result starts with tools.ImageSentinel, the block is constructed
+// with an ImageBlockParam so the model's vision encoder fires on the
+// tool_result content.
+func buildToolResultBlock(id, result string, isError bool) anthropic.ContentBlockParamUnion {
+	if !isError && strings.HasPrefix(result, tools.ImageSentinel+"\t") {
+		parts := strings.SplitN(result, "\t", 3)
+		if len(parts) == 3 {
+			imageBlock := anthropic.ImageBlockParam{
+				Source: anthropic.ImageBlockParamSourceUnion{
+					OfBase64: &anthropic.Base64ImageSourceParam{
+						Data:      parts[2],
+						MediaType: anthropic.Base64ImageSourceMediaType(parts[1]),
+					},
+				},
+			}
+			toolBlock := anthropic.ToolResultBlockParam{
+				ToolUseID: id,
+				Content: []anthropic.ToolResultBlockParamContentUnion{
+					{OfImage: &imageBlock},
+				},
+			}
+			return anthropic.ContentBlockParamUnion{OfToolResult: &toolBlock}
+		}
+	}
+	return anthropic.NewToolResultBlock(id, result, isError)
 }
 
 // BackendFactory creates API backends
 type BackendFactory struct {
 	APIKey         string
 	BaseURL        string
+	Model          string
 	AllowedDirs    []string
 	DefaultWorkDir string
 	SkillStore     skills.SkillStore
 	MinimaxAPIKey  string
 	Passive        bool
 	Discord        bool
+	// WhatsAppEnabled appends the media-handling addendum to the system prompt
+	// so the model knows what to do with <attachment> tags in chat prompts.
+	WhatsAppEnabled bool
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
@@ -214,9 +251,12 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 		base = "Use send_update to post progress updates for longer tasks."
 		apiTools = buildChatTools()
 	}
+	if f.WhatsAppEnabled && !f.Passive {
+		base += "\n" + core.WhatsAppMediaSystemPromptAddendum
+	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
-	return NewBackend(client, systemPrompt, apiTools, f.SkillStore, f.MinimaxAPIKey), nil
+	return NewBackend(client, f.Model, systemPrompt, apiTools, f.SkillStore, f.MinimaxAPIKey), nil
 }
 
 func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {

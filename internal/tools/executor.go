@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,14 @@ import (
 )
 
 const maxOutputLen = 50000
+
+// ImageSentinel marks a Read result as an image payload that the API backend
+// should turn into an anthropic.ImageBlockParam tool_result. Format:
+//
+//	__CLAUDECORD_IMAGE__\t<mime>\t<base64>
+//
+// Tab-delimited so the second field can't collide with arbitrary MIME chars.
+const ImageSentinel = "__CLAUDECORD_IMAGE__"
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 var bashTimeout = 2 * time.Minute
@@ -96,7 +105,39 @@ func executeRead(input core.ToolInput) (string, bool) {
 		return "error reading file: " + err.Error(), true
 	}
 
+	if mime := detectImageMIME(filePath, content); mime != "" {
+		return ImageSentinel + "\t" + mime + "\t" + base64.StdEncoding.EncodeToString(content), false
+	}
+
 	return truncateOutput(string(content), maxOutputLen), false
+}
+
+// detectImageMIME returns a normalized image MIME ("image/png" etc.) when the
+// file looks like one of the supported image types — extension first, then a
+// content sniff. Returns "" for non-images so callers fall through to text.
+func detectImageMIME(path string, content []byte) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	}
+	sniff := http.DetectContentType(content)
+	switch {
+	case strings.HasPrefix(sniff, "image/jpeg"):
+		return "image/jpeg"
+	case strings.HasPrefix(sniff, "image/png"):
+		return "image/png"
+	case strings.HasPrefix(sniff, "image/webp"):
+		return "image/webp"
+	case strings.HasPrefix(sniff, "image/gif"):
+		return "image/gif"
+	}
+	return ""
 }
 
 func executeBash(input core.ToolInput) (string, bool) {
