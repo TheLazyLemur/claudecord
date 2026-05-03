@@ -346,12 +346,16 @@ func TestLoad_ModelExplicitWithBaseURL(t *testing.T) {
 
 // --- WhatsAppMediaDir tests ---
 
-func TestLoad_WhatsAppMediaDirRequired(t *testing.T) {
+func TestLoad_WhatsAppMediaDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 	env := validWhatsAppEnv()
 	delete(env, "WHATSAPP_MEDIA_DIR")
-	_, err := Load(env)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "WHATSAPP_MEDIA_DIR")
+	cfg, err := Load(env)
+	require.NoError(t, err)
+	assert.Equal(t, env["ALLOWED_DIRS"]+"/wa-media", cfg.WhatsAppMediaDir)
+
+	info, err := os.Stat(cfg.WhatsAppMediaDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
 }
 
 func TestLoad_WhatsAppMediaDirMustBeInsideAllowedDirs(t *testing.T) {
