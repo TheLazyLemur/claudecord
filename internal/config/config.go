@@ -147,7 +147,7 @@ func Load(env map[string]string) (*Config, error) {
 	if len(whatsAppSenders) > 0 {
 		mediaDir = env["WHATSAPP_MEDIA_DIR"]
 		if mediaDir == "" {
-			return nil, errors.New("WHATSAPP_MEDIA_DIR required when WhatsApp is enabled")
+			mediaDir = filepath.Join(allowedDirs[0], "wa-media")
 		}
 		if !pathInsideAllowedDirs(mediaDir, allowedDirs) {
 			return nil, errors.Errorf("WHATSAPP_MEDIA_DIR %q must live under ALLOWED_DIRS", mediaDir)
