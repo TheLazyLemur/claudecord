@@ -344,3 +344,54 @@ func TestLoad_WhatsAppMediaDirNotRequiredWhenWhatsAppDisabled(t *testing.T) {
 	assert.Empty(t, cfg.WhatsAppMediaDir)
 }
 
+// --- MemoryDir tests ---
+
+func TestLoad_MemoryDirDefaultsUnderFirstAllowedDir(t *testing.T) {
+	dir := mustTempMediaDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":   "tok",
+		"ALLOWED_USERS":   "1",
+		"ALLOWED_DIRS":    dir,
+		"CLAUDECORD_MODE": "cli",
+	}
+	cfg, err := Load(env)
+	require.NoError(t, err)
+	assert.Equal(t, dir+"/claudecord-memory", cfg.MemoryDir)
+
+	info, err := os.Stat(cfg.MemoryDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestLoad_MemoryDirOverride(t *testing.T) {
+	dir := mustTempMediaDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":   "tok",
+		"ALLOWED_USERS":   "1",
+		"ALLOWED_DIRS":    dir,
+		"CLAUDECORD_MODE": "cli",
+		"MEMORY_DIR":      dir + "/notes",
+	}
+	cfg, err := Load(env)
+	require.NoError(t, err)
+	assert.Equal(t, dir+"/notes", cfg.MemoryDir)
+
+	info, err := os.Stat(cfg.MemoryDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestLoad_MemoryDirMustBeInsideAllowedDirs(t *testing.T) {
+	dir := mustTempMediaDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":   "tok",
+		"ALLOWED_USERS":   "1",
+		"ALLOWED_DIRS":    dir,
+		"CLAUDECORD_MODE": "cli",
+		"MEMORY_DIR":      "/somewhere/else",
+	}
+	_, err := Load(env)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must live under ALLOWED_DIRS")
+}
+

@@ -39,6 +39,17 @@ Env vars:
 - `CLAUDE_CWD` - Default working directory for Claude CLI (optional, defaults to first allowed dir)
 - `MODEL` - Anthropic model id. Defaults to `Kimi-for-Coding` when `CLAUDECORD_BASE_URL` is set, otherwise to a recent Sonnet. Override to use any other model id supported by the endpoint.
 - `WHATSAPP_MEDIA_DIR` - Directory inbound WhatsApp attachments are decrypted into. Defaults to `<first ALLOWED_DIR>/wa-media` when `WHATSAPP_ALLOWED_SENDERS` is set; must live under one of `ALLOWED_DIRS` if overridden.
+- `MEMORY_DIR` - Where the `memory` skill stores `MEMORY.md` and `daily/YYYY-MM-DD.md` logs. Defaults to `<first ALLOWED_DIR>/claudecord-memory`. Must live under `ALLOWED_DIRS`. Exported into the bot process env at startup so the skill's bash scripts inherit it.
+
+## Memory skill
+
+OpenClaw-style persistent memory layered on plain Markdown files under `MEMORY_DIR`. Survives `/new-session` and container restarts.
+
+- `MEMORY.md` — durable curated facts; one bullet per line, dated.
+- `daily/YYYY-MM-DD.md` — running daily logs; appended freely.
+- Scripts: `read.sh` (loads MEMORY.md + today + yesterday), `remember.sh` (append durable fact, dedupes), `note.sh` (append timestamped daily note), `search.sh <pattern>` (case-insensitive grep across all files), `get.sh <rel-path> [start] [end]` (read a file or line range).
+- The model decides what to commit; the SKILL.md tells it to call `read.sh` at the start of each conversation, `remember.sh` for durable facts, `note.sh` for tactical context, and `search.sh` before claiming it doesn't know.
+- No semantic search, no embeddings, no eviction — matches OpenClaw's default behaviour. Add a plugin if you want recall guarantees.
 
 ## WhatsApp media
 
