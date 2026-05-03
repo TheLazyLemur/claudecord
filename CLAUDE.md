@@ -37,7 +37,7 @@ Env vars:
 - `ALLOWED_DIRS` - Comma-separated list of allowed directories (required)
 - `ALLOWED_USERS` - Comma-separated Discord user IDs allowed to use bot (required)
 - `CLAUDE_CWD` - Default working directory for Claude CLI (optional, defaults to first allowed dir)
-- `MODEL` - Anthropic model id. Required when `CLAUDECORD_BASE_URL` is set (no magic default for proxy/non-Anthropic endpoints); otherwise defaults to a recent Sonnet.
+- `MODEL` - Anthropic model id. Defaults to `Kimi-for-Coding` when `CLAUDECORD_BASE_URL` is set, otherwise to a recent Sonnet. Override to use any other model id supported by the endpoint.
 - `WHATSAPP_MEDIA_DIR` - Directory inbound WhatsApp attachments are decrypted into. Required when `WHATSAPP_ALLOWED_SENDERS` is set; must live under one of `ALLOWED_DIRS`.
 
 ## WhatsApp media

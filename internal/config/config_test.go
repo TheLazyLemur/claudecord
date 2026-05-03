@@ -323,14 +323,14 @@ func TestLoad_ModelDefaultsToSonnetWithoutBaseURL(t *testing.T) {
 	assert.Equal(t, DefaultModel, cfg.Model)
 }
 
-func TestLoad_ModelRequiredWhenBaseURLSet(t *testing.T) {
+func TestLoad_ModelDefaultsToKimiWhenBaseURLSet(t *testing.T) {
 	env := validDiscordEnv()
 	env["CLAUDECORD_MODE"] = "api"
 	env["CLAUDECORD_API_KEY"] = "sk-test"
 	env["CLAUDECORD_BASE_URL"] = "https://kimi.example.com"
-	_, err := Load(env)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "MODEL required")
+	cfg, err := Load(env)
+	require.NoError(t, err)
+	assert.Equal(t, DefaultKimiModel, cfg.Model)
 }
 
 func TestLoad_ModelExplicitWithBaseURL(t *testing.T) {
