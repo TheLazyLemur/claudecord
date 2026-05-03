@@ -42,6 +42,13 @@ func run() error {
 		return err
 	}
 
+	// Export the resolved MEMORY_DIR so the memory skill scripts pick it up
+	// when the model invokes them via the Bash tool. Set unconditionally so
+	// scripts see the resolved default even when the user didn't set it.
+	if err := os.Setenv("MEMORY_DIR", cfg.MemoryDir); err != nil {
+		return errors.Wrap(err, "exporting MEMORY_DIR")
+	}
+
 	// Create dashboard hub and wrap slog handler
 	hub := dashboard.NewHub()
 	go hub.Run()
