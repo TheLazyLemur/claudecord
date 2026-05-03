@@ -2,6 +2,8 @@ package tools
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +11,7 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockResponder struct {
@@ -147,6 +150,65 @@ func TestTruncateOutput_NoTruncation(t *testing.T) {
 
 	a.Equal("short", truncateOutput("short", 100))
 	a.Equal("exact", truncateOutput("exact", 5))
+}
+
+// --- Read with image sentinel ---
+
+// PNG signature (8 bytes) + minimal IHDR — enough for http.DetectContentType
+// to recognize as image/png.
+var pngBytes = []byte{
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+	0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00,
+}
+
+func TestExecuteRead_ImageByExtension(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	dir := t.TempDir()
+	for _, name := range []string{"a.jpg", "a.jpeg", "a.png", "a.webp", "a.gif"} {
+		path := filepath.Join(dir, name)
+		r.NoError(os.WriteFile(path, []byte("anything"), 0o644))
+
+		out, isErr := executeRead(core.ToolInput{FilePath: path})
+		a.False(isErr, name)
+		a.True(strings.HasPrefix(out, ImageSentinel+"\t"), "name=%s out=%q", name, out)
+	}
+}
+
+func TestExecuteRead_ImageBySniff(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "noext")
+	r.NoError(os.WriteFile(path, pngBytes, 0o644))
+
+	out, isErr := executeRead(core.ToolInput{FilePath: path})
+	a.False(isErr)
+	a.True(strings.HasPrefix(out, ImageSentinel+"\timage/png\t"))
+}
+
+func TestExecuteRead_TextUnchanged(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hello.txt")
+	r.NoError(os.WriteFile(path, []byte("hello"), 0o644))
+
+	out, isErr := executeRead(core.ToolInput{FilePath: path})
+	a.False(isErr)
+	a.Equal("hello", out)
+}
+
+func TestExecuteRead_MissingFile(t *testing.T) {
+	a := assert.New(t)
+	out, isErr := executeRead(core.ToolInput{FilePath: "/nonexistent/missing"})
+	a.True(isErr)
+	a.Contains(out, "error reading file")
 }
 
 func TestExecuteBash_Timeout(t *testing.T) {

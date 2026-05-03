@@ -85,12 +85,14 @@ func run() error {
 		passiveFactory = &passive
 	case config.ModeAPI:
 		base := api.BackendFactory{
-			APIKey:         cfg.APIKey,
-			BaseURL:        cfg.BaseURL,
-			AllowedDirs:    cfg.AllowedDirs,
-			DefaultWorkDir: cfg.ClaudeCWD,
-			SkillStore:     skillStore,
-			MinimaxAPIKey:  cfg.MinimaxAPIKey,
+			APIKey:          cfg.APIKey,
+			BaseURL:         cfg.BaseURL,
+			Model:           cfg.Model,
+			AllowedDirs:     cfg.AllowedDirs,
+			DefaultWorkDir:  cfg.ClaudeCWD,
+			SkillStore:      skillStore,
+			MinimaxAPIKey:   cfg.MinimaxAPIKey,
+			WhatsAppEnabled: cfg.WhatsAppEnabled(),
 		}
 		discord := base
 		discord.Discord = true
@@ -113,6 +115,11 @@ func run() error {
 	var waPermChecker core.PermissionChecker = permChecker
 	if cfg.AutoApproveWhatsApp {
 		waPermChecker = permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs)
+	}
+	// Media carve-out: Read under WhatsAppMediaDir is auto-approved regardless
+	// of AUTO_APPROVE_WHATSAPP, since the user explicitly sent the file.
+	if cfg.WhatsAppMediaDir != "" {
+		waPermChecker = permission.NewMediaAwarePermissionChecker(waPermChecker, cfg.WhatsAppMediaDir)
 	}
 
 	// Create session manager + bot for WA/dashboard (no react_emoji)
@@ -186,7 +193,8 @@ func run() error {
 		}
 		waClient := whatsmeow.NewClient(device, nil)
 		waWrapper := handler.NewWhatsAppClientWrapper(waClient)
-		waHandler := handler.NewWAHandler(bot, cfg.WhatsAppAllowedSenders, waWrapper)
+		waHandler := handler.NewWAHandler(bot, cfg.WhatsAppAllowedSenders, waWrapper, cfg.WhatsAppMediaDir)
+		defer waHandler.Stop()
 		waClient.AddEventHandler(waHandler.HandleEvent)
 
 		if waClient.Store.ID == nil {

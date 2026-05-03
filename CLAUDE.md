@@ -37,6 +37,17 @@ Env vars:
 - `ALLOWED_DIRS` - Comma-separated list of allowed directories (required)
 - `ALLOWED_USERS` - Comma-separated Discord user IDs allowed to use bot (required)
 - `CLAUDE_CWD` - Default working directory for Claude CLI (optional, defaults to first allowed dir)
+- `MODEL` - Anthropic model id. Required when `CLAUDECORD_BASE_URL` is set (no magic default for proxy/non-Anthropic endpoints); otherwise defaults to a recent Sonnet.
+- `WHATSAPP_MEDIA_DIR` - Directory inbound WhatsApp attachments are decrypted into. Required when `WHATSAPP_ALLOWED_SENDERS` is set; must live under one of `ALLOWED_DIRS`.
+
+## WhatsApp media
+
+- Inbound images and documents are decrypted into `WHATSAPP_MEDIA_DIR` and surfaced as `<attachment path mime original_name />` tags inside `<message>` blocks in the prompt body.
+- Bursts (messages from the same chat within ~3s) are batched into a single dispatch.
+- Image MIMEs: the model calls `Read` on the path; the tool returns an `image` `tool_result` block so the vision encoder fires.
+- Other MIMEs: user-authored skills handle them, matching on the `mime` attribute.
+- `Read` is auto-approved for paths under `WHATSAPP_MEDIA_DIR` regardless of `AUTO_APPROVE_WHATSAPP`, since the user explicitly uploaded the file.
+- Size caps: images 10 MiB, docs 50 MiB. Oversized attachments are dropped with a "skipped (too large)" reply; siblings in the same burst still flow.
 
 ## Coding Rules
 

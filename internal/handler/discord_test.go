@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
@@ -71,6 +72,7 @@ func (m *mockSession) MessageReactionAdd(channelID, messageID, emoji string, _ .
 // --- Mock Bot ---
 
 type mockBot struct {
+	mu                sync.Mutex
 	handledMessages   []handledMsg
 	newSessionCalls   int
 	lastNewSessionDir string
@@ -83,14 +85,36 @@ type handledMsg struct {
 }
 
 func (m *mockBot) HandleMessage(responder core.Responder, message string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.handledMessages = append(m.handledMessages, handledMsg{message})
 	return m.handleErr
 }
 
 func (m *mockBot) NewSession(workDir string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.newSessionCalls++
 	m.lastNewSessionDir = workDir
 	return m.newSessionErr
+}
+
+func (m *mockBot) handledCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.handledMessages)
+}
+
+func (m *mockBot) handledAt(i int) handledMsg {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.handledMessages[i]
+}
+
+func (m *mockBot) newSessionCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.newSessionCalls
 }
 
 // --- Tests: DiscordClientWrapper ---
