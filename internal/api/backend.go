@@ -27,13 +27,15 @@ type Backend struct {
 	history       []anthropic.MessageParam
 	tools         []anthropic.ToolUnionParam
 	systemPrompt  string
+	workDir       string
 	skillStore    skills.SkillStore
 	minimaxAPIKey string
 	mu            sync.Mutex
 }
 
-// NewBackend creates an API backend
-func NewBackend(client anthropic.Client, model, systemPrompt string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string) *Backend {
+// NewBackend creates an API backend. workDir is checked for an AGENTS.md
+// file on every API call; its contents are appended to the system prompt.
+func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string) *Backend {
 	if model == "" {
 		model = config.DefaultModel
 	}
@@ -44,9 +46,16 @@ func NewBackend(client anthropic.Client, model, systemPrompt string, tools []ant
 		history:       []anthropic.MessageParam{},
 		tools:         tools,
 		systemPrompt:  systemPrompt,
+		workDir:       workDir,
 		skillStore:    skillStore,
 		minimaxAPIKey: minimaxAPIKey,
 	}
+}
+
+// effectiveSystemPrompt re-reads AGENTS.md from workDir on each call so live
+// edits to the file land in the next turn without restarting the session.
+func (b *Backend) effectiveSystemPrompt() string {
+	return core.AppendAgentsContext(b.systemPrompt, core.LoadAgentsContext(b.workDir))
 }
 
 func generateSessionID() string {
@@ -123,9 +132,9 @@ func (b *Backend) callAPI(ctx context.Context) (*anthropic.Message, error) {
 		Messages:  b.history,
 	}
 
-	if b.systemPrompt != "" {
+	if sys := b.effectiveSystemPrompt(); sys != "" {
 		params.System = []anthropic.TextBlockParam{
-			{Text: b.systemPrompt},
+			{Text: sys},
 		}
 	}
 
@@ -256,7 +265,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
-	return NewBackend(client, f.Model, systemPrompt, apiTools, f.SkillStore, f.MinimaxAPIKey), nil
+	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.MinimaxAPIKey), nil
 }
 
 func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
