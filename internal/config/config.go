@@ -9,7 +9,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const DefaultModel = "claude-sonnet-4-20250514"
+const (
+	DefaultModel     = "claude-sonnet-4-20250514"
+	DefaultKimiModel = "Kimi-for-Coding"
+)
 
 type Mode string
 
@@ -134,9 +137,10 @@ func Load(env map[string]string) (*Config, error) {
 	model := env["MODEL"]
 	if model == "" {
 		if baseURL != "" {
-			return nil, errors.New("MODEL required when CLAUDECORD_BASE_URL is set")
+			model = DefaultKimiModel
+		} else {
+			model = DefaultModel
 		}
-		model = DefaultModel
 	}
 
 	var mediaDir string
