@@ -51,10 +51,6 @@ type Config struct {
 	// Directory media attachments are decrypted into. Required when WhatsApp
 	// is enabled. Must live under one of AllowedDirs.
 	WhatsAppMediaDir string
-
-	// Per-platform auto-approve (skip interactive permission prompts)
-	AutoApproveDiscord  bool
-	AutoApproveWhatsApp bool
 }
 
 func (c *Config) DiscordEnabled() bool {
@@ -173,8 +169,6 @@ func Load(env map[string]string) (*Config, error) {
 		WhatsAppAllowedSenders: whatsAppSenders,
 		WhatsAppDBPath:         whatsAppDBPath,
 		WhatsAppMediaDir:       mediaDir,
-		AutoApproveDiscord:     strings.EqualFold(env["AUTO_APPROVE_DISCORD"], "true"),
-		AutoApproveWhatsApp:    strings.EqualFold(env["AUTO_APPROVE_WHATSAPP"], "true"),
 	}, nil
 }
 
@@ -207,8 +201,6 @@ func LoadFromEnv() (*Config, error) {
 		"WHATSAPP_DB_PATH":         os.Getenv("WHATSAPP_DB_PATH"),
 		"WHATSAPP_MEDIA_DIR":       os.Getenv("WHATSAPP_MEDIA_DIR"),
 		"MODEL":                    os.Getenv("MODEL"),
-		"AUTO_APPROVE_DISCORD":     os.Getenv("AUTO_APPROVE_DISCORD"),
-		"AUTO_APPROVE_WHATSAPP":    os.Getenv("AUTO_APPROVE_WHATSAPP"),
 	}
 	return Load(env)
 }

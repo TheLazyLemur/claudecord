@@ -161,7 +161,7 @@ func (b *Backend) handleCanUseTool(msg CLIMessage, responder core.Responder, per
 		return errors.Wrap(err, "unmarshaling tool input")
 	}
 
-	allow, reason := tools.CheckPermission(req.ToolName, input, perms, responder)
+	allow, reason := tools.CheckPermission(req.ToolName, input, perms)
 	return b.sendPermissionResponse(msg.RequestID, req.ToolUseID, allow, reason, input)
 }
 

@@ -116,8 +116,7 @@ func PassiveSystemPrompt() string {
 // noopResponder is used by passive bot since it doesn't support discord tools
 type noopResponder struct{}
 
-func (n *noopResponder) SendTyping() error                            { return nil }
-func (n *noopResponder) PostResponse(content string) error            { return nil }
-func (n *noopResponder) AddReaction(emoji string) error               { return nil }
-func (n *noopResponder) SendUpdate(message string) error              { return nil }
-func (n *noopResponder) AskPermission(prompt string) (bool, error)    { return false, nil }
+func (n *noopResponder) SendTyping() error                 { return nil }
+func (n *noopResponder) PostResponse(content string) error { return nil }
+func (n *noopResponder) AddReaction(emoji string) error    { return nil }
+func (n *noopResponder) SendUpdate(message string) error   { return nil }

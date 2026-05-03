@@ -169,7 +169,7 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 			continue
 		}
 
-		allow, reason := tools.CheckPermission(tu.Name, input, perms, responder)
+		allow, reason := tools.CheckPermission(tu.Name, input, perms)
 		if !allow {
 			results = append(results, anthropic.NewToolResultBlock(tu.ID, "Permission denied: "+reason, true))
 			continue

@@ -103,24 +103,13 @@ func run() error {
 		passiveFactory = &passive
 	}
 
-	// Create permission checkers
-	permChecker := permission.NewPermissionChecker(cfg.AllowedDirs)
+	// Auto-approve everything inside ALLOWED_DIRS for both platforms.
+	// Path containment is the only safety check; no interactive prompts.
+	defaultPermChecker := permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs)
 	roPermChecker := permission.NewReadOnlyPermissionChecker(cfg.AllowedDirs)
 
-	var discordPermChecker core.PermissionChecker = permChecker
-	if cfg.AutoApproveDiscord {
-		discordPermChecker = permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs)
-	}
-
-	var waPermChecker core.PermissionChecker = permChecker
-	if cfg.AutoApproveWhatsApp {
-		waPermChecker = permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs)
-	}
-	// Media carve-out: Read under WhatsAppMediaDir is auto-approved regardless
-	// of AUTO_APPROVE_WHATSAPP, since the user explicitly sent the file.
-	if cfg.WhatsAppMediaDir != "" {
-		waPermChecker = permission.NewMediaAwarePermissionChecker(waPermChecker, cfg.WhatsAppMediaDir)
-	}
+	discordPermChecker := core.PermissionChecker(defaultPermChecker)
+	waPermChecker := core.PermissionChecker(defaultPermChecker)
 
 	// Create session manager + bot for WA/dashboard (no react_emoji)
 	sessionMgr := core.NewSessionManager(backendFactory)
@@ -144,7 +133,7 @@ func run() error {
 		discordClient := handler.NewDiscordClientWrapper(dg)
 		passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPermChecker)
 
-		dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuildMessageReactions
+		dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
 
 		dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 			slog.Info("READY event", "user", r.User.Username, "guilds", len(r.Guilds))
@@ -165,7 +154,6 @@ func run() error {
 
 		h := handler.NewHandler(discordBot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
 		dg.AddHandler(h.OnMessageCreate)
-		dg.AddHandler(h.OnReactionAdd)
 		dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			h.OnInteractionCreate(s, i)
 		})

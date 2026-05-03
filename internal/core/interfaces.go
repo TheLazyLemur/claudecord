@@ -11,7 +11,6 @@ type DiscordClient interface {
 	StartThread(channelID, messageID, name string) (threadID string, err error)
 	SendTyping(channelID string) error
 	AddReaction(channelID, messageID, emoji string) error
-	WaitForReaction(channelID, messageID string, emojis []string, userID string) (emoji string, err error)
 }
 
 type Responder interface {
@@ -19,7 +18,6 @@ type Responder interface {
 	PostResponse(content string) error
 	AddReaction(emoji string) error
 	SendUpdate(message string) error
-	AskPermission(prompt string) (approved bool, err error)
 }
 
 type EmailClient interface {
@@ -29,5 +27,4 @@ type EmailClient interface {
 type WhatsAppMessenger interface {
 	SendText(chatJID, text string) error
 	SendTyping(chatJID string) error
-	WaitForReply(senderJID string) (string, error)
 }
