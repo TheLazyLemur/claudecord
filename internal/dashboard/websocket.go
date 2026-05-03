@@ -26,19 +26,15 @@ type Message struct {
 	Content string `json:"content,omitempty"`
 	Active  *bool  `json:"active,omitempty"`
 	ID      string `json:"id,omitempty"`
-	Prompt  string `json:"prompt,omitempty"`
 
 	// Session info
 	SessionID string `json:"sessionID,omitempty"`
 
 	// Skills
-	Skills []SkillInfo  `json:"skills,omitempty"`
-	Name   string       `json:"name,omitempty"`
-	Files  []SkillFile  `json:"files,omitempty"`
-	Path   string       `json:"path,omitempty"`
-
-	// Permission response
-	Approved *bool `json:"approved,omitempty"`
+	Skills []SkillInfo `json:"skills,omitempty"`
+	Name   string      `json:"name,omitempty"`
+	Files  []SkillFile `json:"files,omitempty"`
+	Path   string      `json:"path,omitempty"`
 
 	// New session
 	WorkDir string `json:"workDir,omitempty"`

@@ -85,39 +85,6 @@ func TestDiscordResponder_SendUpdate_ReusesThread(t *testing.T) {
 	client.AssertExpectations(t)
 }
 
-func TestDiscordResponder_AskPermission_Approved(t *testing.T) {
-	a := assert.New(t)
-	client := &MockDiscordClient{}
-	client.On("SendMessageReturningID", "chan-1", "Allow file edit? React ✅ or ❌").Return("perm-msg-1", nil)
-	client.On("AddReaction", "chan-1", "perm-msg-1", "✅").Return(nil)
-	client.On("AddReaction", "chan-1", "perm-msg-1", "❌").Return(nil)
-	client.On("WaitForReaction", "chan-1", "perm-msg-1", []string{"✅", "❌"}, "user-1").Return("✅", nil)
-
-	r := NewDiscordResponder(client, "chan-1", "msg-1")
-	r.SetUserID("user-1")
-	approved, err := r.AskPermission("Allow file edit?")
-
-	a.NoError(err)
-	a.True(approved)
-	client.AssertExpectations(t)
-}
-
-func TestDiscordResponder_AskPermission_Denied(t *testing.T) {
-	a := assert.New(t)
-	client := &MockDiscordClient{}
-	client.On("SendMessageReturningID", "chan-1", "Allow bash cmd? React ✅ or ❌").Return("perm-msg-2", nil)
-	client.On("AddReaction", "chan-1", "perm-msg-2", "✅").Return(nil)
-	client.On("AddReaction", "chan-1", "perm-msg-2", "❌").Return(nil)
-	client.On("WaitForReaction", "chan-1", "perm-msg-2", []string{"✅", "❌"}, "user-1").Return("❌", nil)
-
-	r := NewDiscordResponder(client, "chan-1", "msg-1")
-	r.SetUserID("user-1")
-	approved, err := r.AskPermission("Allow bash cmd?")
-
-	a.NoError(err)
-	a.False(approved)
-	client.AssertExpectations(t)
-}
 
 func TestEmailResponder_SendTyping_Noop(t *testing.T) {
 	a := assert.New(t)
@@ -221,48 +188,6 @@ func TestWhatsAppResponder_SendUpdate(t *testing.T) {
 	client.AssertExpectations(t)
 }
 
-func TestWhatsAppResponder_AskPermission_ApprovedYes(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-	client.On("SendText", "chat-1@s.whatsapp.net", "Allow file edit?\nReply yes/no").Return(nil)
-	client.On("WaitForReply", "sender-1@s.whatsapp.net").Return("yes", nil)
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	approved, err := r.AskPermission("Allow file edit?")
-
-	a.NoError(err)
-	a.True(approved)
-	client.AssertExpectations(t)
-}
-
-func TestWhatsAppResponder_AskPermission_ApprovedY(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-	client.On("SendText", "chat-1@s.whatsapp.net", "Allow file edit?\nReply yes/no").Return(nil)
-	client.On("WaitForReply", "sender-1@s.whatsapp.net").Return("Y", nil)
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	approved, err := r.AskPermission("Allow file edit?")
-
-	a.NoError(err)
-	a.True(approved)
-	client.AssertExpectations(t)
-}
-
-func TestWhatsAppResponder_AskPermission_Denied(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-	client.On("SendText", "chat-1@s.whatsapp.net", "Allow file edit?\nReply yes/no").Return(nil)
-	client.On("WaitForReply", "sender-1@s.whatsapp.net").Return("no", nil)
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	approved, err := r.AskPermission("Allow file edit?")
-
-	a.NoError(err)
-	a.False(approved)
-	client.AssertExpectations(t)
-}
-
 func TestChunkMessage_Short(t *testing.T) {
 	a := assert.New(t)
 	a.Equal([]string{"hello"}, ChunkMessage("hello", 10))
@@ -338,11 +263,6 @@ func (m *MockDiscordClient) SendMessageReturningID(channelID, content string) (s
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockDiscordClient) WaitForReaction(channelID, messageID string, emojis []string, userID string) (string, error) {
-	args := m.Called(channelID, messageID, emojis, userID)
-	return args.String(0), args.Error(1)
-}
-
 // MockWhatsAppMessenger for tests
 type MockWhatsAppMessenger struct {
 	mock.Mock
@@ -356,9 +276,4 @@ func (m *MockWhatsAppMessenger) SendText(chatJID, text string) error {
 func (m *MockWhatsAppMessenger) SendTyping(chatJID string) error {
 	args := m.Called(chatJID)
 	return args.Error(0)
-}
-
-func (m *MockWhatsAppMessenger) WaitForReply(senderJID string) (string, error) {
-	args := m.Called(senderJID)
-	return args.String(0), args.Error(1)
 }

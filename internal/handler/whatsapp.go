@@ -22,32 +22,18 @@ import (
 const DefaultBurstDelay = 3 * time.Second
 
 // WAClient is what WAHandler needs from the WhatsApp client wrapper.
-// Download decrypts a WhatsApp media payload into raw bytes.
 type WAClient interface {
 	core.WhatsAppMessenger
-	HandleIncomingReply(senderJID, text string) bool
 	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
-}
-
-// replyWaiter holds state for a pending reply wait
-type replyWaiter struct {
-	senderJID string
-	result    chan string
 }
 
 // WhatsAppClientWrapper wraps whatsmeow.Client, implements WAClient
 type WhatsAppClientWrapper struct {
-	client  *whatsmeow.Client
-	mu      sync.Mutex
-	waiter  *replyWaiter
-	timeout time.Duration
+	client *whatsmeow.Client
 }
 
 func NewWhatsAppClientWrapper(client *whatsmeow.Client) *WhatsAppClientWrapper {
-	return &WhatsAppClientWrapper{
-		client:  client,
-		timeout: 60 * time.Second,
-	}
+	return &WhatsAppClientWrapper{client: client}
 }
 
 func (c *WhatsAppClientWrapper) Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error) {
@@ -77,48 +63,6 @@ func (c *WhatsAppClientWrapper) SendTyping(chatJID string) error {
 		c.client.SendChatPresence(ctx, jid, types.ChatPresenceComposing, types.ChatPresenceMediaText),
 		"sending chat presence",
 	)
-}
-
-func (c *WhatsAppClientWrapper) WaitForReply(senderJID string) (string, error) {
-	c.mu.Lock()
-	c.waiter = &replyWaiter{
-		senderJID: senderJID,
-		result:    make(chan string, 1),
-	}
-	w := c.waiter
-	c.mu.Unlock()
-
-	defer func() {
-		c.mu.Lock()
-		c.waiter = nil
-		c.mu.Unlock()
-	}()
-
-	select {
-	case reply := <-w.result:
-		return reply, nil
-	case <-time.After(c.timeout):
-		return "", errors.New("timeout waiting for reply")
-	}
-}
-
-func (c *WhatsAppClientWrapper) HandleIncomingReply(senderJID, text string) bool {
-	c.mu.Lock()
-	w := c.waiter
-	c.mu.Unlock()
-
-	if w == nil {
-		return false
-	}
-	if w.senderJID != senderJID {
-		return false
-	}
-
-	select {
-	case w.result <- text:
-	default:
-	}
-	return true
 }
 
 // WAHandler handles whatsmeow events.
@@ -201,20 +145,12 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 		return
 	}
 
-	// Permission-reply fast path stays before media + buffer logic.
-	// Known limitation: a single message with both a permission reply *and*
-	// an attachment will consume the reply and drop the attachment.
 	plainText := extractText(v.Message)
-	if plainText != "" {
-		if h.client.HandleIncomingReply(senderJID, plainText) || h.client.HandleIncomingReply(v.Info.SenderAlt.String(), plainText) {
-			return
+	if plainText == "!new" {
+		if err := h.bot.NewSession(""); err != nil {
+			slog.Error("creating new whatsapp session", "error", err)
 		}
-		if plainText == "!new" {
-			if err := h.bot.NewSession(""); err != nil {
-				slog.Error("creating new whatsapp session", "error", err)
-			}
-			return
-		}
+		return
 	}
 
 	// Synchronous: ordering of decrypted attachments must match send order

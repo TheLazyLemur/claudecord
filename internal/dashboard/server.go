@@ -233,9 +233,6 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 	case "new_session":
 		go s.handleNewSession(msg.WorkDir)
 
-	case "permission_response":
-		s.handlePermissionResponse(msg.ID, msg.Approved)
-
 	case "get_skills":
 		s.handleGetSkills(client)
 
@@ -332,16 +329,6 @@ func (s *Server) handleNewSession(workDir string) {
 		Active:    &active,
 		SessionID: backend.SessionID(),
 	})
-}
-
-func (s *Server) handlePermissionResponse(id string, approved *bool) {
-	s.mu.Lock()
-	responder := s.responder
-	s.mu.Unlock()
-
-	if responder != nil && approved != nil {
-		responder.HandlePermissionResponse(id, *approved)
-	}
 }
 
 func (s *Server) handleGetSkills(client *Client) {

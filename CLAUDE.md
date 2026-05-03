@@ -9,7 +9,7 @@ Discord bot integrating Claude Code CLI via stdio protocol.
 - `/new-session` starts fresh session, subsequent `@claude` continues it
 - Uses Claude CLI's built-in session management (no disk persistence)
 - Threads for long messages/responses
-- Auto-approve tools with directory restrictions via hooks
+- Fully autonomous: tools run without interactive prompts. The only safety net is path containment against `ALLOWED_DIRS`.
 - Allowed directories configurable via env var, applied recursively
 
 ## Architecture

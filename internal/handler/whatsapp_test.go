@@ -32,16 +32,6 @@ func (m *mockWAClient) SendTyping(chatJID string) error {
 	return args.Error(0)
 }
 
-func (m *mockWAClient) WaitForReply(senderJID string) (string, error) {
-	args := m.Called(senderJID)
-	return args.String(0), args.Error(1)
-}
-
-func (m *mockWAClient) HandleIncomingReply(senderJID, text string) bool {
-	args := m.Called(senderJID, text)
-	return args.Bool(0)
-}
-
 func (m *mockWAClient) Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error) {
 	args := m.Called(ctx, msg)
 	if args.Get(0) == nil {
@@ -72,8 +62,6 @@ func TestWAHandler_AllowedSender_CallsHandleMessage(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", "sender-1@s.whatsapp.net", "hello").Return(false)
-	client.On("HandleIncomingReply", "", "hello").Return(false) // SenderAlt fallback
 	h := newTestWAHandler(t, bot, []string{"sender-1@s.whatsapp.net"}, client)
 
 	evt := makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "hello")
@@ -108,8 +96,6 @@ func TestWAHandler_NewCommand_CallsNewSession(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", "sender-1@s.whatsapp.net", "!new").Return(false)
-	client.On("HandleIncomingReply", "", "!new").Return(false) // SenderAlt fallback
 	h := newTestWAHandler(t, bot, []string{"sender-1@s.whatsapp.net"}, client)
 
 	evt := makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "!new")
@@ -120,23 +106,6 @@ func TestWAHandler_NewCommand_CallsNewSession(t *testing.T) {
 	// then
 	a.Equal(1, bot.newSessionCount())
 	a.Equal(0, bot.handledCount())
-}
-
-func TestWAHandler_PermissionReply_Consumed(t *testing.T) {
-	// given
-	bot := &mockBot{}
-	client := &mockWAClient{}
-	client.On("HandleIncomingReply", "sender-1@s.whatsapp.net", "yes").Return(true)
-	h := newTestWAHandler(t, bot, []string{"sender-1@s.whatsapp.net"}, client)
-
-	evt := makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "yes")
-
-	// when
-	h.HandleEvent(evt)
-
-	// then - consumed by reply waiter, bot not called
-	assert.Equal(t, 0, bot.handledCount())
-	assert.Equal(t, 0, bot.newSessionCount())
 }
 
 func TestWAHandler_EmptyText_Ignored(t *testing.T) {
@@ -161,8 +130,6 @@ func TestWAHandler_SenderAltMatch_Allowed(t *testing.T) {
 	// given
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", "sender-1@s.whatsapp.net", "hello").Return(false)
-	client.On("HandleIncomingReply", "alt-sender@s.whatsapp.net", "hello").Return(false) // SenderAlt fallback
 	h := newTestWAHandler(t, bot, []string{"alt-sender@s.whatsapp.net"}, client)
 
 	evt := makeMessageEventWithAlt("sender-1@s.whatsapp.net", "alt-sender@s.whatsapp.net", "chat-1@g.us", "hello")
@@ -182,8 +149,6 @@ func TestWAHandler_PhoneNumberOnly_MatchesSenderUser(t *testing.T) {
 	// given — allowed list has phone number with @s.whatsapp.net, sender comes as LID
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", "12345@lid", "hello").Return(false)
-	client.On("HandleIncomingReply", "27123456789@s.whatsapp.net", "hello").Return(false) // SenderAlt fallback
 	h := newTestWAHandler(t, bot, []string{"27123456789@s.whatsapp.net"}, client)
 
 	// sender is LID, alt is the phone number JID
@@ -203,8 +168,6 @@ func TestWAHandler_BarePhoneNumber_MatchesSenderAltUser(t *testing.T) {
 	// given — allowed list has bare phone number, sender comes as LID with phone in alt
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", "12345@lid", "hello").Return(false)
-	client.On("HandleIncomingReply", "27123456789@s.whatsapp.net", "hello").Return(false) // SenderAlt fallback
 	h := newTestWAHandler(t, bot, []string{"27123456789"}, client)
 
 	evt := makeMessageEventWithAlt("12345@lid", "27123456789@s.whatsapp.net", "chat-1@g.us", "hello")
@@ -238,7 +201,6 @@ func TestWAHandler_BurstBatch_DispatchesOnce(t *testing.T) {
 
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", mock.Anything, mock.Anything).Return(false)
 	h := newTestWAHandler(t, bot, []string{"sender-1@s.whatsapp.net"}, client)
 
 	for _, text := range []string{"one", "two", "three"} {
@@ -258,7 +220,6 @@ func TestWAHandler_AttachmentOnly_FlushedWithAttachmentTag(t *testing.T) {
 
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", mock.Anything, mock.Anything).Return(false)
 	client.On("Download", mock.Anything, mock.Anything).Return([]byte("PNGDATA"), nil)
 	h := newTestWAHandler(t, bot, []string{"sender-1@s.whatsapp.net"}, client)
 
@@ -277,7 +238,6 @@ func TestWAHandler_OversizedAttachment_SkippedWithNotice(t *testing.T) {
 
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", mock.Anything, mock.Anything).Return(false)
 	huge := make([]byte, MaxImageBytes+1)
 	client.On("Download", mock.Anything, mock.Anything).Return(huge, nil)
 	client.On("SendText", "chat-1@g.us", mock.MatchedBy(func(s string) bool {
@@ -302,7 +262,6 @@ func TestWAHandler_MixedTextAndAttachmentBatch_OrderPreserved(t *testing.T) {
 
 	bot := &mockBot{}
 	client := &mockWAClient{}
-	client.On("HandleIncomingReply", mock.Anything, mock.Anything).Return(false)
 	client.On("Download", mock.Anything, mock.Anything).Return([]byte("DATA"), nil)
 	h := newTestWAHandler(t, bot, []string{"sender-1@s.whatsapp.net"}, client)
 
@@ -317,76 +276,6 @@ func TestWAHandler_MixedTextAndAttachmentBatch_OrderPreserved(t *testing.T) {
 	idx2 := strings.Index(body, "image/png")
 	idx3 := strings.Index(body, "third")
 	a.True(idx1 >= 0 && idx2 > idx1 && idx3 > idx2, "out of order: %s", body)
-}
-
-// --- WhatsAppClientWrapper WaitForReply/HandleIncomingReply tests ---
-
-func TestWhatsAppClientWrapper_WaitForReply_Success(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given - nil whatsmeow client is fine, WaitForReply doesn't touch it
-	wrapper := NewWhatsAppClientWrapper(nil)
-
-	// when
-	go func() {
-		// small delay to ensure WaitForReply is blocking
-		time.Sleep(10 * time.Millisecond)
-		wrapper.HandleIncomingReply("sender-1@s.whatsapp.net", "yes")
-	}()
-
-	reply, err := wrapper.WaitForReply("sender-1@s.whatsapp.net")
-
-	// then
-	r.NoError(err)
-	a.Equal("yes", reply)
-}
-
-func TestWhatsAppClientWrapper_WaitForReply_Timeout(t *testing.T) {
-	a := assert.New(t)
-
-	// given
-	wrapper := NewWhatsAppClientWrapper(nil)
-	wrapper.timeout = 50 * time.Millisecond
-
-	// when - no reply arrives
-	_, err := wrapper.WaitForReply("sender-1@s.whatsapp.net")
-
-	// then
-	a.Error(err)
-	a.Contains(err.Error(), "timeout")
-}
-
-func TestWhatsAppClientWrapper_HandleIncomingReply_WrongSender(t *testing.T) {
-	a := assert.New(t)
-
-	// given
-	wrapper := NewWhatsAppClientWrapper(nil)
-
-	// set up a waiter for sender-1
-	go func() {
-		wrapper.WaitForReply("sender-1@s.whatsapp.net")
-	}()
-	time.Sleep(10 * time.Millisecond) // let waiter register
-
-	// when - wrong sender
-	consumed := wrapper.HandleIncomingReply("wrong-sender@s.whatsapp.net", "yes")
-
-	// then
-	a.False(consumed)
-}
-
-func TestWhatsAppClientWrapper_HandleIncomingReply_NoActiveWaiter(t *testing.T) {
-	a := assert.New(t)
-
-	// given
-	wrapper := NewWhatsAppClientWrapper(nil)
-
-	// when - no waiter registered
-	consumed := wrapper.HandleIncomingReply("sender-1@s.whatsapp.net", "yes")
-
-	// then
-	a.False(consumed)
 }
 
 // --- extractText tests ---
