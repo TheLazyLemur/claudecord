@@ -304,6 +304,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	if f.Passive {
 		base = core.PassiveSystemPrompt()
 	}
+	base = core.AppendAgentsContext(base, core.LoadAgentsContext(workDir))
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
 	proc, err := NewProcessWithSystemPrompt(workDir, "", f.InitTimeout, systemPrompt)

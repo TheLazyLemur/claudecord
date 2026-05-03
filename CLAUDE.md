@@ -51,6 +51,12 @@ OpenClaw-style persistent memory layered on plain Markdown files under `MEMORY_D
 - The model decides what to commit; the SKILL.md tells it to call `read.sh` at the start of each conversation, `remember.sh` for durable facts, `note.sh` for tactical context, and `search.sh` before claiming it doesn't know.
 - No semantic search, no embeddings, no eviction — matches OpenClaw's default behaviour. Add a plugin if you want recall guarantees.
 
+## AGENTS.md context
+
+- If `AGENTS.md` exists in the session working directory, its contents are appended to the system prompt wrapped in `<agents_md>...</agents_md>`.
+- API backend re-reads the file on every API call, so edits land on the next turn with no session restart.
+- CLI backend reads it once at session creation (CLI protocol locks the system prompt at init); `/new-session` picks up changes.
+
 ## WhatsApp media
 
 - Inbound images and documents are decrypted into `WHATSAPP_MEDIA_DIR` and surfaced as `<attachment path mime original_name />` tags inside `<message>` blocks in the prompt body.
