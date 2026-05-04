@@ -1,21 +1,36 @@
 package core
 
 import (
+	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/pkg/errors"
 )
+
+// FlushFunc is invoked against the outgoing backend just before it is
+// closed during NewSession, so the agent can persist any unsaved memory
+// state. Errors and panics are swallowed; flushes never block the reset.
+type FlushFunc func(ctx context.Context, current Backend)
 
 // SessionManager manages the single active backend session
 type SessionManager struct {
 	mu      sync.RWMutex
 	current Backend
 	factory BackendFactory
+	flush   FlushFunc
 }
 
 // NewSessionManager creates a session manager with the given backend factory
 func NewSessionManager(factory BackendFactory) *SessionManager {
 	return &SessionManager{factory: factory}
+}
+
+// NewSessionManagerWithFlush creates a session manager that runs the flush
+// func against the outgoing backend before closing it on each NewSession.
+// Pass nil to disable flushing.
+func NewSessionManagerWithFlush(factory BackendFactory, flush FlushFunc) *SessionManager {
+	return &SessionManager{factory: factory, flush: flush}
 }
 
 // NewSession starts a fresh session, closing any existing one
@@ -24,6 +39,7 @@ func (m *SessionManager) NewSession(workDir string) error {
 	defer m.mu.Unlock()
 
 	if m.current != nil {
+		m.runFlush(m.current)
 		m.current.Close()
 		m.current = nil
 	}
@@ -35,6 +51,18 @@ func (m *SessionManager) NewSession(workDir string) error {
 
 	m.current = backend
 	return nil
+}
+
+func (m *SessionManager) runFlush(current Backend) {
+	if m.flush == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("memory flush panicked", "panic", r)
+		}
+	}()
+	m.flush(context.Background(), current)
 }
 
 // GetOrCreateSession returns current session or creates one if none exists
