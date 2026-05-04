@@ -38,6 +38,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if err := cfg.EnsureDirs(); err != nil {
+		return err
+	}
 
 	// Export the resolved MEMORY_DIR so the memory skill scripts pick it up
 	// when the model invokes them via the Bash tool. Set unconditionally so

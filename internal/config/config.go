@@ -146,9 +146,6 @@ func Load(env map[string]string) (*Config, error) {
 		if !pathInsideAllowedDirs(mediaDir, allowedDirs) {
 			return nil, errors.Errorf("WHATSAPP_MEDIA_DIR %q must live under ALLOWED_DIRS", mediaDir)
 		}
-		if err := os.MkdirAll(mediaDir, 0o700); err != nil {
-			return nil, errors.Wrap(err, "creating WHATSAPP_MEDIA_DIR")
-		}
 	}
 
 	agentsDefaultPath := env["AGENTS_DEFAULT_PATH"]
@@ -175,9 +172,6 @@ func Load(env map[string]string) (*Config, error) {
 	if !pathInsideAllowedDirs(memoryDir, allowedDirs) {
 		return nil, errors.Errorf("MEMORY_DIR %q must live under ALLOWED_DIRS", memoryDir)
 	}
-	if err := os.MkdirAll(memoryDir, 0o700); err != nil {
-		return nil, errors.Wrap(err, "creating MEMORY_DIR")
-	}
 
 	return &Config{
 		DiscordToken:           discordToken,
@@ -198,6 +192,22 @@ func Load(env map[string]string) (*Config, error) {
 		AgentsDefaultPath:      agentsDefaultPath,
 		ThinkingBudgetTokens:   thinkingBudget,
 	}, nil
+}
+
+// EnsureDirs creates the working directories Load validated. Pulled out of
+// Load so config parsing stays pure and testable without disk side effects.
+func (c *Config) EnsureDirs() error {
+	if c.WhatsAppMediaDir != "" {
+		if err := os.MkdirAll(c.WhatsAppMediaDir, 0o700); err != nil {
+			return errors.Wrap(err, "creating WHATSAPP_MEDIA_DIR")
+		}
+	}
+	if c.MemoryDir != "" {
+		if err := os.MkdirAll(c.MemoryDir, 0o700); err != nil {
+			return errors.Wrap(err, "creating MEMORY_DIR")
+		}
+	}
+	return nil
 }
 
 func pathInsideAllowedDirs(path string, allowedDirs []string) bool {

@@ -389,6 +389,7 @@ func TestLoad_WhatsAppMediaDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 	cfg, err := Load(env)
 	require.NoError(t, err)
 	assert.Equal(t, env["ALLOWED_DIRS"]+"/wa-media", cfg.WhatsAppMediaDir)
+	require.NoError(t, cfg.EnsureDirs())
 
 	info, err := os.Stat(cfg.WhatsAppMediaDir)
 	require.NoError(t, err)
@@ -408,9 +409,10 @@ func TestLoad_WhatsAppMediaDirMustBeInsideAllowedDirs(t *testing.T) {
 	assert.Contains(t, err.Error(), "must live under ALLOWED_DIRS")
 }
 
-func TestLoad_WhatsAppMediaDirCreatedOnLoad(t *testing.T) {
+func TestLoad_WhatsAppMediaDirCreatedByEnsureDirs(t *testing.T) {
 	cfg, err := Load(validWhatsAppEnv())
 	require.NoError(t, err)
+	require.NoError(t, cfg.EnsureDirs())
 	info, err := os.Stat(cfg.WhatsAppMediaDir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
@@ -435,6 +437,7 @@ func TestLoad_MemoryDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 	cfg, err := Load(env)
 	require.NoError(t, err)
 	assert.Equal(t, dir+"/claudecord-memory", cfg.MemoryDir)
+	require.NoError(t, cfg.EnsureDirs())
 
 	info, err := os.Stat(cfg.MemoryDir)
 	require.NoError(t, err)
@@ -453,6 +456,7 @@ func TestLoad_MemoryDirOverride(t *testing.T) {
 	cfg, err := Load(env)
 	require.NoError(t, err)
 	assert.Equal(t, dir+"/notes", cfg.MemoryDir)
+	require.NoError(t, cfg.EnsureDirs())
 
 	info, err := os.Stat(cfg.MemoryDir)
 	require.NoError(t, err)
