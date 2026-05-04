@@ -1,6 +1,6 @@
 # Claudecord
 
-Discord/WhatsApp bot that talks to any Anthropic-compatible API endpoint (Anthropic, Moonshot/Kimi, etc.) via the Anthropic Go SDK.
+Discord/WhatsApp bot that talks to any Anthropic-shaped `/v1/messages` endpoint via the Anthropic Go SDK. Tested against Anthropic, Moonshot/Kimi, Minimax, and Ollama; many other providers expose the same shape (often as an opt-in compatibility mode). It is NOT tied to Anthropic-the-company — Anthropic is just the wire format.
 
 ## What It Is
 
@@ -38,7 +38,7 @@ Env vars:
 - `ALLOWED_USERS` - Comma-separated Discord user IDs allowed to use bot (required)
 - `CLAUDE_CWD` - Default working directory the agent runs in (optional, defaults to first allowed dir)
 - `CLAUDECORD_API_KEY` - API key for the upstream endpoint (required)
-- `CLAUDECORD_BASE_URL` - Optional base URL to point at a non-Anthropic endpoint (e.g. Moonshot/Kimi)
+- `CLAUDECORD_BASE_URL` - Optional base URL to point at a non-Anthropic endpoint (e.g. Moonshot/Kimi, Minimax, Ollama, or any other provider exposing an Anthropic-shaped `/v1/messages` API)
 - `MODEL` - Model id. Defaults to `Kimi-for-Coding` when `CLAUDECORD_BASE_URL` is set, otherwise to a recent Sonnet. Override to use any other model id supported by the endpoint.
 - `WHATSAPP_MEDIA_DIR` - Directory inbound WhatsApp attachments are decrypted into. Defaults to `<first ALLOWED_DIR>/wa-media` when `WHATSAPP_ALLOWED_SENDERS` is set; must live under one of `ALLOWED_DIRS` if overridden.
 - `MEMORY_DIR` - Where the `memory` skill stores `MEMORY.md` and `daily/YYYY-MM-DD.md` logs. Defaults to `<first ALLOWED_DIR>/claudecord-memory`. Must live under `ALLOWED_DIRS`. Exported into the bot process env at startup so the skill's bash scripts inherit it.

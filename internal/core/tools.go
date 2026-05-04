@@ -1,6 +1,6 @@
 package core
 
-// ToolDef defines a tool that can be used by both CLI (MCP) and API modes
+// ToolDef defines a tool sent to the upstream Anthropic-shaped API.
 type ToolDef struct {
 	Name        string
 	Description string
@@ -137,22 +137,6 @@ func FileTools() []ToolDef {
 	}
 }
 
-// MCPTool is the typed MCP tool representation sent to CLI
-type MCPTool struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"inputSchema"`
-}
-
-// ToMCP converts a ToolDef to MCP format for CLI mode
-func (t ToolDef) ToMCP() MCPTool {
-	return MCPTool{
-		Name:        t.Name,
-		Description: t.Description,
-		InputSchema: t.InputSchema,
-	}
-}
-
 // SkillTools returns tool definitions for skill activation
 func SkillTools() []ToolDef {
 	return []ToolDef{
@@ -191,12 +175,3 @@ func SkillTools() []ToolDef {
 	}
 }
 
-// MCPTools returns MCP-formatted tools for CLI mode (Discord + Skill tools)
-var MCPTools = func() []MCPTool {
-	tools := append(DiscordTools(), SkillTools()...)
-	result := make([]MCPTool, len(tools))
-	for i, t := range tools {
-		result[i] = t.ToMCP()
-	}
-	return result
-}()
