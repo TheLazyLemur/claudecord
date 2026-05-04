@@ -42,6 +42,7 @@ Env vars:
 - `MODEL` - Model id. Defaults to `Kimi-for-Coding` when `CLAUDECORD_BASE_URL` is set, otherwise to a recent Sonnet. Override to use any other model id supported by the endpoint.
 - `WHATSAPP_MEDIA_DIR` - Directory inbound WhatsApp attachments are decrypted into. Defaults to `<first ALLOWED_DIR>/wa-media` when `WHATSAPP_ALLOWED_SENDERS` is set; must live under one of `ALLOWED_DIRS` if overridden.
 - `MEMORY_DIR` - Where the `memory` skill stores `MEMORY.md` and `daily/YYYY-MM-DD.md` logs. Defaults to `<first ALLOWED_DIR>/claudecord-memory`. Must live under `ALLOWED_DIRS`. Exported into the bot process env at startup so the skill's bash scripts inherit it.
+- `THINKING_BUDGET_TOKENS` - Optional. When set to a positive integer, every API call enables extended thinking with that token budget (`thinking={type:enabled,budget_tokens:N}`). Anthropic requires N >= 1024. Confirmed working against Kimi's `api.kimi.com/coding/v1/messages` Anthropic-compatible endpoint with `kimi-for-coding`. Unset/empty disables thinking.
 
 ## Memory skill
 

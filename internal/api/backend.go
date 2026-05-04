@@ -21,34 +21,37 @@ var _ core.Backend = (*Backend)(nil)
 
 // Backend implements core.Backend using Anthropic API
 type Backend struct {
-	client        anthropic.Client
-	model         string
-	sessionID     string
-	history       []anthropic.MessageParam
-	tools         []anthropic.ToolUnionParam
-	systemPrompt  string
-	workDir       string
-	skillStore    skills.SkillStore
-	minimaxAPIKey string
-	mu            sync.Mutex
+	client         anthropic.Client
+	model          string
+	sessionID      string
+	history        []anthropic.MessageParam
+	tools          []anthropic.ToolUnionParam
+	systemPrompt   string
+	workDir        string
+	skillStore     skills.SkillStore
+	minimaxAPIKey  string
+	thinkingBudget int
+	mu             sync.Mutex
 }
 
 // NewBackend creates an API backend. workDir is checked for an AGENTS.md
 // file on every API call; its contents are appended to the system prompt.
-func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string) *Backend {
+// thinkingBudget > 0 enables extended thinking with that token budget.
+func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string, thinkingBudget int) *Backend {
 	if model == "" {
 		model = config.DefaultModel
 	}
 	return &Backend{
-		client:        client,
-		model:         model,
-		sessionID:     generateSessionID(),
-		history:       []anthropic.MessageParam{},
-		tools:         tools,
-		systemPrompt:  systemPrompt,
-		workDir:       workDir,
-		skillStore:    skillStore,
-		minimaxAPIKey: minimaxAPIKey,
+		client:         client,
+		model:          model,
+		sessionID:      generateSessionID(),
+		history:        []anthropic.MessageParam{},
+		tools:          tools,
+		systemPrompt:   systemPrompt,
+		workDir:        workDir,
+		skillStore:     skillStore,
+		minimaxAPIKey:  minimaxAPIKey,
+		thinkingBudget: thinkingBudget,
 	}
 }
 
@@ -125,10 +128,14 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 	}
 }
 
-func (b *Backend) callAPI(ctx context.Context) (*anthropic.Message, error) {
+func (b *Backend) buildParams() anthropic.MessageNewParams {
+	maxTokens := int64(8192)
+	if b.thinkingBudget > 0 && int64(b.thinkingBudget) >= maxTokens {
+		maxTokens = int64(b.thinkingBudget) + 4096
+	}
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(b.model),
-		MaxTokens: 8192,
+		MaxTokens: maxTokens,
 		Messages:  b.history,
 	}
 
@@ -142,7 +149,15 @@ func (b *Backend) callAPI(ctx context.Context) (*anthropic.Message, error) {
 		params.Tools = b.tools
 	}
 
-	return b.client.Messages.New(ctx, params)
+	if b.thinkingBudget > 0 {
+		params.Thinking = anthropic.ThinkingConfigParamOfEnabled(int64(b.thinkingBudget))
+	}
+
+	return params
+}
+
+func (b *Backend) callAPI(ctx context.Context) (*anthropic.Message, error) {
+	return b.client.Messages.New(ctx, b.buildParams())
 }
 
 func extractTextFromResponse(resp *anthropic.Message) string {
@@ -234,6 +249,8 @@ type BackendFactory struct {
 	// WhatsAppEnabled appends the media-handling addendum to the system prompt
 	// so the model knows what to do with <attachment> tags in chat prompts.
 	WhatsAppEnabled bool
+	// ThinkingBudgetTokens > 0 enables extended thinking on every API call.
+	ThinkingBudgetTokens int
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
@@ -269,7 +286,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
-	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.MinimaxAPIKey), nil
+	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.MinimaxAPIKey, f.ThinkingBudgetTokens), nil
 }
 
 func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {

@@ -305,6 +305,82 @@ func TestLoad_ModelExplicitWithBaseURL(t *testing.T) {
 	assert.Equal(t, "kimi-k2.6", cfg.Model)
 }
 
+// --- Thinking budget tests ---
+
+func thinkingTestEnv(t *testing.T) map[string]string {
+	t.Helper()
+	dir := t.TempDir()
+	return map[string]string{
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       dir,
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_API_KEY": "sk-test",
+	}
+}
+
+func TestLoad_ThinkingBudgetDefaultsToZero(t *testing.T) {
+	// given
+	// ... no THINKING_BUDGET_TOKENS set
+	env := thinkingTestEnv(t)
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... thinking is disabled (budget == 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, cfg.ThinkingBudgetTokens)
+}
+
+func TestLoad_ThinkingBudgetParsed(t *testing.T) {
+	// given
+	// ... THINKING_BUDGET_TOKENS set to a valid value
+	env := thinkingTestEnv(t)
+	env["THINKING_BUDGET_TOKENS"] = "4096"
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... the budget is parsed
+	require.NoError(t, err)
+	assert.Equal(t, 4096, cfg.ThinkingBudgetTokens)
+}
+
+func TestLoad_ThinkingBudgetRejectsBelowMinimum(t *testing.T) {
+	// given
+	// ... THINKING_BUDGET_TOKENS below Anthropic's 1024 minimum
+	env := thinkingTestEnv(t)
+	env["THINKING_BUDGET_TOKENS"] = "1023"
+
+	// when
+	// ... config is loaded
+	_, err := Load(env)
+
+	// then
+	// ... an error is returned
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "THINKING_BUDGET_TOKENS")
+}
+
+func TestLoad_ThinkingBudgetRejectsNonNumeric(t *testing.T) {
+	// given
+	// ... THINKING_BUDGET_TOKENS set to a non-numeric value
+	env := thinkingTestEnv(t)
+	env["THINKING_BUDGET_TOKENS"] = "yes"
+
+	// when
+	// ... config is loaded
+	_, err := Load(env)
+
+	// then
+	// ... an error is returned
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "THINKING_BUDGET_TOKENS")
+}
+
 // --- WhatsAppMediaDir tests ---
 
 func TestLoad_WhatsAppMediaDirDefaultsUnderFirstAllowedDir(t *testing.T) {

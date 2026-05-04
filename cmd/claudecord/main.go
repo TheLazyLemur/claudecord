@@ -75,14 +75,15 @@ func run() error {
 	// Create backend factories.
 	// discordFactory includes react_emoji tool; backendFactory (WA/dashboard) does not.
 	base := api.BackendFactory{
-		APIKey:          cfg.APIKey,
-		BaseURL:         cfg.BaseURL,
-		Model:           cfg.Model,
-		AllowedDirs:     cfg.AllowedDirs,
-		DefaultWorkDir:  cfg.ClaudeCWD,
-		SkillStore:      skillStore,
-		MinimaxAPIKey:   cfg.MinimaxAPIKey,
-		WhatsAppEnabled: cfg.WhatsAppEnabled(),
+		APIKey:               cfg.APIKey,
+		BaseURL:              cfg.BaseURL,
+		Model:                cfg.Model,
+		AllowedDirs:          cfg.AllowedDirs,
+		DefaultWorkDir:       cfg.ClaudeCWD,
+		SkillStore:           skillStore,
+		MinimaxAPIKey:        cfg.MinimaxAPIKey,
+		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
+		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
 	}
 	discord := base
 	discord.Discord = true

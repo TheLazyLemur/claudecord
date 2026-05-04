@@ -117,6 +117,62 @@ func TestEffectiveSystemPrompt_AgentsFileRefreshedPerCall(t *testing.T) {
 	}
 }
 
+func TestBuildParams_NoThinkingByDefault(t *testing.T) {
+	// given
+	// ... a backend with thinkingBudget unset
+	b := &Backend{model: "kimi-for-coding"}
+
+	// when
+	// ... params are built
+	params := b.buildParams()
+
+	// then
+	// ... no thinking config is attached
+	a := assert.New(t)
+	a.Nil(params.Thinking.OfEnabled)
+	a.Nil(params.Thinking.OfDisabled)
+}
+
+func TestBuildParams_ThinkingEnabledWhenBudgetSet(t *testing.T) {
+	// given
+	// ... a backend with a positive thinking budget
+	b := &Backend{model: "kimi-for-coding", thinkingBudget: 4096}
+
+	// when
+	// ... params are built
+	params := b.buildParams()
+
+	// then
+	// ... params.Thinking carries the enabled config with that budget
+	r := require.New(t)
+	a := assert.New(t)
+	r.NotNil(params.Thinking.OfEnabled)
+	a.Equal(int64(4096), params.Thinking.OfEnabled.BudgetTokens)
+}
+
+func TestBackendFactory_Create_PropagatesThinkingBudget(t *testing.T) {
+	// given
+	// ... a factory configured with a thinking budget
+	r := require.New(t)
+	a := assert.New(t)
+	factory := &BackendFactory{
+		APIKey:               "test",
+		DefaultWorkDir:       t.TempDir(),
+		ThinkingBudgetTokens: 4096,
+	}
+
+	// when
+	// ... a backend is created
+	backend, err := factory.Create("")
+	r.NoError(err)
+
+	// then
+	// ... the backend carries the same budget
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.Equal(4096, apiBackend.thinkingBudget)
+}
+
 func TestBackendFactory_Create_FallsBackToDefaultWorkDirWhenEmpty(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)

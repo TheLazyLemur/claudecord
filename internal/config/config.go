@@ -50,7 +50,14 @@ type Config struct {
 	// Path to the bundled default AGENTS.md, used to seed <ClaudeCWD>/AGENTS.md
 	// when missing. Defaults to /etc/claudecord/AGENTS.md.default.
 	AgentsDefaultPath string
+
+	// Token budget for extended thinking. 0 disables thinking. When >0, the
+	// Anthropic Messages request includes thinking={type:enabled,budget_tokens:N}.
+	// Anthropic requires N >= 1024.
+	ThinkingBudgetTokens int
 }
+
+const minThinkingBudgetTokens = 1024
 
 func (c *Config) DiscordEnabled() bool {
 	return c.DiscordToken != ""
@@ -149,6 +156,18 @@ func Load(env map[string]string) (*Config, error) {
 		agentsDefaultPath = "/etc/claudecord/AGENTS.md.default"
 	}
 
+	var thinkingBudget int
+	if s := env["THINKING_BUDGET_TOKENS"]; s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, errors.Wrap(err, "THINKING_BUDGET_TOKENS must be an integer")
+		}
+		if n < minThinkingBudgetTokens {
+			return nil, errors.Errorf("THINKING_BUDGET_TOKENS=%d below minimum %d", n, minThinkingBudgetTokens)
+		}
+		thinkingBudget = n
+	}
+
 	memoryDir := env["MEMORY_DIR"]
 	if memoryDir == "" {
 		memoryDir = filepath.Join(allowedDirs[0], "claudecord-memory")
@@ -177,6 +196,7 @@ func Load(env map[string]string) (*Config, error) {
 		WhatsAppMediaDir:       mediaDir,
 		MemoryDir:              memoryDir,
 		AgentsDefaultPath:      agentsDefaultPath,
+		ThinkingBudgetTokens:   thinkingBudget,
 	}, nil
 }
 
@@ -210,6 +230,7 @@ func LoadFromEnv() (*Config, error) {
 		"MODEL":                    os.Getenv("MODEL"),
 		"MEMORY_DIR":               os.Getenv("MEMORY_DIR"),
 		"AGENTS_DEFAULT_PATH":      os.Getenv("AGENTS_DEFAULT_PATH"),
+		"THINKING_BUDGET_TOKENS":   os.Getenv("THINKING_BUDGET_TOKENS"),
 	}
 	return Load(env)
 }
