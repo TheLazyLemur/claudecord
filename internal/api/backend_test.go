@@ -117,6 +117,32 @@ func TestEffectiveSystemPrompt_AgentsFileRefreshedPerCall(t *testing.T) {
 	}
 }
 
+func TestBackendFactory_Create_FallsBackToDefaultWorkDirWhenEmpty(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a default work dir containing an AGENTS.md file
+	defaultDir := t.TempDir()
+	r.NoError(os.WriteFile(filepath.Join(defaultDir, "AGENTS.md"), []byte("RULES"), 0o644))
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: defaultDir,
+	}
+
+	// when
+	// ... a backend is created with an empty work dir
+	backend, err := factory.Create("")
+	r.NoError(err)
+
+	// then
+	// ... the backend uses DefaultWorkDir and AGENTS.md is loaded into the system prompt
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.Equal(defaultDir, apiBackend.workDir)
+	a.Contains(apiBackend.effectiveSystemPrompt(), "RULES")
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
