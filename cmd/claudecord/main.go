@@ -46,6 +46,10 @@ func run() error {
 		return errors.Wrap(err, "exporting MEMORY_DIR")
 	}
 
+	if err := core.BootstrapAgentsMd(cfg.ClaudeCWD, cfg.AgentsDefaultPath); err != nil {
+		slog.Warn("bootstrap AGENTS.md", "error", err)
+	}
+
 	// Create dashboard hub and wrap slog handler
 	hub := dashboard.NewHub()
 	go hub.Run()
@@ -201,7 +205,7 @@ func run() error {
 	}
 
 	// Dashboard server (platform-independent)
-	dashboardServer := dashboard.NewServer(hub, sessionMgr, waPermChecker, skillStore, skillsDir, cfg.DashboardPassword)
+	dashboardServer := dashboard.NewServer(hub, sessionMgr, waPermChecker, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword)
 
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())

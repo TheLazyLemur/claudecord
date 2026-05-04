@@ -40,6 +40,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # Copy Go binary
 COPY --from=builder /claudecord /usr/local/bin/claudecord
 
+# Bundle the canonical AGENTS.md so the bot can seed empty workspaces.
+COPY AGENTS.md /etc/claudecord/AGENTS.md.default
+
 WORKDIR /root
 
 # Custom entrypoint to auth gh and configure git

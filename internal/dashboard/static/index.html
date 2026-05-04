@@ -63,6 +63,19 @@
         </div>
       </div>
 
+      <!-- Instructions section -->
+      <div class="p-4 border-b border-zinc-800">
+        <h2 class="text-sm font-semibold text-zinc-400 mb-3">INSTRUCTIONS</h2>
+        <div class="space-y-2">
+          <button id="openAgentsMdBtn" class="w-full text-left px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm rounded transition-colors">
+            AGENTS.md
+          </button>
+          <button id="openMemoryBtn" class="w-full text-left px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm rounded transition-colors">
+            Memory
+          </button>
+        </div>
+      </div>
+
       <!-- Skills list -->
       <div class="flex-1 overflow-hidden flex flex-col">
         <div class="p-4 pb-2 flex items-center justify-between">
@@ -219,6 +232,90 @@
           Cancel
         </button>
         <button id="saveSkillBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-sm font-medium rounded transition-colors">
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AGENTS.md Editor Modal -->
+  <div id="agentsMdModal" class="fixed inset-0 bg-black/60 flex items-center justify-center hidden z-50">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-lg w-full max-w-4xl mx-4 h-[80vh] flex flex-col shadow-2xl">
+      <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+        <h3 class="text-sm font-semibold">AGENTS.md</h3>
+        <button id="closeAgentsMdBtn" class="text-zinc-400 hover:text-zinc-100 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 p-4 overflow-hidden">
+        <textarea id="agentsMdContent"
+          class="w-full h-full bg-zinc-950 border border-zinc-800 rounded p-3 text-sm font-mono resize-none focus:outline-none focus:border-zinc-600 scrollbar-thin"
+          spellcheck="false"></textarea>
+      </div>
+      <div class="p-4 border-t border-zinc-800 flex justify-between gap-3">
+        <button id="resetAgentsMdBtn" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-sm rounded transition-colors">
+          Reset to default
+        </button>
+        <div class="flex gap-3">
+          <button id="cancelAgentsMdBtn" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-sm rounded transition-colors">
+            Cancel
+          </button>
+          <button id="saveAgentsMdBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-sm font-medium rounded transition-colors">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory Editor Modal -->
+  <div id="memoryModal" class="fixed inset-0 bg-black/60 flex items-center justify-center hidden z-50">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-lg w-full max-w-5xl mx-4 h-[80vh] flex flex-col shadow-2xl">
+      <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+        <h3 class="text-sm font-semibold">Memory</h3>
+        <button id="closeMemoryBtn" class="text-zinc-400 hover:text-zinc-100 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 flex overflow-hidden">
+        <!-- File list -->
+        <div class="w-64 border-r border-zinc-800 flex flex-col">
+          <div class="p-3 flex items-center justify-between border-b border-zinc-800">
+            <span class="text-xs text-zinc-400">FILES</span>
+            <button id="newMemoryFileBtn" class="text-zinc-500 hover:text-zinc-300 transition-colors" title="New file">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+            </button>
+          </div>
+          <div id="memoryFilesList" class="flex-1 overflow-y-auto scrollbar-thin"></div>
+        </div>
+        <!-- Editor -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <div class="p-3 border-b border-zinc-800 flex items-center justify-between">
+            <span id="memoryCurrentPath" class="text-xs text-zinc-500 truncate">No file selected</span>
+            <button id="deleteMemoryFileBtn" class="text-zinc-500 hover:text-red-400 transition-colors hidden" title="Delete file">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+          <div class="flex-1 p-3 overflow-hidden">
+            <textarea id="memoryContent"
+              class="w-full h-full bg-zinc-950 border border-zinc-800 rounded p-3 text-sm font-mono resize-none focus:outline-none focus:border-zinc-600 scrollbar-thin"
+              spellcheck="false" placeholder="Select a file to edit, or create a new one"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="p-4 border-t border-zinc-800 flex justify-end gap-3">
+        <button id="cancelMemoryBtn" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-sm rounded transition-colors">
+          Close
+        </button>
+        <button id="saveMemoryBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-sm font-medium rounded transition-colors">
           Save
         </button>
       </div>

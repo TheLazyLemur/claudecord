@@ -214,6 +214,49 @@ func TestLoad_DashboardPasswordOptional(t *testing.T) {
 	assert.Empty(t, cfg.DashboardPassword)
 }
 
+func TestLoad_AgentsDefaultPathDefault(t *testing.T) {
+	// given
+	// ... env without AGENTS_DEFAULT_PATH set
+	dir := t.TempDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       dir,
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_API_KEY": "sk-test",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... AgentsDefaultPath defaults to the docker bundle location
+	require.NoError(t, err)
+	assert.Equal(t, "/etc/claudecord/AGENTS.md.default", cfg.AgentsDefaultPath)
+}
+
+func TestLoad_AgentsDefaultPathOverride(t *testing.T) {
+	// given
+	// ... env with AGENTS_DEFAULT_PATH set
+	dir := t.TempDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        dir,
+		"ALLOWED_USERS":       "123",
+		"CLAUDECORD_API_KEY":  "sk-test",
+		"AGENTS_DEFAULT_PATH": "/custom/AGENTS.md",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... AgentsDefaultPath uses the override
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/AGENTS.md", cfg.AgentsDefaultPath)
+}
+
 func TestLoad_MinimaxAPIKey(t *testing.T) {
 	cfg, err := Load(map[string]string{
 		"DISCORD_TOKEN":      "mytoken",

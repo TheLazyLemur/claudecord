@@ -37,6 +37,30 @@ const whatsappQR = document.getElementById('whatsappQR');
 const qrCanvas = document.getElementById('qrCanvas');
 const qrStatus = document.getElementById('qrStatus');
 
+// AGENTS.md modal
+const openAgentsMdBtn = document.getElementById('openAgentsMdBtn');
+const agentsMdModal = document.getElementById('agentsMdModal');
+const agentsMdContent = document.getElementById('agentsMdContent');
+const closeAgentsMdBtn = document.getElementById('closeAgentsMdBtn');
+const cancelAgentsMdBtn = document.getElementById('cancelAgentsMdBtn');
+const saveAgentsMdBtn = document.getElementById('saveAgentsMdBtn');
+const resetAgentsMdBtn = document.getElementById('resetAgentsMdBtn');
+
+// Memory modal
+const openMemoryBtn = document.getElementById('openMemoryBtn');
+const memoryModal = document.getElementById('memoryModal');
+const memoryFilesList = document.getElementById('memoryFilesList');
+const memoryContent = document.getElementById('memoryContent');
+const memoryCurrentPath = document.getElementById('memoryCurrentPath');
+const newMemoryFileBtn = document.getElementById('newMemoryFileBtn');
+const deleteMemoryFileBtn = document.getElementById('deleteMemoryFileBtn');
+const closeMemoryBtn = document.getElementById('closeMemoryBtn');
+const cancelMemoryBtn = document.getElementById('cancelMemoryBtn');
+const saveMemoryBtn = document.getElementById('saveMemoryBtn');
+
+let currentMemoryPath = null;
+let memoryFilesCache = [];
+
 // Skill modal
 const skillModal = document.getElementById('skillModal');
 const skillModalTitle = document.getElementById('skillModalTitle');
@@ -131,6 +155,25 @@ function handleMessage(msg) {
 
     case 'whatsapp_qr':
       handleWhatsAppQR(msg.content);
+      break;
+
+    case 'agents_md':
+      agentsMdContent.value = msg.content || '';
+      if (msg.msg) addLog('ERROR', 'AGENTS.md: ' + msg.msg);
+      break;
+
+    case 'memory_list':
+      memoryFilesCache = (msg.files || []).map(f => f.path);
+      renderMemoryFiles();
+      if (msg.msg) addLog('ERROR', 'memory: ' + msg.msg);
+      break;
+
+    case 'memory_file':
+      currentMemoryPath = msg.path;
+      memoryCurrentPath.textContent = msg.path;
+      memoryContent.value = msg.content || '';
+      deleteMemoryFileBtn.classList.remove('hidden');
+      if (msg.msg) addLog('ERROR', 'memory: ' + msg.msg);
       break;
   }
 }
@@ -381,6 +424,76 @@ function handleFileUpload(files) {
   }
 }
 
+// AGENTS.md
+function openAgentsMd() {
+  agentsMdContent.value = '';
+  agentsMdModal.classList.remove('hidden');
+  send({ type: 'get_agents_md' });
+}
+
+function hideAgentsMd() {
+  agentsMdModal.classList.add('hidden');
+}
+
+function saveAgentsMd() {
+  send({ type: 'save_agents_md', content: agentsMdContent.value });
+  hideAgentsMd();
+}
+
+function resetAgentsMd() {
+  send({ type: 'reset_agents_md' });
+}
+
+// Memory
+function openMemory() {
+  memoryFilesCache = [];
+  currentMemoryPath = null;
+  memoryContent.value = '';
+  memoryCurrentPath.textContent = 'No file selected';
+  deleteMemoryFileBtn.classList.add('hidden');
+  memoryModal.classList.remove('hidden');
+  send({ type: 'list_memory' });
+}
+
+function hideMemory() {
+  memoryModal.classList.add('hidden');
+}
+
+function renderMemoryFiles() {
+  memoryFilesList.innerHTML = '';
+  for (const path of memoryFilesCache) {
+    const div = document.createElement('div');
+    const isCurrent = path === currentMemoryPath;
+    div.className = `px-3 py-2 cursor-pointer transition-colors text-sm break-all ${isCurrent ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-800'}`;
+    div.textContent = path;
+    div.onclick = () => send({ type: 'get_memory', path });
+    memoryFilesList.appendChild(div);
+  }
+}
+
+function newMemoryFile() {
+  const path = prompt('New file path (relative, e.g. daily/2026-05-04.md):');
+  if (!path) return;
+  currentMemoryPath = path;
+  memoryCurrentPath.textContent = path;
+  memoryContent.value = '';
+  deleteMemoryFileBtn.classList.remove('hidden');
+}
+
+function saveMemory() {
+  if (!currentMemoryPath) return;
+  send({ type: 'save_memory', path: currentMemoryPath, content: memoryContent.value });
+}
+
+function deleteMemory() {
+  if (!currentMemoryPath) return;
+  send({ type: 'delete_memory', path: currentMemoryPath });
+  currentMemoryPath = null;
+  memoryCurrentPath.textContent = 'No file selected';
+  memoryContent.value = '';
+  deleteMemoryFileBtn.classList.add('hidden');
+}
+
 // WhatsApp QR
 function handleWhatsAppQR(content) {
   if (content === 'success') {
@@ -464,12 +577,32 @@ skillFilesTab.ondrop = (e) => {
   handleFileUpload(e.dataTransfer.files);
 };
 
+// AGENTS.md / Memory listeners
+openAgentsMdBtn.onclick = openAgentsMd;
+closeAgentsMdBtn.onclick = hideAgentsMd;
+cancelAgentsMdBtn.onclick = hideAgentsMd;
+saveAgentsMdBtn.onclick = saveAgentsMd;
+resetAgentsMdBtn.onclick = resetAgentsMd;
+
+openMemoryBtn.onclick = openMemory;
+closeMemoryBtn.onclick = hideMemory;
+cancelMemoryBtn.onclick = hideMemory;
+saveMemoryBtn.onclick = saveMemory;
+newMemoryFileBtn.onclick = newMemoryFile;
+deleteMemoryFileBtn.onclick = deleteMemory;
+
 // Close modals on backdrop click
 permissionModal.onclick = (e) => {
   if (e.target === permissionModal) hidePermissionModal();
 };
 skillModal.onclick = (e) => {
   if (e.target === skillModal) hideSkillModal();
+};
+agentsMdModal.onclick = (e) => {
+  if (e.target === agentsMdModal) hideAgentsMd();
+};
+memoryModal.onclick = (e) => {
+  if (e.target === memoryModal) hideMemory();
 };
 
 // Start

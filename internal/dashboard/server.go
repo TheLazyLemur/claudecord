@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/claudecord/internal/memory"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/gorilla/websocket"
 )
@@ -27,13 +28,16 @@ const sessionCookieName = "claudecord_session"
 
 // Server handles the dashboard HTTP and WS endpoints.
 type Server struct {
-	hub            *Hub
-	upgrader       websocket.Upgrader
-	sessionMgr     *core.SessionManager
-	permChecker    core.PermissionChecker
-	skillStore     skills.SkillStore
-	skillsDir      string
-	password       string
+	hub               *Hub
+	upgrader          websocket.Upgrader
+	sessionMgr        *core.SessionManager
+	permChecker       core.PermissionChecker
+	skillStore        skills.SkillStore
+	skillsDir         string
+	workDir           string
+	agentsDefaultPath string
+	memoryDir         string
+	password          string
 
 	mu        sync.Mutex
 	responder *WSResponder
@@ -41,15 +45,18 @@ type Server struct {
 }
 
 // NewServer creates a dashboard server.
-func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.PermissionChecker, skillStore skills.SkillStore, skillsDir, password string) *Server {
+func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.PermissionChecker, skillStore skills.SkillStore, skillsDir, workDir, agentsDefaultPath, memoryDir, password string) *Server {
 	return &Server{
-		hub:         hub,
-		sessionMgr:  sessionMgr,
-		permChecker: permChecker,
-		skillStore:  skillStore,
-		skillsDir:   skillsDir,
-		password:    password,
-		sessions:    make(map[string]time.Time),
+		hub:               hub,
+		sessionMgr:        sessionMgr,
+		permChecker:       permChecker,
+		skillStore:        skillStore,
+		skillsDir:         skillsDir,
+		workDir:           workDir,
+		agentsDefaultPath: agentsDefaultPath,
+		memoryDir:         memoryDir,
+		password:          password,
+		sessions:          make(map[string]time.Time),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
@@ -244,7 +251,102 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 
 	case "delete_skill_file":
 		s.handleDeleteSkillFile(client, msg.Name, msg.Path)
+
+	case "get_agents_md":
+		s.handleGetAgentsMd(client)
+
+	case "save_agents_md":
+		s.handleSaveAgentsMd(client, msg.Content)
+
+	case "reset_agents_md":
+		s.handleResetAgentsMd(client)
+
+	case "list_memory":
+		s.handleListMemory(client)
+
+	case "get_memory":
+		s.handleGetMemory(client, msg.Path)
+
+	case "save_memory":
+		s.handleSaveMemory(client, msg.Path, msg.Content)
+
+	case "delete_memory":
+		s.handleDeleteMemory(client, msg.Path)
 	}
+}
+
+func (s *Server) handleGetAgentsMd(client *Client) {
+	content, err := core.ReadAgentsMd(s.workDir)
+	if err != nil {
+		slog.Error("read AGENTS.md", "error", err)
+		client.Send(Message{Type: "agents_md", Content: "", Msg: err.Error()})
+		return
+	}
+	client.Send(Message{Type: "agents_md", Content: content})
+}
+
+func (s *Server) handleSaveAgentsMd(client *Client, content string) {
+	if err := core.WriteAgentsMd(s.workDir, content); err != nil {
+		slog.Error("write AGENTS.md", "error", err)
+		client.Send(Message{Type: "agents_md", Content: content, Msg: err.Error()})
+		return
+	}
+	slog.Info("AGENTS.md saved")
+	client.Send(Message{Type: "agents_md", Content: content})
+}
+
+func (s *Server) handleResetAgentsMd(client *Client) {
+	if err := core.ResetAgentsMd(s.workDir, s.agentsDefaultPath); err != nil {
+		slog.Error("reset AGENTS.md", "error", err)
+		client.Send(Message{Type: "agents_md", Msg: err.Error()})
+		return
+	}
+	slog.Info("AGENTS.md reset to default")
+	s.handleGetAgentsMd(client)
+}
+
+func (s *Server) handleListMemory(client *Client) {
+	files, err := memory.List(s.memoryDir)
+	if err != nil {
+		slog.Error("list memory", "error", err)
+		return
+	}
+	infos := make([]SkillFile, 0, len(files))
+	for _, f := range files {
+		infos = append(infos, SkillFile{Path: f})
+	}
+	client.Send(Message{Type: "memory_list", Files: infos})
+}
+
+func (s *Server) handleGetMemory(client *Client, path string) {
+	content, err := memory.Read(s.memoryDir, path)
+	if err != nil {
+		slog.Error("read memory", "error", err, "path", path)
+		client.Send(Message{Type: "memory_file", Path: path, Msg: err.Error()})
+		return
+	}
+	client.Send(Message{Type: "memory_file", Path: path, Content: content})
+}
+
+func (s *Server) handleSaveMemory(client *Client, path, content string) {
+	if err := memory.Write(s.memoryDir, path, content); err != nil {
+		slog.Error("write memory", "error", err, "path", path)
+		client.Send(Message{Type: "memory_file", Path: path, Msg: err.Error()})
+		return
+	}
+	slog.Info("memory saved", "path", path)
+	client.Send(Message{Type: "memory_file", Path: path, Content: content})
+	s.handleListMemory(client)
+}
+
+func (s *Server) handleDeleteMemory(client *Client, path string) {
+	if err := memory.Delete(s.memoryDir, path); err != nil {
+		slog.Error("delete memory", "error", err, "path", path)
+		client.Send(Message{Type: "memory_list", Msg: err.Error()})
+		return
+	}
+	slog.Info("memory deleted", "path", path)
+	s.handleListMemory(client)
 }
 
 func (s *Server) handleChat(content string) {

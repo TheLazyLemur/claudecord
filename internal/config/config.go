@@ -46,6 +46,10 @@ type Config struct {
 	// Directory the memory skill stores MEMORY.md and daily logs in. Defaults
 	// to <first AllowedDirs>/claudecord-memory. Must live under AllowedDirs.
 	MemoryDir string
+
+	// Path to the bundled default AGENTS.md, used to seed <ClaudeCWD>/AGENTS.md
+	// when missing. Defaults to /etc/claudecord/AGENTS.md.default.
+	AgentsDefaultPath string
 }
 
 func (c *Config) DiscordEnabled() bool {
@@ -140,6 +144,11 @@ func Load(env map[string]string) (*Config, error) {
 		}
 	}
 
+	agentsDefaultPath := env["AGENTS_DEFAULT_PATH"]
+	if agentsDefaultPath == "" {
+		agentsDefaultPath = "/etc/claudecord/AGENTS.md.default"
+	}
+
 	memoryDir := env["MEMORY_DIR"]
 	if memoryDir == "" {
 		memoryDir = filepath.Join(allowedDirs[0], "claudecord-memory")
@@ -167,6 +176,7 @@ func Load(env map[string]string) (*Config, error) {
 		WhatsAppDBPath:         whatsAppDBPath,
 		WhatsAppMediaDir:       mediaDir,
 		MemoryDir:              memoryDir,
+		AgentsDefaultPath:      agentsDefaultPath,
 	}, nil
 }
 
@@ -199,6 +209,7 @@ func LoadFromEnv() (*Config, error) {
 		"WHATSAPP_MEDIA_DIR":       os.Getenv("WHATSAPP_MEDIA_DIR"),
 		"MODEL":                    os.Getenv("MODEL"),
 		"MEMORY_DIR":               os.Getenv("MEMORY_DIR"),
+		"AGENTS_DEFAULT_PATH":      os.Getenv("AGENTS_DEFAULT_PATH"),
 	}
 	return Load(env)
 }
