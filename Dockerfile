@@ -9,10 +9,25 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /claudecord ./cmd/claudecord
 
 # Runtime stage
-FROM node:20-alpine
+FROM node:24-slim
 
-# Install bash, zsh, git, gh CLI, openssh, and pdftotext (poppler-utils for the pdf-reader skill)
-RUN apk add --no-cache bash zsh git github-cli openssh-client curl jq poppler-utils
+# Install system dependencies:
+# - bash, zsh, git, openssh-client, curl, jq (general tooling)
+# - poppler-utils (pdftotext for pdf-reader skill)
+# - pandoc (docx-reader and link-summarize skills)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       bash zsh git openssh-client curl jq \
+       poppler-utils pandoc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI (gh) — not in default Debian repos, use official apt repo
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Claude CLI globally
 RUN npm install -g @anthropic-ai/claude-code
@@ -25,7 +40,7 @@ RUN mkdir -p /workspace
 WORKDIR /workspace
 
 # Custom entrypoint to symlink config dirs and auth gh
-RUN cat <<'EOF' > /entrypoint.sh
+RUN cat <<'ENTRYPOINT' > /entrypoint.sh
 #!/bin/sh
 mkdir -p /root/.claude/.config
 ln -sf /root/.claude/.config /root/.config
@@ -46,7 +61,7 @@ if [ -n "$GIT_USER_EMAIL" ]; then
 fi
 
 exec claudecord
-EOF
+ENTRYPOINT
 RUN chmod +x /entrypoint.sh
 
 # Default port for webhook server
