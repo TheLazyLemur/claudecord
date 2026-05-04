@@ -81,7 +81,6 @@ func run() error {
 		APIKey:               cfg.APIKey,
 		BaseURL:              cfg.BaseURL,
 		Model:                cfg.Model,
-		AllowedDirs:          cfg.AllowedDirs,
 		DefaultWorkDir:       cfg.ClaudeCWD,
 		SkillStore:           skillStore,
 		MinimaxAPIKey:        cfg.MinimaxAPIKey,
@@ -135,14 +134,6 @@ func run() error {
 		passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPermChecker)
 
 		dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
-
-		dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-			slog.Info("READY event", "user", r.User.Username, "guilds", len(r.Guilds))
-		})
-
-		dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-			slog.Info("RAW message", "content", m.Content, "author", m.Author.Username)
-		})
 
 		if err := dg.Open(); err != nil {
 			return errors.Wrap(err, "opening discord connection")

@@ -240,7 +240,6 @@ type BackendFactory struct {
 	APIKey         string
 	BaseURL        string
 	Model          string
-	AllowedDirs    []string
 	DefaultWorkDir string
 	SkillStore     skills.SkillStore
 	MinimaxAPIKey  string

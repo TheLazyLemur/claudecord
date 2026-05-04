@@ -86,48 +86,6 @@ func TestDiscordResponder_SendUpdate_ReusesThread(t *testing.T) {
 }
 
 
-func TestEmailResponder_SendTyping_Noop(t *testing.T) {
-	a := assert.New(t)
-	client := &MockEmailClient{}
-
-	r := NewEmailResponder(client, "user@example.com", "Re: Hello")
-	err := r.SendTyping()
-
-	a.NoError(err)
-}
-
-func TestEmailResponder_PostResponse_SendsEmail(t *testing.T) {
-	a := assert.New(t)
-	client := &MockEmailClient{}
-	client.On("Send", "user@example.com", "Re: Hello", "Here is my response").Return(nil)
-
-	r := NewEmailResponder(client, "user@example.com", "Re: Hello")
-	err := r.PostResponse("Here is my response")
-
-	a.NoError(err)
-	client.AssertExpectations(t)
-}
-
-func TestEmailResponder_AddReaction_Noop(t *testing.T) {
-	a := assert.New(t)
-	client := &MockEmailClient{}
-
-	r := NewEmailResponder(client, "user@example.com", "Re: Hello")
-	err := r.AddReaction("👍")
-
-	a.NoError(err)
-}
-
-func TestEmailResponder_SendUpdate_Noop(t *testing.T) {
-	a := assert.New(t)
-	client := &MockEmailClient{}
-
-	r := NewEmailResponder(client, "user@example.com", "Re: Hello")
-	err := r.SendUpdate("working on it")
-
-	a.NoError(err)
-}
-
 func TestWhatsAppResponder_SendTyping(t *testing.T) {
 	a := assert.New(t)
 	client := &MockWhatsAppMessenger{}
@@ -218,16 +176,6 @@ func TestChunkMessage_DiscordLimit(t *testing.T) {
 	a.Len(chunks[2], 500)
 }
 
-// MockEmailClient for tests
-type MockEmailClient struct {
-	mock.Mock
-}
-
-func (m *MockEmailClient) Send(to, subject, body string) error {
-	args := m.Called(to, subject, body)
-	return args.Error(0)
-}
-
 // MockDiscordClient for tests
 type MockDiscordClient struct {
 	mock.Mock
@@ -256,11 +204,6 @@ func (m *MockDiscordClient) SendTyping(channelID string) error {
 func (m *MockDiscordClient) AddReaction(channelID, messageID, emoji string) error {
 	args := m.Called(channelID, messageID, emoji)
 	return args.Error(0)
-}
-
-func (m *MockDiscordClient) SendMessageReturningID(channelID, content string) (string, error) {
-	args := m.Called(channelID, content)
-	return args.String(0), args.Error(1)
 }
 
 // MockWhatsAppMessenger for tests

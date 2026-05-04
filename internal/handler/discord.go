@@ -35,14 +35,6 @@ func (c *DiscordClientWrapper) SendMessage(channelID, content string) error {
 	return errors.Wrap(err, "sending message")
 }
 
-func (c *DiscordClientWrapper) SendMessageReturningID(channelID, content string) (string, error) {
-	msg, err := c.session.ChannelMessageSend(channelID, content)
-	if err != nil {
-		return "", errors.Wrap(err, "sending message")
-	}
-	return msg.ID, nil
-}
-
 func (c *DiscordClientWrapper) SendTyping(channelID string) error {
 	return c.session.ChannelTyping(channelID)
 }
@@ -177,7 +169,6 @@ func (h *Handler) OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 			h.buffer.ClearChannel(m.ChannelID)
 		}
 		responder := core.NewDiscordResponder(h.discordClient, m.ChannelID, m.Message.ID)
-		responder.SetUserID(m.Author.ID)
 		if err := h.bot.HandleMessage(responder, msg); err != nil {
 			slog.Error("handling message", "error", err)
 		}

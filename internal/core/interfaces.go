@@ -6,7 +6,6 @@ type PermissionChecker interface {
 
 type DiscordClient interface {
 	SendMessage(channelID, content string) error
-	SendMessageReturningID(channelID, content string) (messageID string, err error)
 	CreateThread(channelID, content string) (threadID string, err error)
 	StartThread(channelID, messageID, name string) (threadID string, err error)
 	SendTyping(channelID string) error
@@ -18,10 +17,6 @@ type Responder interface {
 	PostResponse(content string) error
 	AddReaction(emoji string) error
 	SendUpdate(message string) error
-}
-
-type EmailClient interface {
-	Send(to, subject, body string) error
 }
 
 type WhatsAppMessenger interface {

@@ -162,11 +162,6 @@ func (h *Hub) Sticky() []byte {
 	return h.sticky
 }
 
-// BroadcastRaw sends raw bytes to all clients.
-func (h *Hub) BroadcastRaw(data []byte) {
-	h.broadcast <- data
-}
-
 // readPump pumps messages from WS to hub.
 func (c *Client) readPump(handler func(*Client, Message)) {
 	defer func() {

@@ -22,11 +22,10 @@ type mockResponder struct {
 	updateErr   error
 }
 
-func (m *mockResponder) SendTyping() error                   { return nil }
-func (m *mockResponder) PostResponse(string) error           { return nil }
-func (m *mockResponder) AskPermission(string) (bool, error)  { return false, nil }
-func (m *mockResponder) AddReaction(emoji string) error      { m.reactions = append(m.reactions, emoji); return m.reactionErr }
-func (m *mockResponder) SendUpdate(msg string) error         { m.updates = append(m.updates, msg); return m.updateErr }
+func (m *mockResponder) SendTyping() error              { return nil }
+func (m *mockResponder) PostResponse(string) error      { return nil }
+func (m *mockResponder) AddReaction(emoji string) error { m.reactions = append(m.reactions, emoji); return m.reactionErr }
+func (m *mockResponder) SendUpdate(msg string) error    { m.updates = append(m.updates, msg); return m.updateErr }
 
 type mockSkillStore struct {
 	skills     map[string]string

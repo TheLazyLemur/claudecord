@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
@@ -76,11 +75,6 @@ type WAHandler struct {
 	mediaDir       string
 	buffer         *core.DebouncedBuffer
 	now            func() time.Time
-
-	// senderByChat tracks which sender should receive the bot's reply for a
-	// given chat. Latest wins (set on each enqueue, read on flush).
-	mu           sync.Mutex
-	senderByChat map[string]string
 }
 
 func NewWAHandler(bot BotInterface, allowedSenders []string, client WAClient, mediaDir string) *WAHandler {
@@ -90,7 +84,6 @@ func NewWAHandler(bot BotInterface, allowedSenders []string, client WAClient, me
 		client:         client,
 		mediaDir:       mediaDir,
 		now:            time.Now,
-		senderByChat:   make(map[string]string),
 	}
 	h.buffer = core.NewDebouncedBuffer(DefaultBurstDelay, h.flush)
 	return h
@@ -191,10 +184,6 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 		return
 	}
 
-	h.mu.Lock()
-	h.senderByChat[chatJID] = senderJID
-	h.mu.Unlock()
-
 	h.buffer.Add(core.BufferedMessage{
 		ChannelID:   chatJID,
 		Content:     caption,
@@ -205,14 +194,10 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 
 // flush is the DebouncedBuffer callback: render → dispatch to bot.
 func (h *WAHandler) flush(chatJID string, msgs []core.BufferedMessage) {
-	h.mu.Lock()
-	senderJID := h.senderByChat[chatJID]
-	delete(h.senderByChat, chatJID)
-	h.mu.Unlock()
-
-	if senderJID == "" && len(msgs) > 0 {
-		senderJID = msgs[len(msgs)-1].AuthorID
+	if len(msgs) == 0 {
+		return
 	}
+	senderJID := msgs[len(msgs)-1].AuthorID
 
 	prompt := core.RenderWhatsAppBatch(msgs)
 	if prompt == "" {

@@ -28,7 +28,6 @@ type DiscordResponder struct {
 	channelID string
 	messageID string
 	threadID  string
-	userID    string
 }
 
 func NewDiscordResponder(client DiscordClient, channelID, messageID string) *DiscordResponder {
@@ -64,41 +63,6 @@ func (r *DiscordResponder) SendUpdate(message string) error {
 		r.threadID = tid
 	}
 	return r.client.SendMessage(r.threadID, message)
-}
-
-func (r *DiscordResponder) SetUserID(userID string) {
-	r.userID = userID
-}
-
-// EmailResponder sends responses via email
-type EmailResponder struct {
-	client  EmailClient
-	to      string
-	subject string
-}
-
-func NewEmailResponder(client EmailClient, to, subject string) *EmailResponder {
-	return &EmailResponder{
-		client:  client,
-		to:      to,
-		subject: subject,
-	}
-}
-
-func (r *EmailResponder) SendTyping() error {
-	return nil // no-op for email
-}
-
-func (r *EmailResponder) PostResponse(content string) error {
-	return r.client.Send(r.to, r.subject, content)
-}
-
-func (r *EmailResponder) AddReaction(emoji string) error {
-	return nil // no-op for email
-}
-
-func (r *EmailResponder) SendUpdate(message string) error {
-	return nil // no-op for email
 }
 
 // WhatsAppResponder sends responses via WhatsApp

@@ -13,16 +13,13 @@ import (
 // --- Mocks ---
 
 type mockResponder struct {
-	typingCalled       bool
-	responses          []string
-	reactions          []string
-	updates            []string
-	permissionPrompts  []string
-	postErr            error
-	reactionErr        error
-	updateErr          error
-	askPermissionAllow bool
-	askPermissionErr   error
+	typingCalled bool
+	responses    []string
+	reactions    []string
+	updates      []string
+	postErr      error
+	reactionErr  error
+	updateErr    error
 }
 
 func (m *mockResponder) SendTyping() error {
@@ -43,11 +40,6 @@ func (m *mockResponder) AddReaction(emoji string) error {
 func (m *mockResponder) SendUpdate(message string) error {
 	m.updates = append(m.updates, message)
 	return m.updateErr
-}
-
-func (m *mockResponder) AskPermission(prompt string) (bool, error) {
-	m.permissionPrompts = append(m.permissionPrompts, prompt)
-	return m.askPermissionAllow, m.askPermissionErr
 }
 
 type mockPermissionChecker struct {
