@@ -19,7 +19,14 @@ import (
 
 var _ core.Backend = (*Backend)(nil)
 
-// Backend implements core.Backend using Anthropic API
+// Backend implements core.Backend using Anthropic API.
+//
+// Concurrency: at most one runConversationLoop runs at a time per Backend.
+// While a loop is running, additional Converse calls enqueue their message
+// into the mailbox and return immediately ("steering"). The running loop
+// drains the mailbox after each tool round-trip and at natural exit, so
+// queued messages are picked up before the next API call without aborting
+// the in-flight one.
 type Backend struct {
 	client         anthropic.Client
 	model          string
@@ -31,7 +38,10 @@ type Backend struct {
 	skillStore     skills.SkillStore
 	minimaxAPIKey  string
 	thinkingBudget int
-	mu             sync.Mutex
+
+	mu      sync.Mutex
+	running bool
+	mailbox []string
 }
 
 // NewBackend creates an API backend. workDir is checked for an AGENTS.md
@@ -69,13 +79,89 @@ func (b *Backend) Close() error {
 	return nil
 }
 
-// Converse sends a message and handles the response loop
+// Converse sends a message and handles the response loop. If a loop is
+// already running for this Backend the message is queued and an empty
+// response is returned; the running loop's responder will produce the
+// combined reply.
 func (b *Backend) Converse(ctx context.Context, msg string, responder core.Responder, perms core.PermissionChecker) (string, error) {
+	if !b.claim(msg) {
+		slog.Info("steering message queued", "session", b.sessionID)
+		return "", nil
+	}
+
+	resp, err := b.runConversationLoop(ctx, responder, perms)
+	if err != nil {
+		b.release()
+	}
+	return resp, err
+}
+
+// claim atomically takes ownership of the loop. Returns true if this caller
+// now owns the loop (msg has been appended to history). Returns false if
+// another loop is already running, in which case msg has been added to the
+// mailbox and the caller must return without posting a response.
+func (b *Backend) claim(msg string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.history = append(b.history, anthropic.NewUserMessage(anthropic.NewTextBlock(msg)))
-	return b.runConversationLoop(ctx, responder, perms)
+	if b.running {
+		b.mailbox = append(b.mailbox, msg)
+		return false
+	}
+
+	b.running = true
+	blocks := []anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(msg)}
+	for _, queued := range b.mailbox {
+		blocks = append(blocks, anthropic.NewTextBlock(steeringText(queued)))
+	}
+	b.mailbox = nil
+	b.history = append(b.history, anthropic.NewUserMessage(blocks...))
+	return true
+}
+
+// drainMailbox returns and clears any pending steering messages. Used between
+// tool round-trips, before the next API call. Does not change running.
+func (b *Backend) drainMailbox() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.mailbox) == 0 {
+		return nil
+	}
+	msgs := b.mailbox
+	b.mailbox = nil
+	return msgs
+}
+
+// finishOrContinue is called when the loop would otherwise return. If the
+// mailbox is empty it atomically marks running=false and returns nil. If the
+// mailbox has messages it returns them and the caller must continue the loop;
+// running stays true. The atomicity is what prevents a steering message from
+// being stranded between the loop's exit and the running flag flipping.
+func (b *Backend) finishOrContinue() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.mailbox) == 0 {
+		b.running = false
+		return nil
+	}
+	msgs := b.mailbox
+	b.mailbox = nil
+	return msgs
+}
+
+// release clears the running flag on error paths so a future Converse call
+// can start a new loop. Queued messages are preserved and will be picked up
+// by the next claim().
+func (b *Backend) release() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.running = false
+}
+
+func steeringText(msg string) string {
+	return "<user_steering>" + msg + "</user_steering>"
 }
 
 func (b *Backend) runConversationLoop(ctx context.Context, responder core.Responder, perms core.PermissionChecker) (string, error) {
@@ -98,15 +184,31 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 		b.history = append(b.history, resp.ToParam())
 
 		if len(toolUses) == 0 {
-			return finalResponse, nil
+			steered := b.finishOrContinue()
+			if len(steered) == 0 {
+				return finalResponse, nil
+			}
+			b.history = append(b.history, steeringUserMessage(steered))
+			continue
 		}
 
 		toolResults, err := b.executeTools(ctx, toolUses, responder, perms)
 		if err != nil {
 			return finalResponse, errors.Wrap(err, "tool execution failed")
 		}
+		for _, m := range b.drainMailbox() {
+			toolResults = append(toolResults, anthropic.NewTextBlock(steeringText(m)))
+		}
 		b.history = append(b.history, anthropic.NewUserMessage(toolResults...))
 	}
+}
+
+func steeringUserMessage(msgs []string) anthropic.MessageParam {
+	blocks := make([]anthropic.ContentBlockParamUnion, 0, len(msgs))
+	for _, m := range msgs {
+		blocks = append(blocks, anthropic.NewTextBlock(steeringText(m)))
+	}
+	return anthropic.NewUserMessage(blocks...)
 }
 
 func (b *Backend) buildParams() anthropic.MessageNewParams {

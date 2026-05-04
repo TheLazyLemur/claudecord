@@ -9,11 +9,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Bot orchestrates backend sessions
+// Bot orchestrates backend sessions.
+//
+// mu is an RWMutex so multiple HandleMessage calls can run concurrently
+// (the underlying Backend serializes via its own mailbox / running flag,
+// queueing later messages as steering for the in-flight loop). NewSession
+// takes the write lock so it still waits for all in-flight HandleMessages
+// before swapping the backend.
 type Bot struct {
 	sessions        *SessionManager
 	perms           PermissionChecker
-	mu              sync.Mutex
+	mu              sync.RWMutex
 	converseTimeout time.Duration
 }
 
@@ -28,8 +34,8 @@ func NewBot(sessions *SessionManager, perms PermissionChecker) *Bot {
 
 // HandleMessage processes a message via the backend
 func (b *Bot) HandleMessage(responder Responder, userMessage string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 
 	slog.Info("HandleMessage start", "msg", userMessage)
 	responder.SendTyping()
