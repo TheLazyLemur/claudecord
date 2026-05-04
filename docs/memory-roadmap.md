@@ -108,7 +108,33 @@ get appended to `MEMORY.md`; the run is summarised in `DREAMS.md`.
 Human-readable audit of consolidation runs: timestamp, candidates
 considered, what was promoted, why. Skip until #2 ships.
 
-### 4. Semantic search (LOW leverage at current scale, HIGH effort)
+### 4. Transcript persistence + transcript-fed dreaming (HIGH leverage, HIGH effort)
+
+Daily logs only capture what the model thought to write down via
+`note.sh`. Persisting full session transcripts and feeding them into
+consolidation catches misses where a fact was clearly established in the
+conversation but never noted at the time. Mirrors OpenClaw's optional
+transcript ingestion (`sessions/*.jsonl`).
+
+- **Persistence:** every user/assistant turn and tool call written to
+  `MEMORY_DIR/transcripts/<session-id>.jsonl` as the conversation
+  progresses. Append-only, one file per session, redacted at write time
+  (strip secrets / API keys / etc.).
+- **Consolidation upgrade:** after daily-log consolidation has run,
+  optionally feed the in-window transcripts into a second pass.
+  Dedupe candidates against what daily-log consolidation already
+  promoted (Jaccard ≥ 0.9, OpenClaw-style).
+- **Cost knobs:** transcript-fed dreaming is opt-in
+  (`MEMORY_DREAM_TRANSCRIPTS=1`), runs less frequently than the daily
+  pass (e.g. weekly), and can be capped to last N days of transcripts
+  to bound token spend.
+- **Trade-off:** much higher token cost per run (10–100x), but catches
+  facts the model failed to note. Ship only after #2 has run for long
+  enough to know whether note discipline is the bottleneck.
+- **Storage:** rotate / cap transcripts at e.g. 90 days; older ones
+  archived or deleted on a schedule.
+
+### 5. Semantic search (LOW leverage at current scale, HIGH effort)
 
 Out of scope until `MEMORY.md` exceeds ~500 entries or you start missing
 facts you know are stored. When that happens, candidate stacks:
@@ -125,9 +151,10 @@ SQLite-vec.
 
 ## Suggested order
 
-1. Pre-`/new-session` flush — its own PR. Smallest possible change with
-   visible win.
-2. Consolidation: dashboard button first, ticker second. Same PR or two,
-   author's call.
-3. `DREAMS.md` ships inside the consolidation PR.
+1. ✅ Pre-`/new-session` flush — shipped (#20).
+2. Daily-log consolidation: dashboard button first, ticker second. Same
+   PR or two, author's call. `DREAMS.md` ships inside this PR.
+3. Transcript persistence + transcript-fed dreaming — only after #2
+   has run long enough to know whether note discipline is the
+   bottleneck.
 4. Semantic search only when grep starts to bite.
