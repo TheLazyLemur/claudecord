@@ -16,11 +16,16 @@ FROM node:24-slim
 # - bash, zsh, git, openssh-client, curl, jq (general tooling)
 # - poppler-utils (pdftotext for pdf-reader skill)
 # - pandoc (docx-reader and link-summarize skills)
+# - chromium runtime libs + fonts (Playwright headless Chromium for PDF/render skills)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates \
        bash zsh git openssh-client curl jq \
        poppler-utils pandoc \
+       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+       libdrm2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+       libgbm1 libxkbcommon0 libpango-1.0-0 libcairo2 libasound2 \
+       fonts-liberation fonts-noto-color-emoji \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
