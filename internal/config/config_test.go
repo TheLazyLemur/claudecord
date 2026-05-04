@@ -10,10 +10,10 @@ import (
 
 func validDiscordEnv() map[string]string {
 	return map[string]string{
-		"DISCORD_TOKEN":   "mytoken",
-		"ALLOWED_DIRS":    "/home/user",
-		"ALLOWED_USERS":   "123",
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user",
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_API_KEY": "sk-test",
 	}
 }
 
@@ -22,7 +22,7 @@ func validWhatsAppEnv() map[string]string {
 	return map[string]string{
 		"WHATSAPP_ALLOWED_SENDERS": "123456@lid",
 		"ALLOWED_DIRS":             dir,
-		"CLAUDECORD_MODE":          "cli",
+		"CLAUDECORD_API_KEY":       "sk-test",
 		"WHATSAPP_MEDIA_DIR":       dir + "/media",
 	}
 }
@@ -39,8 +39,8 @@ func mustTempMediaDir() string {
 
 func TestLoad_RequiresAtLeastOnePlatform(t *testing.T) {
 	_, err := Load(map[string]string{
-		"ALLOWED_DIRS":    "/tmp",
-		"CLAUDECORD_MODE": "cli",
+		"ALLOWED_DIRS":       "/tmp",
+		"CLAUDECORD_API_KEY": "sk-test",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one platform")
@@ -74,9 +74,9 @@ func TestLoad_BothPlatformsSuccess(t *testing.T) {
 
 func TestLoad_DiscordRequiresAllowedUsers(t *testing.T) {
 	_, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "token",
-		"ALLOWED_DIRS":    "/tmp",
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "token",
+		"ALLOWED_DIRS":       "/tmp",
+		"CLAUDECORD_API_KEY": "sk-test",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ALLOWED_USERS required")
@@ -84,10 +84,10 @@ func TestLoad_DiscordRequiresAllowedUsers(t *testing.T) {
 
 func TestLoad_DiscordValidatesAllowedUsersNumeric(t *testing.T) {
 	_, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "token",
-		"ALLOWED_DIRS":    "/tmp",
-		"ALLOWED_USERS":   "notanumber",
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "token",
+		"ALLOWED_DIRS":       "/tmp",
+		"ALLOWED_USERS":      "notanumber",
+		"CLAUDECORD_API_KEY": "sk-test",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be numeric")
@@ -140,23 +140,22 @@ func TestLoad_RequiresAllowedDirs(t *testing.T) {
 	assert.Contains(t, err.Error(), "ALLOWED_DIRS required")
 }
 
-func TestLoad_DefaultsToAPIMode(t *testing.T) {
-	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
+func TestLoad_RequiresAPIKey(t *testing.T) {
+	_, err := Load(map[string]string{
+		"DISCORD_TOKEN": "token",
+		"ALLOWED_DIRS":  "/tmp",
+		"ALLOWED_USERS": "123",
 	})
-	require.NoError(t, err)
-	assert.Equal(t, ModeAPI, cfg.Mode)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CLAUDECORD_API_KEY required")
 }
 
-func TestLoad_CLIModeSuccess(t *testing.T) {
+func TestLoad_Success(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "mytoken",
-		"ALLOWED_DIRS":    "/home/user, /tmp",
-		"ALLOWED_USERS":   "123, 456",
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user, /tmp",
+		"ALLOWED_USERS":      "123, 456",
+		"CLAUDECORD_API_KEY": "sk-test-key",
 	})
 	require.NoError(t, err)
 
@@ -164,39 +163,14 @@ func TestLoad_CLIModeSuccess(t *testing.T) {
 	assert.Equal(t, []string{"/home/user", "/tmp"}, cfg.AllowedDirs)
 	assert.Equal(t, []string{"123", "456"}, cfg.AllowedUsers)
 	assert.Equal(t, "/home/user", cfg.ClaudeCWD)
-	assert.Equal(t, ModeCLI, cfg.Mode)
-}
-
-func TestLoad_APIModeRequiresAPIKey(t *testing.T) {
-	_, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "token",
-		"ALLOWED_DIRS":    "/tmp",
-		"ALLOWED_USERS":   "123",
-		"CLAUDECORD_MODE": "api",
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "CLAUDECORD_API_KEY required")
-}
-
-func TestLoad_APIModeSuccess(t *testing.T) {
-	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_MODE":    "api",
-		"CLAUDECORD_API_KEY": "sk-test-key",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, ModeAPI, cfg.Mode)
 	assert.Equal(t, "sk-test-key", cfg.APIKey)
 }
 
-func TestLoad_APIModeWithBaseURL(t *testing.T) {
+func TestLoad_BaseURLSet(t *testing.T) {
 	cfg, err := Load(map[string]string{
 		"DISCORD_TOKEN":       "mytoken",
 		"ALLOWED_DIRS":        "/home/user",
 		"ALLOWED_USERS":       "123",
-		"CLAUDECORD_MODE":     "api",
 		"CLAUDECORD_API_KEY":  "sk-test-key",
 		"CLAUDECORD_BASE_URL": "https://proxy.example.com",
 		"MODEL":               "kimi-k2.6",
@@ -205,24 +179,13 @@ func TestLoad_APIModeWithBaseURL(t *testing.T) {
 	assert.Equal(t, "https://proxy.example.com", cfg.BaseURL)
 }
 
-func TestLoad_InvalidMode(t *testing.T) {
-	_, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "token",
-		"ALLOWED_DIRS":    "/tmp",
-		"ALLOWED_USERS":   "123",
-		"CLAUDECORD_MODE": "invalid",
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid CLAUDECORD_MODE")
-}
-
 func TestLoad_ClaudeCWDOverride(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "mytoken",
-		"ALLOWED_DIRS":    "/home/user",
-		"ALLOWED_USERS":   "123",
-		"CLAUDE_CWD":      "/custom/path",
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user",
+		"ALLOWED_USERS":      "123",
+		"CLAUDE_CWD":         "/custom/path",
+		"CLAUDECORD_API_KEY": "sk-test",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/path", cfg.ClaudeCWD)
@@ -233,7 +196,7 @@ func TestLoad_DashboardPassword(t *testing.T) {
 		"DISCORD_TOKEN":      "mytoken",
 		"ALLOWED_DIRS":       "/home/user",
 		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_MODE":    "cli",
+		"CLAUDECORD_API_KEY": "sk-test",
 		"DASHBOARD_PASSWORD": "secret123",
 	})
 	require.NoError(t, err)
@@ -242,10 +205,10 @@ func TestLoad_DashboardPassword(t *testing.T) {
 
 func TestLoad_DashboardPasswordOptional(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "mytoken",
-		"ALLOWED_DIRS":    "/home/user",
-		"ALLOWED_USERS":   "123",
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user",
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_API_KEY": "sk-test",
 	})
 	require.NoError(t, err)
 	assert.Empty(t, cfg.DashboardPassword)
@@ -253,11 +216,11 @@ func TestLoad_DashboardPasswordOptional(t *testing.T) {
 
 func TestLoad_MinimaxAPIKey(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "mytoken",
-		"ALLOWED_DIRS":    "/home/user",
-		"ALLOWED_USERS":   "123",
-		"CLAUDECORD_MODE": "cli",
-		"MINIMAX_API_KEY": "minimax-test-key",
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user",
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_API_KEY": "sk-test",
+		"MINIMAX_API_KEY":    "minimax-test-key",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "minimax-test-key", cfg.MinimaxAPIKey)
@@ -265,10 +228,10 @@ func TestLoad_MinimaxAPIKey(t *testing.T) {
 
 func TestLoad_MinimaxAPIKeyOptional(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":   "mytoken",
-		"ALLOWED_DIRS":    "/home/user",
-		"ALLOWED_USERS":   "123",
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user",
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_API_KEY": "sk-test",
 	})
 	require.NoError(t, err)
 	assert.Empty(t, cfg.MinimaxAPIKey)
@@ -284,8 +247,6 @@ func TestLoad_ModelDefaultsToSonnetWithoutBaseURL(t *testing.T) {
 
 func TestLoad_ModelDefaultsToKimiWhenBaseURLSet(t *testing.T) {
 	env := validDiscordEnv()
-	env["CLAUDECORD_MODE"] = "api"
-	env["CLAUDECORD_API_KEY"] = "sk-test"
 	env["CLAUDECORD_BASE_URL"] = "https://kimi.example.com"
 	cfg, err := Load(env)
 	require.NoError(t, err)
@@ -294,8 +255,6 @@ func TestLoad_ModelDefaultsToKimiWhenBaseURLSet(t *testing.T) {
 
 func TestLoad_ModelExplicitWithBaseURL(t *testing.T) {
 	env := validDiscordEnv()
-	env["CLAUDECORD_MODE"] = "api"
-	env["CLAUDECORD_API_KEY"] = "sk-test"
 	env["CLAUDECORD_BASE_URL"] = "https://kimi.example.com"
 	env["MODEL"] = "kimi-k2.6"
 	cfg, err := Load(env)
@@ -322,7 +281,7 @@ func TestLoad_WhatsAppMediaDirMustBeInsideAllowedDirs(t *testing.T) {
 	env := map[string]string{
 		"WHATSAPP_ALLOWED_SENDERS": "123456@lid",
 		"ALLOWED_DIRS":             dir,
-		"CLAUDECORD_MODE":          "cli",
+		"CLAUDECORD_API_KEY":       "sk-test",
 		"WHATSAPP_MEDIA_DIR":       "/somewhere/else",
 	}
 	_, err := Load(env)
@@ -349,10 +308,10 @@ func TestLoad_WhatsAppMediaDirNotRequiredWhenWhatsAppDisabled(t *testing.T) {
 func TestLoad_MemoryDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":   "tok",
-		"ALLOWED_USERS":   "1",
-		"ALLOWED_DIRS":    dir,
-		"CLAUDECORD_MODE": "cli",
+		"DISCORD_TOKEN":      "tok",
+		"ALLOWED_USERS":      "1",
+		"ALLOWED_DIRS":       dir,
+		"CLAUDECORD_API_KEY": "sk-test",
 	}
 	cfg, err := Load(env)
 	require.NoError(t, err)
@@ -366,11 +325,11 @@ func TestLoad_MemoryDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 func TestLoad_MemoryDirOverride(t *testing.T) {
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":   "tok",
-		"ALLOWED_USERS":   "1",
-		"ALLOWED_DIRS":    dir,
-		"CLAUDECORD_MODE": "cli",
-		"MEMORY_DIR":      dir + "/notes",
+		"DISCORD_TOKEN":      "tok",
+		"ALLOWED_USERS":      "1",
+		"ALLOWED_DIRS":       dir,
+		"CLAUDECORD_API_KEY": "sk-test",
+		"MEMORY_DIR":         dir + "/notes",
 	}
 	cfg, err := Load(env)
 	require.NoError(t, err)
@@ -384,14 +343,13 @@ func TestLoad_MemoryDirOverride(t *testing.T) {
 func TestLoad_MemoryDirMustBeInsideAllowedDirs(t *testing.T) {
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":   "tok",
-		"ALLOWED_USERS":   "1",
-		"ALLOWED_DIRS":    dir,
-		"CLAUDECORD_MODE": "cli",
-		"MEMORY_DIR":      "/somewhere/else",
+		"DISCORD_TOKEN":      "tok",
+		"ALLOWED_USERS":      "1",
+		"ALLOWED_DIRS":       dir,
+		"CLAUDECORD_API_KEY": "sk-test",
+		"MEMORY_DIR":         "/somewhere/else",
 	}
 	_, err := Load(env)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must live under ALLOWED_DIRS")
 }
-

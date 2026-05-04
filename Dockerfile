@@ -9,7 +9,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /claudecord ./cmd/claudecord
 
 # Runtime stage
-FROM node:24-slim
+FROM debian:bookworm-slim
 
 # Install system dependencies:
 # - ca-certificates (TLS trust store for the Go binary, built CGO_ENABLED=0)
@@ -37,9 +37,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude CLI globally
-RUN npm install -g @anthropic-ai/claude-code
-
 # Copy Go binary
 COPY --from=builder /claudecord /usr/local/bin/claudecord
 
@@ -47,13 +44,9 @@ COPY --from=builder /claudecord /usr/local/bin/claudecord
 RUN mkdir -p /workspace
 WORKDIR /workspace
 
-# Custom entrypoint to symlink config dirs and auth gh
+# Custom entrypoint to auth gh and configure git
 RUN cat <<'ENTRYPOINT' > /entrypoint.sh
 #!/bin/sh
-mkdir -p /root/.claude/.config
-ln -sf /root/.claude/.config /root/.config
-ln -sf /root/.claude/.claude.json /root/.claude.json
-
 # Auth gh CLI if GH_TOKEN is set
 if [ -n "$GH_TOKEN" ]; then
   echo "$GH_TOKEN" | gh auth login --with-token
