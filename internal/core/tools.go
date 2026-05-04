@@ -7,36 +7,37 @@ type ToolDef struct {
 	InputSchema map[string]any
 }
 
+// objSchema builds the standard {"type":"object","properties":...,"required":...}
+// JSON-schema wrapper so each tool definition stays readable.
+func objSchema(props map[string]any, required ...string) map[string]any {
+	return map[string]any{
+		"type":       "object",
+		"properties": props,
+		"required":   required,
+	}
+}
+
+// strProp builds a {"type":"string","description":...} property.
+func strProp(desc string) map[string]any {
+	return map[string]any{"type": "string", "description": desc}
+}
+
 // DiscordTools returns tool definitions for Discord interaction
 func DiscordTools() []ToolDef {
 	return []ToolDef{
 		{
 			Name:        "react_emoji",
 			Description: "Add emoji reaction to current Discord message. Call this first when you receive a message.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"emoji": map[string]any{
-						"type":        "string",
-						"description": "Unicode emoji character (e.g. 👀, 👍, 🚀)",
-					},
-				},
-				"required": []string{"emoji"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"emoji": strProp("Unicode emoji character (e.g. 👀, 👍, 🚀)"),
+			}, "emoji"),
 		},
 		{
 			Name:        "send_update",
 			Description: "Send a progress update message to a thread on the original Discord message. Use this to keep the user informed about what you're doing.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"message": map[string]any{
-						"type":        "string",
-						"description": "The update message to send",
-					},
-				},
-				"required": []string{"message"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"message": strProp("The update message to send"),
+			}, "message"),
 		},
 	}
 }
@@ -47,16 +48,9 @@ func ChatTools() []ToolDef {
 		{
 			Name:        "send_update",
 			Description: "Send a progress update message. Use this to keep the user informed about what you're doing.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"message": map[string]any{
-						"type":        "string",
-						"description": "The update message to send",
-					},
-				},
-				"required": []string{"message"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"message": strProp("The update message to send"),
+			}, "message"),
 		},
 	}
 }
@@ -67,72 +61,38 @@ func FileTools() []ToolDef {
 		{
 			Name:        "Read",
 			Description: "Read file contents",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"file_path": map[string]any{
-						"type":        "string",
-						"description": "Absolute path to the file",
-					},
-				},
-				"required": []string{"file_path"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"file_path": strProp("Absolute path to the file"),
+			}, "file_path"),
 		},
 		{
 			Name:        "Bash",
 			Description: "Execute a bash command",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"command": map[string]any{
-						"type":        "string",
-						"description": "The command to execute",
-					},
-				},
-				"required": []string{"command"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"command": strProp("The command to execute"),
+			}, "command"),
 		},
 		{
 			Name:        "Fetch",
 			Description: "Make HTTP request. GET auto-approved, POST/PATCH/DELETE require approval.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"url": map[string]any{
-						"type":        "string",
-						"description": "URL to fetch",
-					},
-					"method": map[string]any{
-						"type":        "string",
-						"enum":        []string{"GET", "POST", "PATCH", "DELETE"},
-						"default":     "GET",
-						"description": "HTTP method",
-					},
-					"body": map[string]any{
-						"type":        "string",
-						"description": "Request body (for POST/PATCH)",
-					},
-					"headers": map[string]any{
-						"type":        "object",
-						"description": "Request headers",
-					},
+			InputSchema: objSchema(map[string]any{
+				"url": strProp("URL to fetch"),
+				"method": map[string]any{
+					"type":        "string",
+					"enum":        []string{"GET", "POST", "PATCH", "DELETE"},
+					"default":     "GET",
+					"description": "HTTP method",
 				},
-				"required": []string{"url"},
-			},
+				"body":    strProp("Request body (for POST/PATCH)"),
+				"headers": map[string]any{"type": "object", "description": "Request headers"},
+			}, "url"),
 		},
 		{
 			Name:        "WebSearch",
 			Description: "Search the web. Returns titles, links, snippets. Use 3-5 keywords.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"query": map[string]any{
-						"type":        "string",
-						"description": "Search query (3-5 keywords)",
-					},
-				},
-				"required": []string{"query"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"query": strProp("Search query (3-5 keywords)"),
+			}, "query"),
 		},
 	}
 }
@@ -143,35 +103,17 @@ func SkillTools() []ToolDef {
 		{
 			Name:        "Skill",
 			Description: "Load a skill's full instructions. Call when task matches a skill description from available_skills.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"name": map[string]any{
-						"type":        "string",
-						"description": "Skill name from available_skills list",
-					},
-				},
-				"required": []string{"name"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"name": strProp("Skill name from available_skills list"),
+			}, "name"),
 		},
 		{
 			Name:        "LoadSkillSupporting",
 			Description: "Load a supporting file from a skill (scripts/, references/, assets/).",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"name": map[string]any{
-						"type":        "string",
-						"description": "Skill name",
-					},
-					"path": map[string]any{
-						"type":        "string",
-						"description": "Relative path within skill (e.g. references/API.md, scripts/run.sh)",
-					},
-				},
-				"required": []string{"name", "path"},
-			},
+			InputSchema: objSchema(map[string]any{
+				"name": strProp("Skill name"),
+				"path": strProp("Relative path within skill (e.g. references/API.md, scripts/run.sh)"),
+			}, "name", "path"),
 		},
 	}
 }
-

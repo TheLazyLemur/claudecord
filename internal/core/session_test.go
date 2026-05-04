@@ -35,7 +35,7 @@ func TestSessionManager_NewSession_CreatesSession(t *testing.T) {
 	factory := &mockBackendFactory{
 		backend: &mockBackend{sessionID: "session-1"},
 	}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 
 	// when
 	err := mgr.NewSession("")
@@ -56,7 +56,7 @@ func TestSessionManager_NewSession_PassesWorkDirToFactory(t *testing.T) {
 	factory := &mockBackendFactory{
 		backend: &mockBackend{sessionID: "session-1"},
 	}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 
 	// when
 	err := mgr.NewSession("/custom/work/dir")
@@ -74,7 +74,7 @@ func TestSessionManager_NewSession_ClosesOldAndCreatesNewWithDifferentWorkDir(t 
 	firstBackend := &mockBackend{sessionID: "session-1"}
 	secondBackend := &mockBackend{sessionID: "session-2"}
 	factory := &mockBackendFactory{backend: firstBackend}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 	r.NoError(mgr.NewSession("/first/dir"))
 	a.Equal("/first/dir", factory.lastWorkDir)
 
@@ -100,7 +100,7 @@ func TestSessionManager_NewSession_ClosesPreviousSession(t *testing.T) {
 	firstBackend := &mockBackend{sessionID: "session-1"}
 	secondBackend := &mockBackend{sessionID: "session-2"}
 	factory := &mockBackendFactory{backend: firstBackend}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 	r.NoError(mgr.NewSession(""))
 
 	factory.backend = secondBackend
@@ -123,7 +123,7 @@ func TestSessionManager_GetOrCreateSession_CreatesIfNone(t *testing.T) {
 	factory := &mockBackendFactory{
 		backend: &mockBackend{sessionID: "auto-created"},
 	}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 
 	// when
 	sess, err := mgr.GetOrCreateSession()
@@ -143,7 +143,7 @@ func TestSessionManager_GetOrCreateSession_ReturnsExisting(t *testing.T) {
 	factory := &mockBackendFactory{
 		backend: &mockBackend{sessionID: "existing"},
 	}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 	r.NoError(mgr.NewSession(""))
 	factory.createCalled = false
 
@@ -160,7 +160,7 @@ func TestSessionManager_GetSession_ReturnsNilIfNone(t *testing.T) {
 	a := assert.New(t)
 
 	// given
-	mgr := NewSessionManager(&mockBackendFactory{})
+	mgr := NewSessionManager(&mockBackendFactory{}, nil)
 
 	// when
 	sess, err := mgr.GetSession()
@@ -177,7 +177,7 @@ func TestSessionManager_Close_ClosesCurrentSession(t *testing.T) {
 	// given
 	backend := &mockBackend{sessionID: "to-close"}
 	factory := &mockBackendFactory{backend: backend}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 	r.NoError(mgr.NewSession(""))
 
 	// when
@@ -192,7 +192,7 @@ func TestSessionManager_Close_ClosesCurrentSession(t *testing.T) {
 
 func TestSessionManager_Close_NoopIfNoSession(t *testing.T) {
 	// given
-	mgr := NewSessionManager(&mockBackendFactory{})
+	mgr := NewSessionManager(&mockBackendFactory{}, nil)
 
 	// when
 	err := mgr.Close()
@@ -206,7 +206,7 @@ func TestSessionManager_NewSession_FactoryError(t *testing.T) {
 
 	// given
 	factory := &mockBackendFactory{err: errors.New("spawn failed")}
-	mgr := NewSessionManager(factory)
+	mgr := NewSessionManager(factory, nil)
 
 	// when
 	err := mgr.NewSession("")
@@ -236,7 +236,7 @@ func TestSessionManager_NewSession_RunsFlushBeforeClose(t *testing.T) {
 		}
 	}
 
-	mgr := NewSessionManagerWithFlush(factory, flushFn)
+	mgr := NewSessionManager(factory, flushFn)
 	r.NoError(mgr.NewSession(""))
 	factory.backend = secondBackend
 
@@ -262,7 +262,7 @@ func TestSessionManager_NewSession_NoFlushOnFirstSession(t *testing.T) {
 	flushFn := func(ctx context.Context, current Backend) {
 		flushCalled = true
 	}
-	mgr := NewSessionManagerWithFlush(factory, flushFn)
+	mgr := NewSessionManager(factory, flushFn)
 
 	// when
 	// ... NewSession is called for the very first time
@@ -281,7 +281,7 @@ func TestSessionManager_NewSession_NilFlushIsNoop(t *testing.T) {
 	first := &mockBackend{sessionID: "first"}
 	second := &mockBackend{sessionID: "second"}
 	factory := &mockBackendFactory{backend: first}
-	mgr := NewSessionManagerWithFlush(factory, nil)
+	mgr := NewSessionManager(factory, nil)
 	r.NoError(mgr.NewSession(""))
 	factory.backend = second
 
@@ -306,7 +306,7 @@ func TestSessionManager_NewSession_FlushPanicDoesNotBlock(t *testing.T) {
 	flushFn := func(ctx context.Context, current Backend) {
 		panic("boom")
 	}
-	mgr := NewSessionManagerWithFlush(factory, flushFn)
+	mgr := NewSessionManager(factory, flushFn)
 	r.NoError(mgr.NewSession(""))
 	factory.backend = second
 

@@ -110,17 +110,17 @@ func run() error {
 	}
 
 	// Create session manager + bot for WA/dashboard (no react_emoji)
-	sessionMgr := core.NewSessionManagerWithFlush(backendFactory, flushFn)
+	sessionMgr := core.NewSessionManager(backendFactory, flushFn)
 	bot := core.NewBot(sessionMgr, waPermChecker)
 	defer sessionMgr.Close()
 
 	// Discord (optional) — separate session manager with react_emoji
 	if cfg.DiscordToken != "" {
-		discordSessionMgr := core.NewSessionManagerWithFlush(discordFactory, flushFn)
+		discordSessionMgr := core.NewSessionManager(discordFactory, flushFn)
 		defer discordSessionMgr.Close()
 		discordBot := core.NewBot(discordSessionMgr, discordPermChecker)
 
-		passiveSessionMgr := core.NewSessionManagerWithFlush(passiveFactory, flushFn)
+		passiveSessionMgr := core.NewSessionManager(passiveFactory, flushFn)
 		defer passiveSessionMgr.Close()
 
 		dg, err := discordgo.New("Bot " + cfg.DiscordToken)

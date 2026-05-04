@@ -21,15 +21,9 @@ type SessionManager struct {
 	flush   FlushFunc
 }
 
-// NewSessionManager creates a session manager with the given backend factory
-func NewSessionManager(factory BackendFactory) *SessionManager {
-	return &SessionManager{factory: factory}
-}
-
-// NewSessionManagerWithFlush creates a session manager that runs the flush
-// func against the outgoing backend before closing it on each NewSession.
-// Pass nil to disable flushing.
-func NewSessionManagerWithFlush(factory BackendFactory, flush FlushFunc) *SessionManager {
+// NewSessionManager creates a session manager. If flush is non-nil it runs
+// against the outgoing backend before it is closed on each NewSession.
+func NewSessionManager(factory BackendFactory, flush FlushFunc) *SessionManager {
 	return &SessionManager{factory: factory, flush: flush}
 }
 

@@ -120,7 +120,7 @@ func TestBot_HandleMessage_SendsTypingIndicator(t *testing.T) {
 	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
 	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// when
@@ -139,7 +139,7 @@ func TestBot_HandleMessage_CallsBackendConverse(t *testing.T) {
 	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
 	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// when
@@ -161,7 +161,7 @@ func TestBot_HandleMessage_PostsResponseFromBackend(t *testing.T) {
 	backend := &botMockBackend{sessionID: "s1", converseResp: "Hello there!"}
 	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// when
@@ -181,7 +181,7 @@ func TestBot_HandleMessage_NoResponseIfEmpty(t *testing.T) {
 	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
 	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// when
@@ -196,7 +196,7 @@ func TestBot_HandleMessage_SessionError(t *testing.T) {
 	// given
 	factory := &botMockFactory{err: errors.New("spawn failed")}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// when
@@ -212,7 +212,7 @@ func TestBot_HandleMessage_ConverseError(t *testing.T) {
 	backend := &botMockBackend{sessionID: "s1", converseErr: errors.New("converse failed")}
 	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// when
@@ -232,7 +232,7 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 	backend2 := &botMockBackend{sessionID: "s2"}
 	factory := &botMockFactory{backend: backend1}
 	perms := &mockPermissionChecker{}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// create initial session
@@ -264,7 +264,7 @@ func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
 	backend2 := &botMockBackend{sessionID: "s2"}
 	factory := &botMockFactory{backend: backend1}
 	perms := &mockPermissionChecker{}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	responder := &mockResponder{}
 
 	// when
@@ -310,7 +310,7 @@ func TestBot_HandleMessage_ConverseTimeout(t *testing.T) {
 	}
 	factory := &botMockFactory{backend: backend}
 	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory), perms)
+	bot := NewBot(NewSessionManager(factory, nil), perms)
 	bot.converseTimeout = 50 * time.Millisecond
 	responder := &mockResponder{}
 

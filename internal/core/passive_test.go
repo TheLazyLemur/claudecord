@@ -123,7 +123,7 @@ func TestPassiveBot_HandleBufferedMessages_NoResponseIfEmpty(t *testing.T) {
 	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{}
 	perms := &mockPassivePermissionChecker{}
-	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
+	bot := NewPassiveBot(NewSessionManager(factory, nil), discord, perms)
 
 	// when
 	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -144,7 +144,7 @@ func TestPassiveBot_HandleBufferedMessages_NoResponseMarker(t *testing.T) {
 	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{}
 	perms := &mockPassivePermissionChecker{}
-	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
+	bot := NewPassiveBot(NewSessionManager(factory, nil), discord, perms)
 
 	// when
 	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -166,7 +166,7 @@ func TestPassiveBot_HandleBufferedMessages_RespondsInThread(t *testing.T) {
 	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{threadID: "thread-1"}
 	perms := &mockPassivePermissionChecker{}
-	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
+	bot := NewPassiveBot(NewSessionManager(factory, nil), discord, perms)
 
 	// when
 	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -192,7 +192,7 @@ func TestPassiveBot_HandleBufferedMessages_CombinesMultipleMessages(t *testing.T
 	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{threadID: "thread-1"}
 	perms := &mockPassivePermissionChecker{}
-	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
+	bot := NewPassiveBot(NewSessionManager(factory, nil), discord, perms)
 
 	// when
 	err := bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -216,7 +216,7 @@ func TestPassiveBot_NewSession_ResetsSession(t *testing.T) {
 	factory := &passiveMockFactory{backend: backend1}
 	discord := &mockDiscordClient{threadID: "thread-1"}
 	perms := &mockPassivePermissionChecker{}
-	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
+	bot := NewPassiveBot(NewSessionManager(factory, nil), discord, perms)
 
 	// trigger session creation
 	_ = bot.HandleBufferedMessages("chan-1", []BufferedMessage{
@@ -259,7 +259,7 @@ func TestPassiveBot_HandleBufferedMessages_ConverseTimeout(t *testing.T) {
 	factory := &passiveMockFactory{backend: backend}
 	discord := &mockDiscordClient{}
 	perms := &mockPassivePermissionChecker{}
-	bot := NewPassiveBot(NewSessionManager(factory), discord, perms)
+	bot := NewPassiveBot(NewSessionManager(factory, nil), discord, perms)
 	bot.converseTimeout = 50 * time.Millisecond
 
 	// when
