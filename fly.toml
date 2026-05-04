@@ -25,9 +25,13 @@ primary_region = 'jnb'
 [deploy]
   strategy = 'immediate'
 
-[mounts]
+[[mounts]]
   source = 'claude_config'
   destination = '/root'
+
+[[mounts]]
+  source = 'workspace'
+  destination = '/workspace'
 
 [[vm]]
   memory = '2gb'
