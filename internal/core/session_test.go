@@ -216,6 +216,112 @@ func TestSessionManager_NewSession_FactoryError(t *testing.T) {
 	a.Contains(err.Error(), "spawn failed")
 }
 
+func TestSessionManager_NewSession_RunsFlushBeforeClose(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a session manager with a flush func and a current backend
+	firstBackend := &mockBackend{sessionID: "session-1"}
+	secondBackend := &mockBackend{sessionID: "session-2"}
+	factory := &mockBackendFactory{backend: firstBackend}
+
+	var flushedBackend Backend
+	var flushedBeforeClose bool
+	flushFn := func(ctx context.Context, current Backend) {
+		flushedBackend = current
+		// closure captures the firstBackend pointer; check closed flag at this moment
+		if mb, ok := current.(*mockBackend); ok {
+			flushedBeforeClose = !mb.closed
+		}
+	}
+
+	mgr := NewSessionManagerWithFlush(factory, flushFn)
+	r.NoError(mgr.NewSession(""))
+	factory.backend = secondBackend
+
+	// when
+	// ... a new session is started
+	r.NoError(mgr.NewSession(""))
+
+	// then
+	// ... the flush func was called against the previous backend before it was closed
+	a.Same(firstBackend, flushedBackend)
+	a.True(flushedBeforeClose, "flush should run before the old backend is closed")
+	a.True(firstBackend.closed)
+}
+
+func TestSessionManager_NewSession_NoFlushOnFirstSession(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a session manager with a flush func and no current backend
+	factory := &mockBackendFactory{backend: &mockBackend{sessionID: "first"}}
+	flushCalled := false
+	flushFn := func(ctx context.Context, current Backend) {
+		flushCalled = true
+	}
+	mgr := NewSessionManagerWithFlush(factory, flushFn)
+
+	// when
+	// ... NewSession is called for the very first time
+	r.NoError(mgr.NewSession(""))
+
+	// then
+	// ... the flush func was not called
+	a.False(flushCalled, "flush should not run on first session")
+}
+
+func TestSessionManager_NewSession_NilFlushIsNoop(t *testing.T) {
+	r := require.New(t)
+
+	// given
+	// ... a session manager constructed without a flush func
+	first := &mockBackend{sessionID: "first"}
+	second := &mockBackend{sessionID: "second"}
+	factory := &mockBackendFactory{backend: first}
+	mgr := NewSessionManagerWithFlush(factory, nil)
+	r.NoError(mgr.NewSession(""))
+	factory.backend = second
+
+	// when
+	// ... NewSession is called again with no flush func
+	err := mgr.NewSession("")
+
+	// then
+	// ... no panic, behaves like the unflushed manager
+	r.NoError(err)
+}
+
+func TestSessionManager_NewSession_FlushPanicDoesNotBlock(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a flush func that panics
+	first := &mockBackend{sessionID: "first"}
+	second := &mockBackend{sessionID: "second"}
+	factory := &mockBackendFactory{backend: first}
+	flushFn := func(ctx context.Context, current Backend) {
+		panic("boom")
+	}
+	mgr := NewSessionManagerWithFlush(factory, flushFn)
+	r.NoError(mgr.NewSession(""))
+	factory.backend = second
+
+	// when
+	// ... NewSession is called and the flush func panics
+	err := mgr.NewSession("")
+
+	// then
+	// ... the panic is recovered and the new session is created
+	r.NoError(err)
+	a.True(first.closed)
+	sess, _ := mgr.GetSession()
+	a.Equal("second", sess.SessionID())
+}
+
 type mockBackendFactory struct {
 	backend      *mockBackend
 	err          error

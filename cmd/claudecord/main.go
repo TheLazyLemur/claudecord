@@ -100,18 +100,26 @@ func run() error {
 	discordPermChecker := core.PermissionChecker(defaultPermChecker)
 	waPermChecker := core.PermissionChecker(defaultPermChecker)
 
+	// Memory flush runs one final agent turn before each /new-session, so
+	// the model can persist durable facts via remember.sh / note.sh. Disable
+	// with MEMORY_FLUSH_DISABLED=1.
+	var flushFn core.FlushFunc
+	if os.Getenv("MEMORY_FLUSH_DISABLED") != "1" {
+		flushFn = core.NewMemoryFlusher(waPermChecker)
+	}
+
 	// Create session manager + bot for WA/dashboard (no react_emoji)
-	sessionMgr := core.NewSessionManager(backendFactory)
+	sessionMgr := core.NewSessionManagerWithFlush(backendFactory, flushFn)
 	bot := core.NewBot(sessionMgr, waPermChecker)
 	defer sessionMgr.Close()
 
 	// Discord (optional) — separate session manager with react_emoji
 	if cfg.DiscordToken != "" {
-		discordSessionMgr := core.NewSessionManager(discordFactory)
+		discordSessionMgr := core.NewSessionManagerWithFlush(discordFactory, flushFn)
 		defer discordSessionMgr.Close()
 		discordBot := core.NewBot(discordSessionMgr, discordPermChecker)
 
-		passiveSessionMgr := core.NewSessionManager(passiveFactory)
+		passiveSessionMgr := core.NewSessionManagerWithFlush(passiveFactory, flushFn)
 		defer passiveSessionMgr.Close()
 
 		dg, err := discordgo.New("Bot " + cfg.DiscordToken)
