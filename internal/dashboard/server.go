@@ -1,30 +1,21 @@
 package dashboard
 
 import (
-	"context"
-	"crypto/rand"
 	"embed"
-	"encoding/hex"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/memory"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 	"github.com/gorilla/websocket"
 )
 
 //go:embed static/*
 var staticFiles embed.FS
-
-const sessionCookieName = "claudecord_session"
 
 // Server handles the dashboard HTTP and WS endpoints.
 type Server struct {
@@ -77,7 +68,6 @@ func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.Permi
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// If no password set, return 403 for all dashboard routes
 	if s.password == "" {
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Dashboard disabled (no password set)", http.StatusForbidden)
@@ -85,14 +75,11 @@ func (s *Server) Handler() http.Handler {
 		return mux
 	}
 
-	// Login routes (no auth required)
 	mux.HandleFunc("/login", s.handleLogin)
 
-	// Static files (protected)
 	staticFS, _ := fs.Sub(staticFiles, "static")
 	mux.Handle("/static/", s.requireAuth(http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))))
 
-	// Index (protected)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -111,7 +98,6 @@ func (s *Server) Handler() http.Handler {
 		w.Write(data)
 	})
 
-	// QR code (protected) — returns current QR or 204
 	mux.HandleFunc("/api/qr", func(w http.ResponseWriter, r *http.Request) {
 		if !s.isAuthenticated(r) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -126,7 +112,6 @@ func (s *Server) Handler() http.Handler {
 		w.Write(data)
 	})
 
-	// WebSocket (protected)
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		if !s.isAuthenticated(r) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -136,81 +121,6 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	return mux
-}
-
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		data, err := staticFiles.ReadFile("static/login.html")
-		if err != nil {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(data)
-		return
-	}
-
-	if r.Method == http.MethodPost {
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
-
-		if r.FormValue("password") != s.password {
-			http.Error(w, "invalid password", http.StatusUnauthorized)
-			return
-		}
-
-		// Generate session token
-		token := s.createSession()
-		http.SetCookie(w, &http.Cookie{
-			Name:     sessionCookieName,
-			Value:    token,
-			Path:     "/",
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-			MaxAge:   86400 * 7, // 7 days
-		})
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-}
-
-func (s *Server) createSession() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	token := hex.EncodeToString(b)
-
-	s.mu.Lock()
-	s.sessions[token] = time.Now()
-	s.mu.Unlock()
-
-	return token
-}
-
-func (s *Server) isAuthenticated(r *http.Request) bool {
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return false
-	}
-
-	s.mu.Lock()
-	_, valid := s.sessions[cookie.Value]
-	s.mu.Unlock()
-
-	return valid
-}
-
-func (s *Server) requireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.isAuthenticated(r) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -230,359 +140,4 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	go client.writePump()
 	go client.readPump(s.handleMessage)
-}
-
-func (s *Server) handleMessage(client *Client, msg Message) {
-	switch msg.Type {
-	case "chat":
-		go s.handleChat(msg.Content)
-
-	case "new_session":
-		go s.handleNewSession(msg.WorkDir)
-
-	case "get_skills":
-		s.handleGetSkills(client)
-
-	case "get_skill":
-		s.handleGetSkill(client, msg.Name)
-
-	case "save_skill":
-		s.handleSaveSkill(client, msg)
-
-	case "delete_skill_file":
-		s.handleDeleteSkillFile(client, msg.Name, msg.Path)
-
-	case "get_agents_md":
-		s.handleGetAgentsMd(client)
-
-	case "save_agents_md":
-		s.handleSaveAgentsMd(client, msg.Content)
-
-	case "reset_agents_md":
-		s.handleResetAgentsMd(client)
-
-	case "list_memory":
-		s.handleListMemory(client)
-
-	case "get_memory":
-		s.handleGetMemory(client, msg.Path)
-
-	case "save_memory":
-		s.handleSaveMemory(client, msg.Path, msg.Content)
-
-	case "delete_memory":
-		s.handleDeleteMemory(client, msg.Path)
-	}
-}
-
-func (s *Server) handleGetAgentsMd(client *Client) {
-	content, err := core.ReadAgentsMd(s.workDir)
-	if err != nil {
-		slog.Error("read AGENTS.md", "error", err)
-		client.Send(Message{Type: "agents_md", Content: "", Msg: err.Error()})
-		return
-	}
-	client.Send(Message{Type: "agents_md", Content: content})
-}
-
-func (s *Server) handleSaveAgentsMd(client *Client, content string) {
-	if err := core.WriteAgentsMd(s.workDir, content); err != nil {
-		slog.Error("write AGENTS.md", "error", err)
-		client.Send(Message{Type: "agents_md", Content: content, Msg: err.Error()})
-		return
-	}
-	slog.Info("AGENTS.md saved")
-	client.Send(Message{Type: "agents_md", Content: content})
-}
-
-func (s *Server) handleResetAgentsMd(client *Client) {
-	if err := core.ResetAgentsMd(s.workDir, s.agentsDefaultPath); err != nil {
-		slog.Error("reset AGENTS.md", "error", err)
-		client.Send(Message{Type: "agents_md", Msg: err.Error()})
-		return
-	}
-	slog.Info("AGENTS.md reset to default")
-	s.handleGetAgentsMd(client)
-}
-
-func (s *Server) handleListMemory(client *Client) {
-	files, err := memory.List(s.memoryDir)
-	if err != nil {
-		slog.Error("list memory", "error", err)
-		return
-	}
-	infos := make([]SkillFile, 0, len(files))
-	for _, f := range files {
-		infos = append(infos, SkillFile{Path: f})
-	}
-	client.Send(Message{Type: "memory_list", Files: infos})
-}
-
-func (s *Server) handleGetMemory(client *Client, path string) {
-	content, err := memory.Read(s.memoryDir, path)
-	if err != nil {
-		slog.Error("read memory", "error", err, "path", path)
-		client.Send(Message{Type: "memory_file", Path: path, Msg: err.Error()})
-		return
-	}
-	client.Send(Message{Type: "memory_file", Path: path, Content: content})
-}
-
-func (s *Server) handleSaveMemory(client *Client, path, content string) {
-	if err := memory.Write(s.memoryDir, path, content); err != nil {
-		slog.Error("write memory", "error", err, "path", path)
-		client.Send(Message{Type: "memory_file", Path: path, Msg: err.Error()})
-		return
-	}
-	slog.Info("memory saved", "path", path)
-	client.Send(Message{Type: "memory_file", Path: path, Content: content})
-	s.handleListMemory(client)
-}
-
-func (s *Server) handleDeleteMemory(client *Client, path string) {
-	if err := memory.Delete(s.memoryDir, path); err != nil {
-		slog.Error("delete memory", "error", err, "path", path)
-		client.Send(Message{Type: "memory_list", Msg: err.Error()})
-		return
-	}
-	slog.Info("memory deleted", "path", path)
-	s.handleListMemory(client)
-}
-
-func (s *Server) handleChat(content string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	backend, err := s.sessionMgr.GetOrCreateSession()
-	if err != nil {
-		slog.Error("get session", "error", err)
-		s.hub.Broadcast(Message{
-			Type:    "chat",
-			Role:    "assistant",
-			Content: "Error: " + err.Error(),
-		})
-		return
-	}
-
-	// Create/update responder for this session
-	if s.responder == nil || s.responder.sessionID != backend.SessionID() {
-		s.responder = NewWSResponder(s.hub, backend.SessionID())
-
-		active := true
-		s.hub.Broadcast(Message{
-			Type:      "session",
-			Active:    &active,
-			SessionID: backend.SessionID(),
-		})
-	}
-
-	responder := s.responder
-
-	// Broadcast user message
-	s.hub.Broadcast(Message{
-		Type:    "chat",
-		Role:    "user",
-		Content: content,
-	})
-
-	// Converse — lock held to prevent handleNewSession from closing backend mid-conversation
-	ctx := context.Background()
-	response, err := backend.Converse(ctx, content, responder, s.permChecker)
-	if err != nil {
-		slog.Error("converse", "error", err)
-		s.hub.Broadcast(Message{
-			Type:    "chat",
-			Role:    "assistant",
-			Content: "Error: " + err.Error(),
-		})
-		return
-	}
-
-	if response != "" {
-		s.hub.Broadcast(Message{
-			Type:      "chat",
-			Role:      "assistant",
-			Content:   response,
-			SessionID: backend.SessionID(),
-		})
-	}
-}
-
-func (s *Server) handleNewSession(workDir string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if err := s.sessionMgr.NewSession(workDir); err != nil {
-		slog.Error("create session", "error", err)
-		s.hub.Broadcast(Message{
-			Type:    "chat",
-			Role:    "assistant",
-			Content: "Error creating session: " + err.Error(),
-		})
-		return
-	}
-
-	backend, _ := s.sessionMgr.GetOrCreateSession()
-	s.responder = NewWSResponder(s.hub, backend.SessionID())
-
-	active := true
-	s.hub.Broadcast(Message{
-		Type:      "session",
-		Active:    &active,
-		SessionID: backend.SessionID(),
-	})
-}
-
-func (s *Server) handleGetSkills(client *Client) {
-	skillList, err := s.skillStore.List()
-	if err != nil {
-		slog.Error("list skills", "error", err)
-		return
-	}
-
-	var infos []SkillInfo
-	for _, sk := range skillList {
-		infos = append(infos, SkillInfo{
-			Name:        sk.Name,
-			Description: sk.Description,
-		})
-	}
-
-	client.Send(Message{
-		Type:   "skills",
-		Skills: infos,
-	})
-}
-
-func (s *Server) handleGetSkill(client *Client, name string) {
-	skill, err := s.skillStore.Load(name)
-	if err != nil {
-		slog.Error("load skill", "error", err, "name", name)
-		return
-	}
-
-	// Get supporting files
-	skillDir := filepath.Join(s.skillsDir, name)
-	var files []SkillFile
-
-	// Walk subdirectories
-	for _, subdir := range []string{"scripts", "references", "assets"} {
-		dir := filepath.Join(skillDir, subdir)
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			files = append(files, SkillFile{
-				Path: filepath.Join(subdir, e.Name()),
-				Size: info.Size(),
-			})
-		}
-	}
-
-	// Full skill content with frontmatter
-	content := formatSkillContent(skill)
-
-	client.Send(Message{
-		Type:    "skill_detail",
-		Name:    name,
-		Content: content,
-		Files:   files,
-	})
-}
-
-func formatSkillContent(skill *skills.Skill) string {
-	return "---\nname: " + skill.Name + "\ndescription: " + skill.Description + "\n---\n" + skill.Instructions
-}
-
-func (s *Server) handleSaveSkill(client *Client, msg Message) {
-	if msg.Name == "" || msg.Content == "" {
-		return
-	}
-
-	// Validate name
-	if strings.Contains(msg.Name, "..") || strings.Contains(msg.Name, "/") {
-		slog.Error("invalid skill name", "name", msg.Name)
-		return
-	}
-
-	skillDir := filepath.Join(s.skillsDir, msg.Name)
-	if err := os.MkdirAll(skillDir, 0755); err != nil {
-		slog.Error("create skill dir", "error", err)
-		return
-	}
-
-	// Write SKILL.md
-	skillPath := filepath.Join(skillDir, "SKILL.md")
-	if err := os.WriteFile(skillPath, []byte(msg.Content), 0644); err != nil {
-		slog.Error("write skill", "error", err)
-		return
-	}
-
-	// Write supporting files
-	for _, f := range msg.Files {
-		if err := validateRelativePath(f.Path); err != nil {
-			continue
-		}
-		filePath := filepath.Join(skillDir, f.Path)
-		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-			continue
-		}
-		if err := os.WriteFile(filePath, []byte(f.Content), 0644); err != nil {
-			slog.Error("write skill file", "error", err, "path", f.Path)
-		}
-	}
-
-	slog.Info("skill saved", "name", msg.Name)
-
-	// Refresh skill list
-	s.handleGetSkills(client)
-}
-
-func (s *Server) handleDeleteSkillFile(client *Client, name, path string) {
-	if name == "" || path == "" {
-		return
-	}
-
-	if err := validateRelativePath(path); err != nil {
-		slog.Error("invalid path", "error", err)
-		return
-	}
-
-	filePath := filepath.Join(s.skillsDir, name, path)
-
-	// Ensure within skill dir
-	absPath, _ := filepath.Abs(filePath)
-	skillDir, _ := filepath.Abs(filepath.Join(s.skillsDir, name))
-	if !strings.HasPrefix(absPath, skillDir+string(filepath.Separator)) {
-		slog.Error("path escape attempt", "path", path)
-		return
-	}
-
-	if err := os.Remove(filePath); err != nil {
-		slog.Error("delete file", "error", err)
-		return
-	}
-
-	slog.Info("skill file deleted", "name", name, "path", path)
-
-	// Refresh skill detail
-	s.handleGetSkill(client, name)
-}
-
-func validateRelativePath(p string) error {
-	if filepath.IsAbs(p) {
-		return os.ErrInvalid
-	}
-	if strings.Contains(p, "..") {
-		return os.ErrInvalid
-	}
-	return nil
 }
