@@ -6,7 +6,7 @@ existing surface (WhatsApp + Discord, inbound media flow, `Read`/`Bash`/
 
 Each skill follows the same shape as `pdf-reader`:
 `internal/skills/builtin/<name>/SKILL.md` plus an optional
-`scripts/*.sh`. Apk additions go in `Dockerfile`.
+`scripts/*.sh`. Debian package additions go in `Dockerfile`.
 
 ## Tier 1 — round out the WhatsApp media flow
 
@@ -18,21 +18,21 @@ tags but currently have no matching skill, so the model finds nothing in
 - **What:** extract plain text from a `.docx` attachment.
 - **Trigger:** `<attachment mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document" .../>`.
 - **Implementation:** `pandoc -f docx -t plain <path>`.
-- **Apk pkg:** `pandoc`.
-- **Cost:** ~80 MB image bloat. High value — Word docs are the most common non-PDF doc family.
+- **Debian pkg:** `pandoc` (already installed in runtime image).
+- **Cost:** zero marginal — already in image. High value — Word docs are the most common non-PDF doc family.
 
 ### xlsx-reader
 - **What:** dump an Excel workbook as CSV (one chunk per sheet).
 - **Trigger:** `<attachment mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" .../>`.
 - **Implementation:** `xlsx2csv -a <path>` (prints all sheets), or `ssconvert <path> /dev/stdout` if pandoc/gnumeric is already in.
-- **Apk pkg:** `xlsx2csv` (Python, ~5 MB) or pull in via `pip install xlsx2csv`. Avoid `gnumeric` — it's huge.
+- **Debian pkg:** `xlsx2csv` (Python, ~5 MB) or pull in via `pip install xlsx2csv`. Avoid `gnumeric` — it's huge.
 - **Cost:** small. High value — invoices, statements, lists.
 
 ### csv-reader
 - **What:** pretty-print a `.csv` so the model sees aligned columns.
 - **Trigger:** `<attachment mime="text/csv" .../>`.
 - **Implementation:** `column -ts, < <path> | head -200` (cap rows so we don't blow the context).
-- **Apk pkg:** none (BusyBox `column` is enough; if not, `util-linux`).
+- **Debian pkg:** `bsdmainutils` or `util-linux` (if `column` not present).
 - **Cost:** trivial. Skip if you don't care — `Read` already returns raw CSV which is usable but ugly.
 
 ## Tier 2 — utilities that play to existing strengths
@@ -41,22 +41,22 @@ tags but currently have no matching skill, so the model finds nothing in
 - **What:** list contents of `.zip`/`.tar.gz`/`.tar` attachments and optionally extract one named file to a temp path so the model can `Read` it.
 - **Trigger:** `<attachment mime="application/zip" .../>` etc.
 - **Implementation:** `unzip -l <path>` / `tar -tzf <path>`; `unzip -p <path> <inner>` to extract one entry.
-- **Apk pkg:** `unzip` (`tar` already present).
+- **Debian pkg:** `unzip` (`tar` already present).
 - **Cost:** small. Useful for code dumps, log bundles, screenshot zips.
 
 ### exif-info
 - **What:** dump EXIF metadata from an image attachment — date, GPS, camera, dimensions.
 - **Trigger:** model decides; useful when the user asks "where was this taken" or "when was this".
 - **Implementation:** `exiftool -j <path>` (JSON output is easy for the model to parse).
-- **Apk pkg:** `exiftool`.
+- **Debian pkg:** `libimage-exiftool-perl`.
 - **Cost:** ~20 MB. Medium value — fills a gap vision can't reliably answer.
 
 ### link-summarize
 - **What:** fetch a URL, convert HTML → clean plain text, hand it back to the model.
 - **Trigger:** user shares a link and asks about it.
-- **Implementation:** `curl -sL <url> | pandoc -f html -t plain` (pandoc reused from docx-reader; piggy-back on the same install).
-- **Apk pkg:** `pandoc` (shared with docx-reader).
-- **Cost:** zero marginal if docx-reader is in. High value — `Fetch` returns raw HTML today which is hard for the model to skim.
+- **Implementation:** `curl -sL <url> | pandoc -f html -t plain` (pandoc already installed).
+- **Debian pkg:** `pandoc` (already in image).
+- **Cost:** zero marginal. High value — `Fetch` returns raw HTML today which is hard for the model to skim.
 
 ## Tier 3 — bigger lifts
 
@@ -71,7 +71,7 @@ These are higher-value but each adds real complexity. Each is opt-in.
   - `scripts/search.sh <chat-jid> <pattern>` → `grep -i <pattern>` over the file.
 - **Storage:** `~/.claudecord/memory/`. Should live on the Fly volume if persistence matters across deploys.
 - **System prompt addendum:** "If the user asks you to remember something, call the `memory` skill with the chat JID. At the start of a conversation, consider reading the chat's memory file for context."
-- **Apk pkg:** none.
+- **Debian pkg:** none.
 - **Cost:** small code, but real product decision — see "Open questions" below.
 
 ### voice-transcribe
@@ -86,7 +86,7 @@ These are higher-value but each adds real complexity. Each is opt-in.
 ### screenshot-url
 - **What:** render a webpage to a PNG so the model can describe a layout, debug a page, or grab a chart from a dashboard.
 - **Implementation:** `chromium --headless --disable-gpu --screenshot=/tmp/out.png --window-size=1280,1600 <url>` then return the path so vision can `Read` it.
-- **Apk pkg:** `chromium`.
+- **Debian pkg:** `chromium`.
 - **Cost:** ~250 MB image bloat, plus chromium needs to start fresh per call (~1–2s overhead). High utility but expensive — only justified if you actually use it.
 
 ## Tier 4 — explicitly skip
@@ -101,7 +101,7 @@ Documented so we don't keep re-evaluating them.
 
 ## Suggested order
 
-1. **docx-reader + link-summarize** in one PR (share the `pandoc` apk install).
+1. **docx-reader + link-summarize** in one PR (pandoc already in image).
 2. **xlsx-reader + csv-reader + archive-peek** in one PR (Office + zip closes most attachments users actually send).
 3. **memory** as its own PR — needs design discussion before code (see open questions).
 4. **exif-info** standalone, small.
