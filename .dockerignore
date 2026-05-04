@@ -1,6 +1,7 @@
 .git
 .gitignore
 *.md
+!AGENTS.md
 docs/
 *_test.go
 .env*
