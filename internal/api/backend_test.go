@@ -102,7 +102,7 @@ func TestEffectiveSystemPrompt_AgentsFileMerged(t *testing.T) {
 	if got == "BASE" {
 		t.Fatalf("expected merged output, got base unchanged")
 	}
-	if !contains(got, "BASE") || !contains(got, "RULES") || !contains(got, "<agents_md>") {
+	if !strings.Contains(got, "BASE") || !strings.Contains(got, "RULES") || !strings.Contains(got, "<agents_md>") {
 		t.Fatalf("expected merged output to contain base, agents body, and tag, got %q", got)
 	}
 }
@@ -115,14 +115,14 @@ func TestEffectiveSystemPrompt_AgentsFileRefreshedPerCall(t *testing.T) {
 	}
 	b := &Backend{systemPrompt: "BASE", workDir: dir}
 	first := b.effectiveSystemPrompt()
-	if !contains(first, "V1") {
+	if !strings.Contains(first, "V1") {
 		t.Fatalf("expected V1 in first call, got %q", first)
 	}
 	if err := os.WriteFile(path, []byte("V2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	second := b.effectiveSystemPrompt()
-	if !contains(second, "V2") || contains(second, "V1") {
+	if !strings.Contains(second, "V2") || strings.Contains(second, "V1") {
 		t.Fatalf("expected V2 (not V1) in second call, got %q", second)
 	}
 }
@@ -326,6 +326,27 @@ func TestSteeringText_WrapsInTag(t *testing.T) {
 	assert.Equal(t, "<user_steering>hello</user_steering>", steeringText("hello"))
 }
 
+func TestBackend_Claim_DropsWhenMailboxAtCap(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	b := &Backend{}
+	r.True(b.claim("first"))
+	for i := 0; i < maxMailbox; i++ {
+		r.False(b.claim("queued"))
+	}
+	r.Len(b.mailbox, maxMailbox)
+
+	// when
+	// ... one more arrives at the cap
+	owned := b.claim("dropped")
+
+	// then
+	// ... it is not queued and the cap is preserved
+	a.False(owned)
+	a.Len(b.mailbox, maxMailbox)
+}
+
 // stubResponder satisfies core.Responder for tests that don't care about the
 // responder's behavior; the loop only needs Converse to drive the API client.
 type stubResponder struct{}
@@ -493,14 +514,4 @@ func writeMessageJSON(w http.ResponseWriter, id, text, stopReason string) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)
-}
-
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
