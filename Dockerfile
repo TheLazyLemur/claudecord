@@ -12,13 +12,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /claudecord ./cmd/claudecord
 FROM node:24-slim
 
 # Install system dependencies:
+# - ca-certificates (TLS trust store for the Go binary, built CGO_ENABLED=0)
 # - bash, zsh, git, openssh-client, curl, jq (general tooling)
 # - poppler-utils (pdftotext for pdf-reader skill)
 # - pandoc (docx-reader and link-summarize skills)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+       ca-certificates \
        bash zsh git openssh-client curl jq \
        poppler-utils pandoc \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI (gh) — not in default Debian repos, use official apt repo
