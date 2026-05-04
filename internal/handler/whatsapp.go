@@ -156,30 +156,10 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 		return
 	}
 
-	var attachments []core.AttachmentRef
-	if att != nil {
-		if len(att.Bytes) > SizeCap(att.MIME) {
-			label := att.OriginalName
-			if label == "" {
-				label = att.MIME
-			}
-			if err := h.client.SendText(chatJID, "skipped (too large): "+label); err != nil {
-				slog.Error("sending size-cap skip notice", "error", err)
-			}
-		} else {
-			path, err := saveAttachment(h.mediaDir, att, h.now())
-			if err != nil {
-				slog.Error("saving whatsapp attachment", "error", err)
-				return
-			}
-			attachments = []core.AttachmentRef{{
-				Path:         path,
-				MIME:         att.MIME,
-				OriginalName: att.OriginalName,
-			}}
-		}
+	attachments, ok := h.materializeAttachment(chatJID, att)
+	if !ok {
+		return
 	}
-
 	if caption == "" && len(attachments) == 0 {
 		return
 	}
@@ -190,6 +170,36 @@ func (h *WAHandler) HandleEvent(evt interface{}) {
 		AuthorID:    senderJID,
 		Attachments: attachments,
 	})
+}
+
+// materializeAttachment saves the decrypted bytes to disk and returns the
+// resulting AttachmentRefs. The bool is false only when the save failed and
+// we should drop the whole event; oversized attachments return (nil, true)
+// after sending the user a "skipped" notice.
+func (h *WAHandler) materializeAttachment(chatJID string, att *Attachment) ([]core.AttachmentRef, bool) {
+	if att == nil {
+		return nil, true
+	}
+	if len(att.Bytes) > SizeCap(att.MIME) {
+		label := att.OriginalName
+		if label == "" {
+			label = att.MIME
+		}
+		if err := h.client.SendText(chatJID, "skipped (too large): "+label); err != nil {
+			slog.Error("sending size-cap skip notice", "error", err)
+		}
+		return nil, true
+	}
+	path, err := saveAttachment(h.mediaDir, att, h.now())
+	if err != nil {
+		slog.Error("saving whatsapp attachment", "error", err)
+		return nil, false
+	}
+	return []core.AttachmentRef{{
+		Path:         path,
+		MIME:         att.MIME,
+		OriginalName: att.OriginalName,
+	}}, true
 }
 
 // flush is the DebouncedBuffer callback: render → dispatch to bot.

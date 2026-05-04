@@ -44,7 +44,7 @@ func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, to
 	return &Backend{
 		client:         client,
 		model:          model,
-		sessionID:      generateSessionID(),
+		sessionID:      "api-" + time.Now().Format("20060102-150405"),
 		history:        []anthropic.MessageParam{},
 		tools:          tools,
 		systemPrompt:   systemPrompt,
@@ -61,10 +61,6 @@ func (b *Backend) effectiveSystemPrompt() string {
 	return core.AppendAgentsContext(b.systemPrompt, core.LoadAgentsContext(b.workDir))
 }
 
-func generateSessionID() string {
-	return "api-" + time.Now().Format("20060102-150405")
-}
-
 func (b *Backend) SessionID() string {
 	return b.sessionID
 }
@@ -78,9 +74,7 @@ func (b *Backend) Converse(ctx context.Context, msg string, responder core.Respo
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Add user message to history
 	b.history = append(b.history, anthropic.NewUserMessage(anthropic.NewTextBlock(msg)))
-
 	return b.runConversationLoop(ctx, responder, perms)
 }
 
@@ -88,13 +82,12 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 	var finalResponse string
 
 	for {
-		resp, err := b.callAPI(ctx)
+		resp, err := b.client.Messages.New(ctx, b.buildParams())
 		if err != nil {
 			return finalResponse, errors.Wrap(err, "API call failed")
 		}
 
-		// Extract text response
-		text := extractTextFromResponse(resp)
+		text, toolUses := splitContent(resp)
 		if text != "" {
 			if finalResponse != "" {
 				finalResponse += "\n"
@@ -102,29 +95,17 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 			finalResponse += text
 		}
 
-		// Add assistant message to history
 		b.history = append(b.history, resp.ToParam())
 
-		// Check for tool use
-		toolUses := extractToolUses(resp)
 		if len(toolUses) == 0 {
-			// No tools, we're done
 			return finalResponse, nil
 		}
 
-		// Execute tools
-		toolResults, err := b.executeTools(ctx, toolUses, responder, perms, b.skillStore, b.minimaxAPIKey)
+		toolResults, err := b.executeTools(ctx, toolUses, responder, perms)
 		if err != nil {
 			return finalResponse, errors.Wrap(err, "tool execution failed")
 		}
-
-		// Add tool results to history
 		b.history = append(b.history, anthropic.NewUserMessage(toolResults...))
-
-		// Check stop reason
-		if resp.StopReason == "end_turn" {
-			return finalResponse, nil
-		}
 	}
 }
 
@@ -156,32 +137,21 @@ func (b *Backend) buildParams() anthropic.MessageNewParams {
 	return params
 }
 
-func (b *Backend) callAPI(ctx context.Context) (*anthropic.Message, error) {
-	return b.client.Messages.New(ctx, b.buildParams())
-}
-
-func extractTextFromResponse(resp *anthropic.Message) string {
-	var text string
+// splitContent walks resp.Content once and separates the text we surface
+// to the user from the tool_use blocks we must execute next turn.
+func splitContent(resp *anthropic.Message) (text string, tools []anthropic.ToolUseBlock) {
 	for _, block := range resp.Content {
-		switch b := block.AsAny().(type) {
+		switch v := block.AsAny().(type) {
 		case anthropic.TextBlock:
-			text += b.Text
+			text += v.Text
+		case anthropic.ToolUseBlock:
+			tools = append(tools, v)
 		}
 	}
-	return text
+	return
 }
 
-func extractToolUses(resp *anthropic.Message) []anthropic.ToolUseBlock {
-	var tools []anthropic.ToolUseBlock
-	for _, block := range resp.Content {
-		if tu, ok := block.AsAny().(anthropic.ToolUseBlock); ok {
-			tools = append(tools, tu)
-		}
-	}
-	return tools
-}
-
-func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, responder core.Responder, perms core.PermissionChecker, store skills.SkillStore, minimaxAPIKey string) ([]anthropic.ContentBlockParamUnion, error) {
+func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, responder core.Responder, perms core.PermissionChecker) ([]anthropic.ContentBlockParamUnion, error) {
 	var results []anthropic.ContentBlockParamUnion
 
 	for _, tu := range toolUses {
@@ -199,7 +169,7 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 			continue
 		}
 
-		deps := tools.Deps{Responder: responder, SkillStore: store, MinimaxAPIKey: minimaxAPIKey}
+		deps := tools.Deps{Responder: responder, SkillStore: b.skillStore, MinimaxAPIKey: b.minimaxAPIKey}
 		result, isError := tools.Execute(tu.Name, input, deps)
 		results = append(results, buildToolResultBlock(tu.ID, result, isError))
 	}
