@@ -49,8 +49,8 @@ OpenClaw-style persistent memory layered on plain Markdown files under `MEMORY_D
 
 - `MEMORY.md` — durable curated facts; one bullet per line, dated.
 - `daily/YYYY-MM-DD.md` — running daily logs; appended freely.
-- Scripts: `read.sh` (loads MEMORY.md + today + yesterday), `remember.sh` (append durable fact, dedupes), `note.sh` (append timestamped daily note), `search.sh <pattern>` (case-insensitive grep across all files), `get.sh <rel-path> [start] [end]` (read a file or line range).
-- The model decides what to commit; the SKILL.md tells it to call `read.sh` at the start of each conversation, `remember.sh` for durable facts, `note.sh` for tactical context, and `search.sh` before claiming it doesn't know.
+- Scripts: `list.sh` (every file under MEMORY_DIR with sizes), `read.sh` (loads MEMORY.md + today + yesterday), `remember.sh` (append durable fact, dedupes), `note.sh` (append timestamped daily note), `search.sh <pattern>` (case-insensitive grep across all files), `get.sh <rel-path> [start] [end]` (read a file or line range).
+- The model decides what to commit; the SKILL.md tells it to call `list.sh` + `read.sh` at the start of each conversation, `get.sh` for files surfaced by `list.sh` that `read.sh` doesn't auto-load (e.g. dashboard-added notes), `remember.sh` for durable facts, `note.sh` for tactical context, and `search.sh` before claiming it doesn't know.
 - No semantic search, no embeddings, no eviction — matches OpenClaw's default behaviour. Add a plugin if you want recall guarantees.
 
 ## AGENTS.md context
