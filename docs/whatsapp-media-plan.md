@@ -246,8 +246,7 @@ Files: `cmd/claudecord/main.go`.
 26. Plumb `cfg.WhatsAppMediaDir` and a download capability from the
     `whatsmeow.Client` into `NewWhatsAppClientWrapper` and
     `NewWAHandler`.
-27. Plumb `cfg.Model` into both `cli.BackendFactory` (no-op) and
-    `api.BackendFactory`.
+27. Plumb `cfg.Model` into `api.BackendFactory`.
 28. Wrap the WA permission checker with the media-aware carve-out from
     Phase 6.
 29. Update `CLAUDE.md`:

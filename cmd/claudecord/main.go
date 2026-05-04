@@ -13,7 +13,6 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/TheLazyLemur/claudecord/internal/api"
-	"github.com/TheLazyLemur/claudecord/internal/cli"
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/dashboard"
@@ -26,8 +25,6 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 )
-
-const initTimeout = 30 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -57,7 +54,7 @@ func run() error {
 	broadcastHandler := dashboard.NewBroadcastHandler(hub, baseHandler)
 	slog.SetDefault(slog.New(broadcastHandler))
 
-	slog.Info("starting", "mode", cfg.Mode)
+	slog.Info("starting")
 
 	// Initialize skills
 	skillsDir, err := skills.DefaultSkillsDir()
@@ -71,44 +68,25 @@ func run() error {
 	skillList, _ := skillStore.List()
 	slog.Info("skills loaded", "count", len(skillList))
 
-	// Create backend factories based on mode
-	// discordFactory includes react_emoji tool; backendFactory (WA/dashboard) does not
-	var backendFactory core.BackendFactory
-	var discordFactory core.BackendFactory
-	var passiveFactory core.BackendFactory
-
-	switch cfg.Mode {
-	case config.ModeCLI:
-		base := cli.BackendFactory{
-			DefaultWorkDir: cfg.ClaudeCWD,
-			AllowedDirs:    cfg.AllowedDirs,
-			InitTimeout:    initTimeout,
-			SkillStore:     skillStore,
-		}
-		passive := base
-		passive.Passive = true
-		backendFactory = &base
-		discordFactory = &base
-		passiveFactory = &passive
-	case config.ModeAPI:
-		base := api.BackendFactory{
-			APIKey:          cfg.APIKey,
-			BaseURL:         cfg.BaseURL,
-			Model:           cfg.Model,
-			AllowedDirs:     cfg.AllowedDirs,
-			DefaultWorkDir:  cfg.ClaudeCWD,
-			SkillStore:      skillStore,
-			MinimaxAPIKey:   cfg.MinimaxAPIKey,
-			WhatsAppEnabled: cfg.WhatsAppEnabled(),
-		}
-		discord := base
-		discord.Discord = true
-		passive := base
-		passive.Passive = true
-		backendFactory = &base
-		discordFactory = &discord
-		passiveFactory = &passive
+	// Create backend factories.
+	// discordFactory includes react_emoji tool; backendFactory (WA/dashboard) does not.
+	base := api.BackendFactory{
+		APIKey:          cfg.APIKey,
+		BaseURL:         cfg.BaseURL,
+		Model:           cfg.Model,
+		AllowedDirs:     cfg.AllowedDirs,
+		DefaultWorkDir:  cfg.ClaudeCWD,
+		SkillStore:      skillStore,
+		MinimaxAPIKey:   cfg.MinimaxAPIKey,
+		WhatsAppEnabled: cfg.WhatsAppEnabled(),
 	}
+	discord := base
+	discord.Discord = true
+	passive := base
+	passive.Passive = true
+	backendFactory := core.BackendFactory(&base)
+	discordFactory := core.BackendFactory(&discord)
+	passiveFactory := core.BackendFactory(&passive)
 
 	// Auto-approve everything inside ALLOWED_DIRS for both platforms.
 	// Path containment is the only safety check; no interactive prompts.

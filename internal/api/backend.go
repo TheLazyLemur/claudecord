@@ -239,6 +239,10 @@ type BackendFactory struct {
 var _ core.BackendFactory = (*BackendFactory)(nil)
 
 func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
+	if workDir == "" {
+		workDir = f.DefaultWorkDir
+	}
+
 	opts := []option.RequestOption{
 		option.WithAPIKey(f.APIKey),
 	}
