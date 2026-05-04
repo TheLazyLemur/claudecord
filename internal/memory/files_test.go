@@ -190,3 +190,69 @@ func TestDelete_PathEscapeRejected(t *testing.T) {
 		t.Fatal("expected error for path escape")
 	}
 }
+
+func TestRead_SymlinkEscapeRejected(t *testing.T) {
+	// given
+	// ... a memory dir containing a symlink that points outside the memory dir
+	memoryDir := t.TempDir()
+	outside := t.TempDir()
+	target := filepath.Join(outside, "secret.md")
+	if err := os.WriteFile(target, []byte("SECRET"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(memoryDir, "escape.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	// when
+	// ... Read follows the symlink
+	_, err := Read(memoryDir, "escape.md")
+
+	// then
+	// ... it errors instead of returning the file outside memoryDir
+	if err == nil {
+		t.Fatal("expected error for symlink escape")
+	}
+}
+
+func TestWrite_SymlinkedDirEscapeRejected(t *testing.T) {
+	// given
+	// ... a memory dir containing a directory symlinked outside
+	memoryDir := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(memoryDir, "linked")); err != nil {
+		t.Fatal(err)
+	}
+
+	// when
+	// ... Write tries to create a file under the symlinked subtree
+	err := Write(memoryDir, "linked/secret.md", "x")
+
+	// then
+	// ... it errors
+	if err == nil {
+		t.Fatal("expected error for symlinked-dir escape")
+	}
+}
+
+func TestWrite_NonExistentNestedPathStaysContained(t *testing.T) {
+	// given
+	// ... a memory dir without the nested path yet
+	memoryDir := t.TempDir()
+
+	// when
+	// ... Write creates a deeply nested file
+	if err := Write(memoryDir, "a/b/c.md", "hello"); err != nil {
+		t.Fatal(err)
+	}
+
+	// then
+	// ... the file lives inside memoryDir
+	got, err := os.ReadFile(filepath.Join(memoryDir, "a", "b", "c.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "hello" {
+		t.Fatalf("expected hello, got %q", string(got))
+	}
+}

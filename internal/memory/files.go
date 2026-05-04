@@ -91,16 +91,44 @@ func safePath(memoryDir, relPath string) (string, error) {
 		return "", errors.Errorf("path escape rejected: %q", relPath)
 	}
 	abs := filepath.Join(memoryDir, clean)
-	rootAbs, err := filepath.Abs(memoryDir)
+	rootResolved, err := filepath.EvalSymlinks(memoryDir)
 	if err != nil {
 		return "", err
 	}
-	resolved, err := filepath.Abs(abs)
+	resolved, err := evalSymlinksAllowMissing(abs)
 	if err != nil {
 		return "", err
 	}
-	if resolved != rootAbs && !strings.HasPrefix(resolved, rootAbs+string(filepath.Separator)) {
+	if resolved != rootResolved && !strings.HasPrefix(resolved, rootResolved+string(filepath.Separator)) {
 		return "", errors.Errorf("path escape rejected: %q", relPath)
 	}
 	return abs, nil
+}
+
+// evalSymlinksAllowMissing is filepath.EvalSymlinks but tolerates the leaf
+// (and any nested non-existent suffix) being absent — needed for Write paths
+// that haven't been created yet. The nearest existing ancestor is resolved
+// through symlinks; the missing tail is appended literally so any symlink
+// that escapes the root still gets caught at the ancestor level.
+func evalSymlinksAllowMissing(path string) (string, error) {
+	cur := path
+	var suffix []string
+	for {
+		resolved, err := filepath.EvalSymlinks(cur)
+		if err == nil {
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return resolved, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", err
+		}
+		suffix = append(suffix, filepath.Base(cur))
+		cur = parent
+	}
 }

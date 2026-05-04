@@ -286,10 +286,6 @@ func (s *Server) handleGetAgentsMd(client *Client) {
 }
 
 func (s *Server) handleSaveAgentsMd(client *Client, content string) {
-	if s.workDir == "" {
-		slog.Error("save AGENTS.md: workDir empty")
-		return
-	}
 	if err := core.WriteAgentsMd(s.workDir, content); err != nil {
 		slog.Error("write AGENTS.md", "error", err)
 		client.Send(Message{Type: "agents_md", Content: content, Msg: err.Error()})

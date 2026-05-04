@@ -260,6 +260,47 @@ func TestResetAgentsMd_OverwritesWithDefault(t *testing.T) {
 	}
 }
 
+func TestWriteAgentsMd_EmptyWorkDirErrors(t *testing.T) {
+	// given
+	// ... an empty workDir
+	// when
+	// ... WriteAgentsMd is called
+	err := WriteAgentsMd("", "anything")
+
+	// then
+	// ... it returns an error and writes nothing
+	if err == nil {
+		t.Fatal("expected error for empty workDir")
+	}
+	if _, err := os.Stat(AgentsFileName); err == nil {
+		os.Remove(AgentsFileName)
+		t.Fatal("expected no AGENTS.md in CWD")
+	}
+}
+
+func TestResetAgentsMd_EmptyWorkDirErrors(t *testing.T) {
+	// given
+	// ... an empty workDir and a valid default file
+	defaultPath := filepath.Join(t.TempDir(), "default.md")
+	if err := os.WriteFile(defaultPath, []byte("X"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// when
+	// ... ResetAgentsMd is called
+	err := ResetAgentsMd("", defaultPath)
+
+	// then
+	// ... it returns an error and writes nothing
+	if err == nil {
+		t.Fatal("expected error for empty workDir")
+	}
+	if _, err := os.Stat(AgentsFileName); err == nil {
+		os.Remove(AgentsFileName)
+		t.Fatal("expected no AGENTS.md in CWD")
+	}
+}
+
 func TestResetAgentsMd_MissingDefaultErrors(t *testing.T) {
 	// given
 	// ... a workDir and a default path that doesn't exist

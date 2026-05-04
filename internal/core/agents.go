@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // AgentsFileName is the conventional filename read for context injection.
@@ -65,14 +67,22 @@ func ReadAgentsMd(workDir string) (string, error) {
 	return string(body), nil
 }
 
-// WriteAgentsMd overwrites <workDir>/AGENTS.md with content.
+// WriteAgentsMd overwrites <workDir>/AGENTS.md with content. Errors when
+// workDir is empty so an unconfigured caller doesn't silently write to the
+// process CWD.
 func WriteAgentsMd(workDir, content string) error {
+	if workDir == "" {
+		return errors.New("workDir is empty")
+	}
 	return os.WriteFile(filepath.Join(workDir, AgentsFileName), []byte(content), 0o644)
 }
 
 // ResetAgentsMd overwrites <workDir>/AGENTS.md from defaultPath, even if it
-// already exists. Errors if defaultPath is unreadable.
+// already exists. Errors if workDir is empty or defaultPath is unreadable.
 func ResetAgentsMd(workDir, defaultPath string) error {
+	if workDir == "" {
+		return errors.New("workDir is empty")
+	}
 	body, err := os.ReadFile(defaultPath)
 	if err != nil {
 		return err
