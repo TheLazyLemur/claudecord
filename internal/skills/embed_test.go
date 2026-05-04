@@ -36,6 +36,10 @@ func TestDumpBuiltinSkills(t *testing.T) {
 		sendScript := filepath.Join(dir, "send-email", "scripts", "send.sh")
 		_, err = os.Stat(sendScript)
 		assert.NoError(t, err)
+
+		memoryListScript := filepath.Join(dir, "memory", "scripts", "list.sh")
+		_, err = os.Stat(memoryListScript)
+		assert.NoError(t, err)
 	})
 
 	t.Run("overwrites existing files", func(t *testing.T) {

@@ -18,7 +18,7 @@ Plain Markdown. No DB, no embeddings, no hidden state. The only thing you rememb
 
 ## When to use
 
-- **At the start of any conversation:** run `read.sh` once to load `MEMORY.md` plus today's and yesterday's daily logs into context. Do this before answering anything that might depend on prior knowledge of the user.
+- **At the start of any conversation:** run `list.sh` to see every file under `$MEMORY_DIR`, then run `read.sh` to load `MEMORY.md` plus today's and yesterday's daily logs into context. Anything `list.sh` shows that `read.sh` didn't print is a file you can pull in on demand with `get.sh`. Do this before answering anything that might depend on prior knowledge of the user.
 - **User says "remember X" / "don't forget Y":** call `remember.sh "X"` to write a durable fact to `MEMORY.md`.
 - **You learn something durable on your own** (a stable preference, a project name, a recurring contact, a decision the user made): call `remember.sh` proactively. Be selective — only commit what will still matter in a month.
 - **You learn something tactical** (current task state, what was discussed today, intermediate observations): call `note.sh` to append to today's daily log.
@@ -29,13 +29,21 @@ Plain Markdown. No DB, no embeddings, no hidden state. The only thing you rememb
 
 All scripts read `$MEMORY_DIR` from the environment.
 
+### list.sh
+
+```bash
+bash scripts/list.sh
+```
+
+Prints every file under `$MEMORY_DIR` as `<relative-path>\t<size> bytes`, sorted. Run this at the top of a new conversation alongside `read.sh` so you know what files exist beyond the always-loaded ones (e.g. extra notes the user added through the dashboard). Use the paths it prints with `get.sh` when you need their contents.
+
 ### read.sh
 
 ```bash
 bash scripts/read.sh
 ```
 
-Prints `MEMORY.md`, today's daily log, and yesterday's daily log (when they exist). Always safe to call. Run this once at the top of a new conversation.
+Prints `MEMORY.md`, today's daily log, and yesterday's daily log (when they exist). Always safe to call. Run this once at the top of a new conversation. It does **not** print other files in `$MEMORY_DIR` — use `list.sh` to discover those.
 
 ### remember.sh
 
@@ -69,7 +77,7 @@ bash scripts/get.sh daily/2026-04-30.md
 bash scripts/get.sh daily/2026-04-30.md 1 50
 ```
 
-Prints a specific file (or a line range from it). Use to read older daily logs that `read.sh` doesn't auto-load.
+Prints a specific file (or a line range from it). Use to read older daily logs, or any file surfaced by `list.sh` that `read.sh` doesn't auto-load.
 
 ## Conventions
 
