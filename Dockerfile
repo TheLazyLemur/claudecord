@@ -40,13 +40,14 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # Copy Go binary
 COPY --from=builder /claudecord /usr/local/bin/claudecord
 
-# Create workspace directory
-RUN mkdir -p /workspace
-WORKDIR /workspace
+WORKDIR /root
 
 # Custom entrypoint to auth gh and configure git
 RUN cat <<'ENTRYPOINT' > /entrypoint.sh
 #!/bin/sh
+# Ensure workspace dir exists on the mounted volume
+mkdir -p /root/workspace
+
 # Auth gh CLI if GH_TOKEN is set
 if [ -n "$GH_TOKEN" ]; then
   echo "$GH_TOKEN" | gh auth login --with-token
