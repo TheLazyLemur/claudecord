@@ -9,13 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Bot orchestrates backend sessions.
-//
-// mu is an RWMutex so multiple HandleMessage calls can run concurrently
-// (the underlying Backend serializes via its own mailbox / running flag,
-// queueing later messages as steering for the in-flight loop). NewSession
-// takes the write lock so it still waits for all in-flight HandleMessages
-// before swapping the backend.
 type Bot struct {
 	sessions        *SessionManager
 	perms           PermissionChecker

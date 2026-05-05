@@ -19,14 +19,6 @@ import (
 
 var _ core.Backend = (*Backend)(nil)
 
-// Backend implements core.Backend using Anthropic API.
-//
-// Concurrency: at most one runConversationLoop runs at a time per Backend.
-// While a loop is running, additional Converse calls enqueue their message
-// into the mailbox and return immediately ("steering"). The running loop
-// drains the mailbox after each tool round-trip and at natural exit, so
-// queued messages are picked up before the next API call without aborting
-// the in-flight one.
 type Backend struct {
 	client         anthropic.Client
 	model          string
@@ -79,9 +71,6 @@ func (b *Backend) Close() error {
 	return nil
 }
 
-// maxMailbox bounds in-process queue growth if a misbehaving caller floods
-// the bot while a long tool call is in flight. 64 is well above realistic
-// human typing speeds for the time a tool round-trip takes.
 const maxMailbox = 64
 
 func (b *Backend) Converse(ctx context.Context, msg string, responder core.Responder, perms core.PermissionChecker) (string, error) {
@@ -129,9 +118,6 @@ func (b *Backend) drainMailbox() []string {
 	return msgs
 }
 
-// finishOrContinue atomically picks "exit the loop" or "drain and continue"
-// under b.mu. Doing both under the same lock prevents a steering message
-// from being stranded between drain-empty and running flipping false.
 func (b *Backend) finishOrContinue() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -145,8 +131,6 @@ func (b *Backend) finishOrContinue() []string {
 	return msgs
 }
 
-// release clears running on error paths; queued messages are preserved and
-// picked up by the next claim().
 func (b *Backend) release() {
 	b.mu.Lock()
 	defer b.mu.Unlock()

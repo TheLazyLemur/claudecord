@@ -215,12 +215,8 @@ func TestBackend_Claim_FirstCallerOwnsLoop(t *testing.T) {
 
 	b := &Backend{}
 
-	// when
-	// ... the first claim is made
 	owned := b.claim("hello")
 
-	// then
-	// ... it owns the loop and the message is in history
 	a.True(owned)
 	a.True(b.running)
 	r.Len(b.history, 1)
@@ -234,15 +230,11 @@ func TestBackend_Claim_SecondCallerEnqueues(t *testing.T) {
 	b := &Backend{}
 	r.True(b.claim("first"))
 
-	// when
-	// ... a second claim arrives while running
 	owned := b.claim("steered")
 
-	// then
-	// ... it does NOT own the loop and the message lands in the mailbox
 	a.False(owned)
 	a.True(b.running)
-	r.Len(b.history, 1, "history must not have grown for the steered message")
+	r.Len(b.history, 1)
 	r.Len(b.mailbox, 1)
 	a.Equal("steered", b.mailbox[0])
 }
@@ -256,19 +248,15 @@ func TestBackend_Claim_AfterReleaseWithQueuedMessagesIncludesThemInNewTurn(t *te
 	r.False(b.claim("queued-during-error"))
 	b.release()
 
-	// when
-	// ... a new message arrives after the loop was released without draining
 	owned := b.claim("fresh")
 
-	// then
-	// ... the new turn contains the fresh message AND the previously queued one
 	a.True(owned)
 	a.True(b.running)
-	a.Empty(b.mailbox, "mailbox should be drained")
+	a.Empty(b.mailbox)
 	r.Len(b.history, 2)
 
 	last := b.history[1]
-	r.Len(last.Content, 2, "expected fresh user text + steering wrapper for queued msg")
+	r.Len(last.Content, 2)
 	a.Contains(last.Content[1].OfText.Text, "<user_steering>queued-during-error</user_steering>")
 }
 
@@ -281,13 +269,11 @@ func TestBackend_DrainMailbox_ReturnsAndClears(t *testing.T) {
 	r.False(b.claim("a"))
 	r.False(b.claim("b"))
 
-	// when
 	got := b.drainMailbox()
 
-	// then
 	a.Equal([]string{"a", "b"}, got)
 	a.Empty(b.mailbox)
-	a.True(b.running, "drain must NOT change running")
+	a.True(b.running)
 }
 
 func TestBackend_FinishOrContinue_EmptyMailboxFlipsRunningFalse(t *testing.T) {
@@ -297,12 +283,10 @@ func TestBackend_FinishOrContinue_EmptyMailboxFlipsRunningFalse(t *testing.T) {
 	b := &Backend{}
 	r.True(b.claim("first"))
 
-	// when
 	got := b.finishOrContinue()
 
-	// then
 	a.Nil(got)
-	a.False(b.running, "running must flip to false atomically with the empty drain")
+	a.False(b.running)
 }
 
 func TestBackend_FinishOrContinue_NonEmptyMailboxKeepsRunning(t *testing.T) {
@@ -313,12 +297,10 @@ func TestBackend_FinishOrContinue_NonEmptyMailboxKeepsRunning(t *testing.T) {
 	r.True(b.claim("first"))
 	r.False(b.claim("steered"))
 
-	// when
 	got := b.finishOrContinue()
 
-	// then
 	a.Equal([]string{"steered"}, got)
-	a.True(b.running, "running must stay true so concurrent claims keep enqueuing")
+	a.True(b.running)
 	a.Empty(b.mailbox)
 }
 
@@ -337,33 +319,23 @@ func TestBackend_Claim_DropsWhenMailboxAtCap(t *testing.T) {
 	}
 	r.Len(b.mailbox, maxMailbox)
 
-	// when
-	// ... one more arrives at the cap
 	owned := b.claim("dropped")
 
-	// then
-	// ... it is not queued and the cap is preserved
 	a.False(owned)
 	a.Len(b.mailbox, maxMailbox)
 }
 
-// stubResponder satisfies core.Responder for tests that don't care about the
-// responder's behavior; the loop only needs Converse to drive the API client.
 type stubResponder struct{}
 
-func (stubResponder) SendTyping() error              { return nil }
-func (stubResponder) PostResponse(string) error      { return nil }
-func (stubResponder) AddReaction(string) error       { return nil }
-func (stubResponder) SendUpdate(string) error        { return nil }
+func (stubResponder) SendTyping() error         { return nil }
+func (stubResponder) PostResponse(string) error { return nil }
+func (stubResponder) AddReaction(string) error  { return nil }
+func (stubResponder) SendUpdate(string) error   { return nil }
 
 type allowAllPerms struct{}
 
 func (allowAllPerms) Check(string, core.ToolInput) (bool, string) { return true, "" }
 
-// captureRequestBody reads the inbound request body, returning its bytes
-// (so the test can later assert on it) and replacing the body so the SDK's
-// upstream parsing isn't affected. Httptest reads everything before passing
-// to handler so this is safe.
 func captureRequestBody(r *http.Request) string {
 	body, _ := io.ReadAll(r.Body)
 	r.Body.Close()
@@ -374,10 +346,6 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)
 
-	// Coordination channels:
-	// - firstRequestStarted: server signals it has received request #1.
-	// - releaseFirstRequest: test signals server may complete request #1.
-	// - secondRequestBody: server publishes the captured body of request #2.
 	firstRequestStarted := make(chan struct{})
 	releaseFirstRequest := make(chan struct{})
 	var secondRequestBody string
@@ -420,7 +388,6 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 		history:   []anthropic.MessageParam{},
 	}
 
-	// Goroutine 1: starts the loop. Will block in API call #1.
 	type result struct {
 		resp string
 		err  error
@@ -431,35 +398,29 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 		first <- result{resp, err}
 	}()
 
-	// Wait until request #1 has reached the server (so claim() has set running=true).
 	<-firstRequestStarted
 
-	// Goroutine 2: enqueues steering message. Must return immediately.
 	steerDone := make(chan result, 1)
 	go func() {
 		resp, err := b.Converse(context.Background(), "steer me", stubResponder{}, allowAllPerms{})
 		steerDone <- result{resp, err}
 	}()
 
-	// The steered Converse must return promptly with "" — even though the loop
-	// is still mid-API-call.
 	select {
 	case got := <-steerDone:
 		r.NoError(got.err)
-		a.Equal("", got.resp, "steered Converse must return empty so caller does not double-post")
+		a.Equal("", got.resp)
 	case <-time.After(2 * time.Second):
 		t.Fatal("steered Converse blocked instead of enqueueing")
 	}
 
-	// Now release request #1; the loop's finishOrContinue must see the queued
-	// message and continue into request #2.
 	close(releaseFirstRequest)
 
 	select {
 	case got := <-first:
 		r.NoError(got.err)
 		a.Contains(got.resp, "first reply")
-		a.Contains(got.resp, "second reply", "loop must continue after natural end if mailbox non-empty")
+		a.Contains(got.resp, "second reply")
 	case <-time.After(5 * time.Second):
 		t.Fatal("loop did not finish")
 	}
@@ -468,8 +429,8 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 	body := secondRequestBody
 	bodyMu.Unlock()
 
-	// The SDK's JSON encoder HTML-escapes angle brackets, so search the
-	// decoded structure rather than the raw bytes.
+	// The SDK's JSON encoder HTML-escapes angle brackets, so substring-match
+	// against decoded text rather than the raw body.
 	var decoded struct {
 		Messages []struct {
 			Role    string `json:"role"`
@@ -492,11 +453,9 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 			}
 		}
 	}
-	a.True(found, "second API call must carry the steering text wrapped in the tag; body=%s", body)
+	a.True(found, "body=%s", body)
 }
 
-// writeMessageJSON serializes a minimal anthropic.Message body and writes it.
-// Only the fields the SDK's response parser needs are populated.
 func writeMessageJSON(w http.ResponseWriter, id, text, stopReason string) {
 	payload := map[string]any{
 		"id":   id,
