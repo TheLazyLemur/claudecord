@@ -1,12 +1,22 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/tools"
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,7 +102,7 @@ func TestEffectiveSystemPrompt_AgentsFileMerged(t *testing.T) {
 	if got == "BASE" {
 		t.Fatalf("expected merged output, got base unchanged")
 	}
-	if !contains(got, "BASE") || !contains(got, "RULES") || !contains(got, "<agents_md>") {
+	if !strings.Contains(got, "BASE") || !strings.Contains(got, "RULES") || !strings.Contains(got, "<agents_md>") {
 		t.Fatalf("expected merged output to contain base, agents body, and tag, got %q", got)
 	}
 }
@@ -105,14 +115,14 @@ func TestEffectiveSystemPrompt_AgentsFileRefreshedPerCall(t *testing.T) {
 	}
 	b := &Backend{systemPrompt: "BASE", workDir: dir}
 	first := b.effectiveSystemPrompt()
-	if !contains(first, "V1") {
+	if !strings.Contains(first, "V1") {
 		t.Fatalf("expected V1 in first call, got %q", first)
 	}
 	if err := os.WriteFile(path, []byte("V2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	second := b.effectiveSystemPrompt()
-	if !contains(second, "V2") || contains(second, "V1") {
+	if !strings.Contains(second, "V2") || strings.Contains(second, "V1") {
 		t.Fatalf("expected V2 (not V1) in second call, got %q", second)
 	}
 }
@@ -199,11 +209,268 @@ func TestBackendFactory_Create_FallsBackToDefaultWorkDirWhenEmpty(t *testing.T) 
 	a.Contains(apiBackend.effectiveSystemPrompt(), "RULES")
 }
 
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
+func TestBackend_Claim_FirstCallerOwnsLoop(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	b := &Backend{}
+
+	owned := b.claim("hello")
+
+	a.True(owned)
+	a.True(b.running)
+	r.Len(b.history, 1)
+	a.Empty(b.mailbox)
+}
+
+func TestBackend_Claim_SecondCallerEnqueues(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	b := &Backend{}
+	r.True(b.claim("first"))
+
+	owned := b.claim("steered")
+
+	a.False(owned)
+	a.True(b.running)
+	r.Len(b.history, 1)
+	r.Len(b.mailbox, 1)
+	a.Equal("steered", b.mailbox[0])
+}
+
+func TestBackend_Claim_AfterReleaseWithQueuedMessagesIncludesThemInNewTurn(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	b := &Backend{}
+	r.True(b.claim("first"))
+	r.False(b.claim("queued-during-error"))
+	b.release()
+
+	owned := b.claim("fresh")
+
+	a.True(owned)
+	a.True(b.running)
+	a.Empty(b.mailbox)
+	r.Len(b.history, 2)
+
+	last := b.history[1]
+	r.Len(last.Content, 2)
+	a.Contains(last.Content[1].OfText.Text, "<user_steering>queued-during-error</user_steering>")
+}
+
+func TestBackend_DrainMailbox_ReturnsAndClears(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	b := &Backend{}
+	r.True(b.claim("first"))
+	r.False(b.claim("a"))
+	r.False(b.claim("b"))
+
+	got := b.drainMailbox()
+
+	a.Equal([]string{"a", "b"}, got)
+	a.Empty(b.mailbox)
+	a.True(b.running)
+}
+
+func TestBackend_FinishOrContinue_EmptyMailboxFlipsRunningFalse(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	b := &Backend{}
+	r.True(b.claim("first"))
+
+	got := b.finishOrContinue()
+
+	a.Nil(got)
+	a.False(b.running)
+}
+
+func TestBackend_FinishOrContinue_NonEmptyMailboxKeepsRunning(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	b := &Backend{}
+	r.True(b.claim("first"))
+	r.False(b.claim("steered"))
+
+	got := b.finishOrContinue()
+
+	a.Equal([]string{"steered"}, got)
+	a.True(b.running)
+	a.Empty(b.mailbox)
+}
+
+func TestSteeringText_WrapsInTag(t *testing.T) {
+	assert.Equal(t, "<user_steering>hello</user_steering>", steeringText("hello"))
+}
+
+func TestBackend_Claim_DropsWhenMailboxAtCap(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	b := &Backend{}
+	r.True(b.claim("first"))
+	for i := 0; i < maxMailbox; i++ {
+		r.False(b.claim("queued"))
+	}
+	r.Len(b.mailbox, maxMailbox)
+
+	owned := b.claim("dropped")
+
+	a.False(owned)
+	a.Len(b.mailbox, maxMailbox)
+}
+
+type stubResponder struct{}
+
+func (stubResponder) SendTyping() error         { return nil }
+func (stubResponder) PostResponse(string) error { return nil }
+func (stubResponder) AddReaction(string) error  { return nil }
+func (stubResponder) SendUpdate(string) error   { return nil }
+
+type allowAllPerms struct{}
+
+func (allowAllPerms) Check(string, core.ToolInput) (bool, string) { return true, "" }
+
+func captureRequestBody(r *http.Request) string {
+	body, _ := io.ReadAll(r.Body)
+	r.Body.Close()
+	return string(body)
+}
+
+func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	firstRequestStarted := make(chan struct{})
+	releaseFirstRequest := make(chan struct{})
+	var secondRequestBody string
+	var bodyMu sync.Mutex
+
+	var requestCount int
+	var reqMu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		reqMu.Lock()
+		requestCount++
+		n := requestCount
+		reqMu.Unlock()
+
+		switch n {
+		case 1:
+			close(firstRequestStarted)
+			<-releaseFirstRequest
+			writeMessageJSON(w, "msg_1", "first reply", "end_turn")
+		case 2:
+			body := captureRequestBody(req)
+			bodyMu.Lock()
+			secondRequestBody = body
+			bodyMu.Unlock()
+			writeMessageJSON(w, "msg_2", "second reply", "end_turn")
+		default:
+			http.Error(w, "unexpected extra request", http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	client := anthropic.NewClient(
+		option.WithAPIKey("test"),
+		option.WithBaseURL(server.URL),
+	)
+	b := &Backend{
+		client:    client,
+		model:     "test-model",
+		sessionID: "test",
+		history:   []anthropic.MessageParam{},
+	}
+
+	type result struct {
+		resp string
+		err  error
+	}
+	first := make(chan result, 1)
+	go func() {
+		resp, err := b.Converse(context.Background(), "hello", stubResponder{}, allowAllPerms{})
+		first <- result{resp, err}
+	}()
+
+	<-firstRequestStarted
+
+	steerDone := make(chan result, 1)
+	go func() {
+		resp, err := b.Converse(context.Background(), "steer me", stubResponder{}, allowAllPerms{})
+		steerDone <- result{resp, err}
+	}()
+
+	select {
+	case got := <-steerDone:
+		r.NoError(got.err)
+		a.Equal("", got.resp)
+	case <-time.After(2 * time.Second):
+		t.Fatal("steered Converse blocked instead of enqueueing")
+	}
+
+	close(releaseFirstRequest)
+
+	select {
+	case got := <-first:
+		r.NoError(got.err)
+		a.Contains(got.resp, "first reply")
+		a.Contains(got.resp, "second reply")
+	case <-time.After(5 * time.Second):
+		t.Fatal("loop did not finish")
+	}
+
+	bodyMu.Lock()
+	body := secondRequestBody
+	bodyMu.Unlock()
+
+	// The SDK's JSON encoder HTML-escapes angle brackets, so substring-match
+	// against decoded text rather than the raw body.
+	var decoded struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	r.NoError(json.Unmarshal([]byte(body), &decoded))
+
+	var found bool
+	for _, msg := range decoded.Messages {
+		if msg.Role != "user" {
+			continue
+		}
+		for _, c := range msg.Content {
+			if c.Type == "text" && strings.Contains(c.Text, "<user_steering>steer me</user_steering>") {
+				found = true
+			}
 		}
 	}
-	return false
+	a.True(found, "body=%s", body)
+}
+
+func writeMessageJSON(w http.ResponseWriter, id, text, stopReason string) {
+	payload := map[string]any{
+		"id":   id,
+		"type": "message",
+		"role": "assistant",
+		"content": []map[string]any{
+			{"type": "text", "text": text},
+		},
+		"model":       "test-model",
+		"stop_reason": stopReason,
+		"usage": map[string]any{
+			"input_tokens":  1,
+			"output_tokens": 1,
+		},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(payload)
 }

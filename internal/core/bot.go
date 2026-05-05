@@ -9,11 +9,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Bot orchestrates backend sessions
 type Bot struct {
 	sessions        *SessionManager
 	perms           PermissionChecker
-	mu              sync.Mutex
+	mu              sync.RWMutex
 	converseTimeout time.Duration
 }
 
@@ -28,8 +27,8 @@ func NewBot(sessions *SessionManager, perms PermissionChecker) *Bot {
 
 // HandleMessage processes a message via the backend
 func (b *Bot) HandleMessage(responder Responder, userMessage string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 
 	slog.Info("HandleMessage start", "msg", userMessage)
 	responder.SendTyping()

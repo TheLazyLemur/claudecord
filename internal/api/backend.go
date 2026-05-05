@@ -19,7 +19,6 @@ import (
 
 var _ core.Backend = (*Backend)(nil)
 
-// Backend implements core.Backend using Anthropic API
 type Backend struct {
 	client         anthropic.Client
 	model          string
@@ -31,7 +30,10 @@ type Backend struct {
 	skillStore     skills.SkillStore
 	minimaxAPIKey  string
 	thinkingBudget int
-	mu             sync.Mutex
+
+	mu      sync.Mutex
+	running bool
+	mailbox []string
 }
 
 // NewBackend creates an API backend. workDir is checked for an AGENTS.md
@@ -69,13 +71,82 @@ func (b *Backend) Close() error {
 	return nil
 }
 
-// Converse sends a message and handles the response loop
+const maxMailbox = 64
+
 func (b *Backend) Converse(ctx context.Context, msg string, responder core.Responder, perms core.PermissionChecker) (string, error) {
+	if !b.claim(msg) {
+		return "", nil
+	}
+
+	resp, err := b.runConversationLoop(ctx, responder, perms)
+	if err != nil {
+		b.release()
+	}
+	return resp, err
+}
+
+func (b *Backend) claim(msg string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.history = append(b.history, anthropic.NewUserMessage(anthropic.NewTextBlock(msg)))
-	return b.runConversationLoop(ctx, responder, perms)
+	if b.running {
+		if len(b.mailbox) >= maxMailbox {
+			slog.Warn("steering mailbox full, dropping message", "session", b.sessionID, "len", len(b.mailbox))
+			return false
+		}
+		b.mailbox = append(b.mailbox, msg)
+		slog.Info("steering message queued", "session", b.sessionID)
+		return false
+	}
+
+	b.running = true
+	blocks := append([]anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(msg)}, steeringBlocks(b.mailbox)...)
+	b.mailbox = nil
+	b.history = append(b.history, anthropic.NewUserMessage(blocks...))
+	return true
+}
+
+func (b *Backend) drainMailbox() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.mailbox) == 0 {
+		return nil
+	}
+	msgs := b.mailbox
+	b.mailbox = nil
+	return msgs
+}
+
+func (b *Backend) finishOrContinue() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.mailbox) == 0 {
+		b.running = false
+		return nil
+	}
+	msgs := b.mailbox
+	b.mailbox = nil
+	return msgs
+}
+
+func (b *Backend) release() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.running = false
+}
+
+func steeringText(msg string) string {
+	return "<user_steering>" + msg + "</user_steering>"
+}
+
+func steeringBlocks(msgs []string) []anthropic.ContentBlockParamUnion {
+	blocks := make([]anthropic.ContentBlockParamUnion, 0, len(msgs))
+	for _, m := range msgs {
+		blocks = append(blocks, anthropic.NewTextBlock(steeringText(m)))
+	}
+	return blocks
 }
 
 func (b *Backend) runConversationLoop(ctx context.Context, responder core.Responder, perms core.PermissionChecker) (string, error) {
@@ -98,13 +169,19 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 		b.history = append(b.history, resp.ToParam())
 
 		if len(toolUses) == 0 {
-			return finalResponse, nil
+			steered := b.finishOrContinue()
+			if len(steered) == 0 {
+				return finalResponse, nil
+			}
+			b.history = append(b.history, anthropic.NewUserMessage(steeringBlocks(steered)...))
+			continue
 		}
 
 		toolResults, err := b.executeTools(ctx, toolUses, responder, perms)
 		if err != nil {
 			return finalResponse, errors.Wrap(err, "tool execution failed")
 		}
+		toolResults = append(toolResults, steeringBlocks(b.drainMailbox())...)
 		b.history = append(b.history, anthropic.NewUserMessage(toolResults...))
 	}
 }

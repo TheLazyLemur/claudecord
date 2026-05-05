@@ -59,6 +59,16 @@ OpenClaw-style persistent memory layered on plain Markdown files under `MEMORY_D
 - If `AGENTS.md` exists in the session working directory, its contents are appended to the system prompt wrapped in `<agents_md>...</agents_md>`.
 - The file is re-read on every API call, so edits land on the next turn with no session restart.
 
+## Steering (mid-loop message queueing)
+
+- A second `@claude` message that arrives while the previous turn's tool loop is still running is queued, not dropped or rejected.
+- The running loop drains the queue at two boundaries: (a) just after `tool_result` blocks are appended, riding along as extra text blocks in the same user message; and (b) at natural end-of-turn, where a non-empty queue causes the loop to continue with a fresh user message instead of returning.
+- Anthropic requires every `tool_use` to be paired with a `tool_result` in the immediately-next user message, so steering text is appended to that same user message rather than as a separate turn.
+- Queued messages are wrapped in `<user_steering>...</user_steering>` so the model recognizes them as course-corrections.
+- The in-flight HTTP request to the model is **not** aborted; tokens already produced are kept, and the loop reads the queue right before the next API call.
+- Concurrency: `Backend.mu` guards the `running` flag and `mailbox`. `Bot.mu` is an `RWMutex` — `HandleMessage` holds the read lock so multiple messages can reach the backend concurrently; `NewSession` takes the write lock so it still waits for all in-flight messages.
+- Only the first caller's responder produces the combined reply. Steered callers' `Converse` returns `("", nil)` so they don't double-post.
+
 ## WhatsApp media
 
 - Inbound images and documents are decrypted into `WHATSAPP_MEDIA_DIR` and surfaced as `<attachment path mime original_name />` tags inside `<message>` blocks in the prompt body.
