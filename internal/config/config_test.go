@@ -257,19 +257,19 @@ func TestLoad_AgentsDefaultPathOverride(t *testing.T) {
 	assert.Equal(t, "/custom/AGENTS.md", cfg.AgentsDefaultPath)
 }
 
-func TestLoad_MinimaxAPIKey(t *testing.T) {
+func TestLoad_WebSearchAPIKey(t *testing.T) {
 	cfg, err := Load(map[string]string{
 		"DISCORD_TOKEN":      "mytoken",
 		"ALLOWED_DIRS":       "/home/user",
 		"ALLOWED_USERS":      "123",
 		"CLAUDECORD_API_KEY": "sk-test",
-		"MINIMAX_API_KEY":    "minimax-test-key",
+		"WEB_SEARCH_API_KEY": "brave-test-key",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "minimax-test-key", cfg.MinimaxAPIKey)
+	assert.Equal(t, "brave-test-key", cfg.WebSearchAPIKey)
 }
 
-func TestLoad_MinimaxAPIKeyOptional(t *testing.T) {
+func TestLoad_WebSearchAPIKeyOptional(t *testing.T) {
 	cfg, err := Load(map[string]string{
 		"DISCORD_TOKEN":      "mytoken",
 		"ALLOWED_DIRS":       "/home/user",
@@ -277,7 +277,7 @@ func TestLoad_MinimaxAPIKeyOptional(t *testing.T) {
 		"CLAUDECORD_API_KEY": "sk-test",
 	})
 	require.NoError(t, err)
-	assert.Empty(t, cfg.MinimaxAPIKey)
+	assert.Empty(t, cfg.WebSearchAPIKey)
 }
 
 // --- Model tests ---

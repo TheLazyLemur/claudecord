@@ -29,8 +29,8 @@ type Config struct {
 	ResendAPIKey string
 	// Optional password for dashboard auth
 	DashboardPassword string
-	// Minimax API key for WebSearch tool
-	MinimaxAPIKey string
+	// API key for the WebSearch tool (Brave Search API)
+	WebSearchAPIKey string
 
 	// Model id passed to the API. Required when BaseURL is set, else defaults
 	// to the Sonnet id baked into DefaultModel.
@@ -126,7 +126,7 @@ func Load(env map[string]string) (*Config, error) {
 	baseURL := env["CLAUDECORD_BASE_URL"]
 	resendAPIKey := env["RESEND_API_KEY"]
 	dashboardPassword := env["DASHBOARD_PASSWORD"]
-	minimaxAPIKey := env["MINIMAX_API_KEY"]
+	webSearchAPIKey := env["WEB_SEARCH_API_KEY"]
 
 	model := env["MODEL"]
 	if model == "" {
@@ -183,7 +183,7 @@ func Load(env map[string]string) (*Config, error) {
 		BaseURL:                baseURL,
 		ResendAPIKey:           resendAPIKey,
 		DashboardPassword:      dashboardPassword,
-		MinimaxAPIKey:          minimaxAPIKey,
+		WebSearchAPIKey:        webSearchAPIKey,
 		Model:                  model,
 		WhatsAppAllowedSenders: whatsAppSenders,
 		WhatsAppDBPath:         whatsAppDBPath,
@@ -233,7 +233,7 @@ func LoadFromEnv() (*Config, error) {
 		"CLAUDECORD_BASE_URL":      os.Getenv("CLAUDECORD_BASE_URL"),
 		"RESEND_API_KEY":           os.Getenv("RESEND_API_KEY"),
 		"DASHBOARD_PASSWORD":       os.Getenv("DASHBOARD_PASSWORD"),
-		"MINIMAX_API_KEY":          os.Getenv("MINIMAX_API_KEY"),
+		"WEB_SEARCH_API_KEY":       os.Getenv("WEB_SEARCH_API_KEY"),
 		"WHATSAPP_ALLOWED_SENDERS": os.Getenv("WHATSAPP_ALLOWED_SENDERS"),
 		"WHATSAPP_DB_PATH":         os.Getenv("WHATSAPP_DB_PATH"),
 		"WHATSAPP_MEDIA_DIR":       os.Getenv("WHATSAPP_MEDIA_DIR"),

@@ -28,7 +28,7 @@ type Backend struct {
 	systemPrompt   string
 	workDir        string
 	skillStore     skills.SkillStore
-	minimaxAPIKey  string
+	webSearchAPIKey  string
 	thinkingBudget int
 
 	mu      sync.Mutex
@@ -39,7 +39,7 @@ type Backend struct {
 // NewBackend creates an API backend. workDir is checked for an AGENTS.md
 // file on every API call; its contents are appended to the system prompt.
 // thinkingBudget > 0 enables extended thinking with that token budget.
-func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, minimaxAPIKey string, thinkingBudget int) *Backend {
+func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, webSearchAPIKey string, thinkingBudget int) *Backend {
 	if model == "" {
 		model = config.DefaultModel
 	}
@@ -52,7 +52,7 @@ func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, to
 		systemPrompt:   systemPrompt,
 		workDir:        workDir,
 		skillStore:     skillStore,
-		minimaxAPIKey:  minimaxAPIKey,
+		webSearchAPIKey:  webSearchAPIKey,
 		thinkingBudget: thinkingBudget,
 	}
 }
@@ -246,7 +246,7 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 			continue
 		}
 
-		deps := tools.Deps{Responder: responder, SkillStore: b.skillStore, MinimaxAPIKey: b.minimaxAPIKey}
+		deps := tools.Deps{Responder: responder, SkillStore: b.skillStore, WebSearchAPIKey: b.webSearchAPIKey}
 		result, isError := tools.Execute(tu.Name, input, deps)
 		results = append(results, buildToolResultBlock(tu.ID, result, isError))
 	}
@@ -289,7 +289,7 @@ type BackendFactory struct {
 	Model          string
 	DefaultWorkDir string
 	SkillStore     skills.SkillStore
-	MinimaxAPIKey  string
+	WebSearchAPIKey string
 	Passive        bool
 	Discord        bool
 	// WhatsAppEnabled appends the media-handling addendum to the system prompt
@@ -332,7 +332,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
-	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.MinimaxAPIKey, f.ThinkingBudgetTokens), nil
+	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.WebSearchAPIKey, f.ThinkingBudgetTokens), nil
 }
 
 func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {

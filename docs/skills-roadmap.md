@@ -96,7 +96,7 @@ Documented so we don't keep re-evaluating them.
 - **Calculator / unit converter** — the model does these directly with no tool.
 - **Reverse image search** — niche, requires third-party API.
 - **QR decode (`zbarimg`)** — fun but I can't think of a real recurring need.
-- **"Search news" / "search web"** — already covered by the `WebSearch` (Minimax) tool.
+- **"Search news" / "search web"** — already covered by the `WebSearch` (Brave) tool.
 - **Timezone / world clock** — model can compute this from the system prompt's date.
 
 ## Suggested order
