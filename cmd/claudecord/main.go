@@ -69,7 +69,7 @@ func run() error {
 		Model:                cfg.Model,
 		DefaultWorkDir:       cfg.ClaudeCWD,
 		SkillStore:           skillStore,
-		MinimaxAPIKey:        cfg.MinimaxAPIKey,
+		WebSearchAPIKey:      cfg.WebSearchAPIKey,
 		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
 	}
