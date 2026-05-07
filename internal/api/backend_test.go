@@ -474,3 +474,81 @@ func writeMessageJSON(w http.ResponseWriter, id, text, stopReason string) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)
 }
+
+func TestBackend_Transcript_WrittenAsJSONL(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	dir := t.TempDir()
+	b := NewBackend(anthropic.Client{}, "kimi-for-coding", "SYS", "", nil, nil, "", 0, dir)
+
+	// Simulate two user turns
+	b.appendHistory(anthropic.NewUserMessage(anthropic.NewTextBlock("hello")))
+	b.appendHistory(anthropic.NewUserMessage(anthropic.NewTextBlock("world")))
+
+	// File should exist
+	r.FileExists(b.transcriptPath)
+
+	// Read and verify JSONL: two lines, each decodes to MessageParam
+	data, err := os.ReadFile(b.transcriptPath)
+	r.NoError(err)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	a.Len(lines, 2)
+
+	// Verify each line unmarshals and carries the user role
+	var raw map[string]any
+	r.NoError(json.Unmarshal([]byte(lines[0]), &raw))
+	a.Equal("user", raw["role"])
+	r.NoError(json.Unmarshal([]byte(lines[1]), &raw))
+	a.Equal("user", raw["role"])
+}
+
+func TestBackend_Transcript_DisabledWhenDirEmpty(t *testing.T) {
+	a := assert.New(t)
+
+	b := NewBackend(anthropic.Client{}, "kimi-for-coding", "SYS", "", nil, nil, "", 0, "")
+	b.appendHistory(anthropic.NewUserMessage(anthropic.NewTextBlock("hello")))
+
+	a.Empty(b.transcriptPath)
+	// No panic, no file created
+}
+
+// Guards against a regression where steering-path history appends bypass the
+// transcript writer. Both claim()'s initial user turn and the queued-message
+// reseed must end up on disk.
+func TestBackend_Transcript_PersistsClaimAndSteeringReseed(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	dir := t.TempDir()
+	b := NewBackend(anthropic.Client{}, "test", "", "", nil, nil, "", 0, dir)
+
+	r.True(b.claim("first"))
+	r.False(b.claim("queued"))
+	b.release()
+	r.True(b.claim("second"))
+
+	data, err := os.ReadFile(b.transcriptPath)
+	r.NoError(err)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	r.Len(lines, 2)
+
+	type textBlock struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	type msg struct {
+		Content []textBlock `json:"content"`
+	}
+
+	var first, second msg
+	r.NoError(json.Unmarshal([]byte(lines[0]), &first))
+	r.NoError(json.Unmarshal([]byte(lines[1]), &second))
+
+	r.Len(first.Content, 1)
+	a.Equal("first", first.Content[0].Text)
+
+	r.Len(second.Content, 2)
+	a.Equal("second", second.Content[0].Text)
+	a.Equal("<user_steering>queued</user_steering>", second.Content[1].Text)
+}
