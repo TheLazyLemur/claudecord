@@ -77,6 +77,17 @@ func (m *SessionManager) GetOrCreateSession() (Backend, error) {
 	return m.current, nil
 }
 
+// CurrentSessionID returns the active session's ID, or "" if none.
+func (m *SessionManager) CurrentSessionID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.current == nil {
+		return ""
+	}
+	return m.current.SessionID()
+}
+
 // GetSession returns the current session or error if none
 func (m *SessionManager) GetSession() (Backend, error) {
 	m.mu.RLock()

@@ -201,6 +201,64 @@ func TestSessionManager_Close_NoopIfNoSession(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestSessionManager_CurrentSessionID_EmptyWhenNoSession(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	// ... a session manager with no active session
+	mgr := NewSessionManager(&mockBackendFactory{}, nil)
+
+	// when
+	// ... CurrentSessionID is called
+	id := mgr.CurrentSessionID()
+
+	// then
+	// ... it returns the empty string
+	a.Equal("", id)
+}
+
+func TestSessionManager_CurrentSessionID_ReturnsActiveID(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a session manager with an active session
+	factory := &mockBackendFactory{backend: &mockBackend{sessionID: "active"}}
+	mgr := NewSessionManager(factory, nil)
+	r.NoError(mgr.NewSession(""))
+
+	// when
+	// ... CurrentSessionID is called
+	id := mgr.CurrentSessionID()
+
+	// then
+	// ... it returns the current backend's session id
+	a.Equal("active", id)
+}
+
+func TestSessionManager_CurrentSessionID_ReflectsNewSession(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a session manager that has been swapped to a new session
+	first := &mockBackend{sessionID: "first"}
+	second := &mockBackend{sessionID: "second"}
+	factory := &mockBackendFactory{backend: first}
+	mgr := NewSessionManager(factory, nil)
+	r.NoError(mgr.NewSession(""))
+	factory.backend = second
+	r.NoError(mgr.NewSession(""))
+
+	// when
+	// ... CurrentSessionID is called
+	id := mgr.CurrentSessionID()
+
+	// then
+	// ... it returns the new backend's session id
+	a.Equal("second", id)
+}
+
 func TestSessionManager_NewSession_FactoryError(t *testing.T) {
 	a := assert.New(t)
 

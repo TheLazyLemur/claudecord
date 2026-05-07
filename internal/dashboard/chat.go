@@ -50,7 +50,9 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 
 // handleChat processes an inbound chat message. The server mutex protects only
 // the shared responder field; Converse runs without the lock so a slow API call
-// does not block other dashboard actions like /new_session.
+// does not block other dashboard actions like /new_session. The responder and
+// the post-Converse broadcast both check the live session ID so a turn that
+// outlives its session does not leak into the next one's chat.
 func (s *Server) handleChat(content string) {
 	backend, err := s.sessionMgr.GetOrCreateSession()
 	if err != nil {
@@ -63,15 +65,18 @@ func (s *Server) handleChat(content string) {
 		return
 	}
 
+	sid := backend.SessionID()
+	isCurrent := func() bool { return s.sessionMgr.CurrentSessionID() == sid }
+
 	s.mu.Lock()
-	if s.responder == nil || s.responder.sessionID != backend.SessionID() {
-		s.responder = NewWSResponder(s.hub, backend.SessionID())
+	if s.responder == nil || s.responder.sessionID != sid {
+		s.responder = NewWSResponder(s.hub, sid, isCurrent)
 
 		active := true
 		s.hub.Broadcast(Message{
 			Type:      "session",
 			Active:    &active,
-			SessionID: backend.SessionID(),
+			SessionID: sid,
 		})
 	}
 	responder := s.responder
@@ -85,6 +90,9 @@ func (s *Server) handleChat(content string) {
 
 	ctx := context.Background()
 	response, err := backend.Converse(ctx, content, responder, s.permChecker)
+	if !isCurrent() {
+		return
+	}
 	if err != nil {
 		slog.Error("converse", "error", err)
 		s.hub.Broadcast(Message{
@@ -100,7 +108,7 @@ func (s *Server) handleChat(content string) {
 			Type:      "chat",
 			Role:      "assistant",
 			Content:   response,
-			SessionID: backend.SessionID(),
+			SessionID: sid,
 		})
 	}
 }
@@ -117,15 +125,17 @@ func (s *Server) handleNewSession(workDir string) {
 	}
 
 	backend, _ := s.sessionMgr.GetOrCreateSession()
+	sid := backend.SessionID()
+	isCurrent := func() bool { return s.sessionMgr.CurrentSessionID() == sid }
 
 	s.mu.Lock()
-	s.responder = NewWSResponder(s.hub, backend.SessionID())
+	s.responder = NewWSResponder(s.hub, sid, isCurrent)
 	s.mu.Unlock()
 
 	active := true
 	s.hub.Broadcast(Message{
 		Type:      "session",
 		Active:    &active,
-		SessionID: backend.SessionID(),
+		SessionID: sid,
 	})
 }
