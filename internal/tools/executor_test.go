@@ -2,6 +2,8 @@ package tools
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,6 +118,97 @@ func TestExecute_Skill_NilStore(t *testing.T) {
 
 	a.Equal("skill store not configured", result)
 	a.True(isErr)
+}
+
+func TestExecute_WebSearch_MissingQuery(t *testing.T) {
+	a := assert.New(t)
+
+	result, isErr := Execute("WebSearch", core.ToolInput{}, Deps{WebSearchAPIKey: "k"})
+
+	a.Equal("missing query argument", result)
+	a.True(isErr)
+}
+
+func TestExecute_WebSearch_MissingAPIKey(t *testing.T) {
+	a := assert.New(t)
+
+	result, isErr := Execute("WebSearch", core.ToolInput{Query: "go programming"}, Deps{})
+
+	a.Equal("WEB_SEARCH_API_KEY not configured", result)
+	a.True(isErr)
+}
+
+func TestExecute_WebSearch_BraveSuccess(t *testing.T) {
+	// given
+	// ... a Brave-shaped response server and recorded request
+	a := assert.New(t)
+	var (
+		gotMethod string
+		gotPath   string
+		gotQuery  string
+		gotToken  string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotQuery = r.URL.Query().Get("q")
+		gotToken = r.Header.Get("X-Subscription-Token")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"query": {"original": "go programming"},
+			"web": {"results": [
+				{"title": "Go Docs", "url": "https://go.dev/doc/", "description": "Official Go docs."},
+				{"title": "Tour of Go", "url": "https://go.dev/tour/", "description": "Interactive tour."}
+			]}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	prev := webSearchEndpoint
+	webSearchEndpoint = srv.URL + "/res/v1/web/search"
+	t.Cleanup(func() { webSearchEndpoint = prev })
+
+	// when
+	// ... WebSearch is executed
+	result, isErr := Execute("WebSearch", core.ToolInput{Query: "go programming"}, Deps{WebSearchAPIKey: "test-key"})
+
+	// then
+	// ... the request hits Brave and the response is formatted as a numbered list
+	a.False(isErr)
+	a.Equal(http.MethodGet, gotMethod)
+	a.Equal("/res/v1/web/search", gotPath)
+	a.Equal("go programming", gotQuery)
+	a.Equal("test-key", gotToken)
+	a.Contains(result, "1. Go Docs")
+	a.Contains(result, "https://go.dev/doc/")
+	a.Contains(result, "Official Go docs.")
+	a.Contains(result, "2. Tour of Go")
+	a.Contains(result, "https://go.dev/tour/")
+}
+
+func TestExecute_WebSearch_BraveErrorStatus(t *testing.T) {
+	// given
+	// ... a Brave endpoint returning 401
+	a := assert.New(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"invalid token"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	prev := webSearchEndpoint
+	webSearchEndpoint = srv.URL + "/res/v1/web/search"
+	t.Cleanup(func() { webSearchEndpoint = prev })
+
+	// when
+	// ... WebSearch is executed
+	result, isErr := Execute("WebSearch", core.ToolInput{Query: "anything"}, Deps{WebSearchAPIKey: "bad"})
+
+	// then
+	// ... the error is reported with the response body
+	a.True(isErr)
+	a.Contains(result, "search failed")
+	a.Contains(result, "invalid token")
 }
 
 func TestExecute_LoadSkillSupporting(t *testing.T) {

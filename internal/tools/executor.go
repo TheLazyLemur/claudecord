@@ -31,6 +31,7 @@ const ImageSentinel = "__CLAUDECORD_IMAGE__"
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 var bashTimeout = 2 * time.Minute
+var webSearchEndpoint = "https://api.search.brave.com/res/v1/web/search"
 
 func truncateOutput(s string, maxLen int) string {
 	if len(s) > maxLen {
@@ -41,9 +42,9 @@ func truncateOutput(s string, maxLen int) string {
 
 // Deps holds all dependencies needed by tool executors.
 type Deps struct {
-	Responder     core.Responder
-	SkillStore    skills.SkillStore
-	MinimaxAPIKey string
+	Responder       core.Responder
+	SkillStore      skills.SkillStore
+	WebSearchAPIKey string
 }
 
 // Execute dispatches to the appropriate tool executor. Returns (result, isError).
@@ -64,7 +65,7 @@ func Execute(name string, input core.ToolInput, deps Deps) (string, bool) {
 	case "LoadSkillSupporting":
 		return executeLoadSkillSupporting(input, deps.SkillStore)
 	case "WebSearch":
-		return executeWebSearch(input, deps.MinimaxAPIKey)
+		return executeWebSearch(input, deps.WebSearchAPIKey)
 	default:
 		return "unknown tool: " + name, true
 	}
@@ -260,18 +261,19 @@ func executeWebSearch(input core.ToolInput, apiKey string) (string, bool) {
 	}
 
 	if apiKey == "" {
-		return "MINIMAX_API_KEY not configured", true
+		return "WEB_SEARCH_API_KEY not configured", true
 	}
 
-	reqBody := `{"q":"` + strings.ReplaceAll(input.Query, `"`, `\"`) + `"}`
-
-	req, err := http.NewRequest("POST", "https://api.minimax.io/v1/coding_plan/search", strings.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodGet, webSearchEndpoint, nil)
 	if err != nil {
 		return "error creating request: " + err.Error(), true
 	}
+	q := req.URL.Query()
+	q.Set("q", input.Query)
+	req.URL.RawQuery = q.Encode()
 
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Subscription-Token", apiKey)
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -289,42 +291,34 @@ func executeWebSearch(input core.ToolInput, apiKey string) (string, bool) {
 	}
 
 	var searchResp struct {
-		Organic []struct {
-			Title   string `json:"title"`
-			Link    string `json:"link"`
-			Snippet string `json:"snippet"`
-			Date    string `json:"date"`
-		} `json:"organic"`
-		RelatedSearches []struct {
-			Query string `json:"query"`
-		} `json:"related_searches"`
+		Web struct {
+			Results []struct {
+				Title         string   `json:"title"`
+				URL           string   `json:"url"`
+				Description   string   `json:"description"`
+				ExtraSnippets []string `json:"extra_snippets"`
+			} `json:"results"`
+		} `json:"web"`
 	}
 
 	if err := json.Unmarshal(respBody, &searchResp); err != nil {
 		return "error parsing response: " + err.Error(), true
 	}
 
+	if len(searchResp.Web.Results) == 0 {
+		return "No results.", false
+	}
+
 	var result strings.Builder
 	result.WriteString("Search results:\n\n")
 
-	for i, r := range searchResp.Organic {
+	for i, r := range searchResp.Web.Results {
 		result.WriteString(fmt.Sprintf("%d. %s\n", i+1, r.Title))
-		result.WriteString("   " + r.Link + "\n")
-		if r.Date != "" {
-			result.WriteString("   Date: " + r.Date + "\n")
-		}
-		if r.Snippet != "" {
-			result.WriteString("   " + r.Snippet + "\n")
+		result.WriteString("   " + r.URL + "\n")
+		if r.Description != "" {
+			result.WriteString("   " + r.Description + "\n")
 		}
 		result.WriteString("\n")
-	}
-
-	if len(searchResp.RelatedSearches) > 0 {
-		var related []string
-		for _, r := range searchResp.RelatedSearches {
-			related = append(related, r.Query)
-		}
-		result.WriteString("Related searches: " + strings.Join(related, ", ") + "\n")
 	}
 
 	return result.String(), false
