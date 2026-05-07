@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	_ "modernc.org/sqlite"
@@ -62,6 +63,11 @@ func run() error {
 	skillList, _ := skillStore.List()
 	slog.Info("skills loaded", "count", len(skillList))
 
+	transcriptDir := filepath.Join(cfg.MemoryDir, ".transcripts")
+	if err := os.MkdirAll(transcriptDir, 0o700); err != nil {
+		return errors.Wrap(err, "creating transcripts dir")
+	}
+
 	// discordFactory includes react_emoji tool; baseFactory (WA/dashboard) does not.
 	base := api.BackendFactory{
 		APIKey:               cfg.APIKey,
@@ -72,6 +78,7 @@ func run() error {
 		WebSearchAPIKey:      cfg.WebSearchAPIKey,
 		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
+		TranscriptDir:        transcriptDir,
 	}
 	discord := base
 	discord.Discord = true

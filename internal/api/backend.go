@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -20,16 +22,17 @@ import (
 var _ core.Backend = (*Backend)(nil)
 
 type Backend struct {
-	client         anthropic.Client
-	model          string
-	sessionID      string
-	history        []anthropic.MessageParam
-	tools          []anthropic.ToolUnionParam
-	systemPrompt   string
-	workDir        string
-	skillStore     skills.SkillStore
-	webSearchAPIKey  string
-	thinkingBudget int
+	client          anthropic.Client
+	model           string
+	sessionID       string
+	history         []anthropic.MessageParam
+	tools           []anthropic.ToolUnionParam
+	systemPrompt    string
+	workDir         string
+	skillStore      skills.SkillStore
+	webSearchAPIKey string
+	thinkingBudget  int
+	transcriptPath  string
 
 	mu      sync.Mutex
 	running bool
@@ -39,22 +42,29 @@ type Backend struct {
 // NewBackend creates an API backend. workDir is checked for an AGENTS.md
 // file on every API call; its contents are appended to the system prompt.
 // thinkingBudget > 0 enables extended thinking with that token budget.
-func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, webSearchAPIKey string, thinkingBudget int) *Backend {
+// transcriptDir, when non-empty, enables JSONL transcript persistence under
+// <transcriptDir>/<sessionID>.jsonl.
+func NewBackend(client anthropic.Client, model, systemPrompt, workDir string, tools []anthropic.ToolUnionParam, skillStore skills.SkillStore, webSearchAPIKey string, thinkingBudget int, transcriptDir string) *Backend {
 	if model == "" {
 		model = config.DefaultModel
 	}
-	return &Backend{
-		client:         client,
-		model:          model,
-		sessionID:      "api-" + time.Now().Format("20060102-150405"),
-		history:        []anthropic.MessageParam{},
-		tools:          tools,
-		systemPrompt:   systemPrompt,
-		workDir:        workDir,
-		skillStore:     skillStore,
-		webSearchAPIKey:  webSearchAPIKey,
-		thinkingBudget: thinkingBudget,
+	b := &Backend{
+		client:          client,
+		model:           model,
+		sessionID:       "api-" + time.Now().Format("20060102-150405.000000000"),
+		history:         []anthropic.MessageParam{},
+		tools:           tools,
+		systemPrompt:    systemPrompt,
+		workDir:         workDir,
+		skillStore:      skillStore,
+		webSearchAPIKey: webSearchAPIKey,
+		thinkingBudget:  thinkingBudget,
 	}
+	if transcriptDir != "" {
+		_ = os.MkdirAll(transcriptDir, 0o700)
+		b.transcriptPath = filepath.Join(transcriptDir, b.sessionID+".jsonl")
+	}
+	return b
 }
 
 // effectiveSystemPrompt re-reads AGENTS.md from workDir on each call so live
@@ -102,7 +112,7 @@ func (b *Backend) claim(msg string) bool {
 	b.running = true
 	blocks := append([]anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(msg)}, steeringBlocks(b.mailbox)...)
 	b.mailbox = nil
-	b.history = append(b.history, anthropic.NewUserMessage(blocks...))
+	b.appendHistoryLocked(anthropic.NewUserMessage(blocks...))
 	return true
 }
 
@@ -166,14 +176,14 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 			finalResponse += text
 		}
 
-		b.history = append(b.history, resp.ToParam())
+		b.appendHistory(resp.ToParam())
 
 		if len(toolUses) == 0 {
 			steered := b.finishOrContinue()
 			if len(steered) == 0 {
 				return finalResponse, nil
 			}
-			b.history = append(b.history, anthropic.NewUserMessage(steeringBlocks(steered)...))
+			b.appendHistory(anthropic.NewUserMessage(steeringBlocks(steered)...))
 			continue
 		}
 
@@ -182,7 +192,40 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 			return finalResponse, errors.Wrap(err, "tool execution failed")
 		}
 		toolResults = append(toolResults, steeringBlocks(b.drainMailbox())...)
-		b.history = append(b.history, anthropic.NewUserMessage(toolResults...))
+		b.appendHistory(anthropic.NewUserMessage(toolResults...))
+	}
+}
+
+// appendHistory adds messages to the in-memory history and, when transcript
+// persistence is enabled, appends each message as a JSONL line. Errors are
+// logged and swallowed so a disk issue never breaks the conversation.
+func (b *Backend) appendHistory(msgs ...anthropic.MessageParam) {
+	b.history = append(b.history, msgs...)
+	b.persistTranscript(msgs)
+}
+
+// appendHistoryLocked is the variant called from inside claim() where b.mu
+// is already held. The mutex guards b.history; transcript I/O does not need it.
+func (b *Backend) appendHistoryLocked(msgs ...anthropic.MessageParam) {
+	b.history = append(b.history, msgs...)
+	b.persistTranscript(msgs)
+}
+
+func (b *Backend) persistTranscript(msgs []anthropic.MessageParam) {
+	if b.transcriptPath == "" {
+		return
+	}
+	f, err := os.OpenFile(b.transcriptPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		slog.Warn("transcript open failed", "path", b.transcriptPath, "error", err)
+		return
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, m := range msgs {
+		if err := enc.Encode(m); err != nil {
+			slog.Warn("transcript encode failed", "error", err)
+		}
 	}
 }
 
@@ -284,19 +327,21 @@ func buildToolResultBlock(id, result string, isError bool) anthropic.ContentBloc
 
 // BackendFactory creates API backends
 type BackendFactory struct {
-	APIKey         string
-	BaseURL        string
-	Model          string
-	DefaultWorkDir string
-	SkillStore     skills.SkillStore
+	APIKey          string
+	BaseURL         string
+	Model           string
+	DefaultWorkDir  string
+	SkillStore      skills.SkillStore
 	WebSearchAPIKey string
-	Passive        bool
-	Discord        bool
+	Passive         bool
+	Discord         bool
 	// WhatsAppEnabled appends the media-handling addendum to the system prompt
 	// so the model knows what to do with <attachment> tags in chat prompts.
 	WhatsAppEnabled bool
 	// ThinkingBudgetTokens > 0 enables extended thinking on every API call.
 	ThinkingBudgetTokens int
+	// TranscriptDir, when non-empty, enables JSONL transcript persistence.
+	TranscriptDir string
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
@@ -332,7 +377,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
-	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.WebSearchAPIKey, f.ThinkingBudgetTokens), nil
+	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.WebSearchAPIKey, f.ThinkingBudgetTokens, f.TranscriptDir), nil
 }
 
 func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
