@@ -550,6 +550,48 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 	a.True(found, "body=%s", body)
 }
 
+func TestConverse_AppendsAttachmentTags(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... an inbound with 2 attachments
+	in := core.Inbound{
+		Text: "look at these",
+		Attachments: []core.AttachmentRef{
+			{Path: "/tmp/photo.png", MIME: "image/png", OriginalName: "photo.png"},
+			{Path: "/tmp/doc.pdf", MIME: "application/pdf", OriginalName: "doc.pdf"},
+		},
+	}
+
+	// when
+	// ... renderUserMessage is called with the inbound
+	got := renderUserMessage(in)
+
+	// then
+	// ... both attachment tags appear in the output
+	r.Contains(got, "look at these")
+	a.Contains(got, `<attachment path="/tmp/photo.png" mime="image/png" original_name="photo.png" />`)
+	a.Contains(got, `<attachment path="/tmp/doc.pdf" mime="application/pdf" original_name="doc.pdf" />`)
+}
+
+func TestConverse_NoAttachments_NoTags(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	// ... a backend and an inbound with no attachments
+	in := core.Inbound{Text: "plain message"}
+
+	// when
+	// ... renderUserMessage is called
+	got := renderUserMessage(in)
+
+	// then
+	// ... no attachment tags appear
+	a.Equal("plain message", got)
+	a.NotContains(got, "<attachment")
+}
+
 func writeMessageJSON(w http.ResponseWriter, id, text, stopReason string) {
 	payload := map[string]any{
 		"id":   id,
