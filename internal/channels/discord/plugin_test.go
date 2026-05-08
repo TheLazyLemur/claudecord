@@ -214,6 +214,25 @@ func TestPlugin_Inbound_CapabilitiesMatchPluginCapabilities(t *testing.T) {
 	}
 }
 
+func TestPlugin_Capabilities_UpdatesTrue(t *testing.T) {
+	// given
+	// ... a plugin with no media dir
+	p := New(Config{}, nil)
+
+	// when
+	// ... capabilities are queried
+	caps := p.Capabilities()
+
+	// then
+	// ... reactions yes, updates yes
+	if !caps.Reactions {
+		t.Fatalf("expected Reactions=true, got %+v", caps)
+	}
+	if !caps.Updates {
+		t.Fatalf("expected Updates=true, got %+v", caps)
+	}
+}
+
 func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
 	// given
 	// ... a session where thread creation fails

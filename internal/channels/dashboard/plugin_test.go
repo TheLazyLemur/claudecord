@@ -108,9 +108,12 @@ func TestPlugin_Capabilities(t *testing.T) {
 	caps := p.Capabilities()
 
 	// then
-	// ... reactions no
+	// ... reactions no, updates yes
 	if caps.Reactions {
 		t.Fatalf("unexpected caps: %+v", caps)
+	}
+	if !caps.Updates {
+		t.Fatalf("expected Updates=true, got %+v", caps)
 	}
 }
 

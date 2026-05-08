@@ -33,7 +33,7 @@ func New(cfg Config) *Plugin { return &Plugin{cfg: cfg} }
 func (p *Plugin) ID() string { return "dashboard" }
 
 func (p *Plugin) Capabilities() core.Capabilities {
-	return core.Capabilities{Reactions: false}
+	return core.Capabilities{Reactions: false, Updates: true}
 }
 
 func (p *Plugin) Start(_ context.Context, deliver func(core.Inbound)) error {

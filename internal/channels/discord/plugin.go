@@ -76,7 +76,7 @@ func New(cfg Config, s sessionForPlugin) *Plugin {
 func (p *Plugin) ID() string { return "discord" }
 
 func (p *Plugin) Capabilities() core.Capabilities {
-	return core.Capabilities{Reactions: true, Media: p.cfg.MediaDir != ""}
+	return core.Capabilities{Reactions: true, Media: p.cfg.MediaDir != "", Updates: true}
 }
 
 func (p *Plugin) Start(ctx context.Context, deliver func(core.Inbound)) error {
