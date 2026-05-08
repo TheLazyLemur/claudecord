@@ -61,6 +61,26 @@ func TestOutbound_AddReaction_TargetsOriginalMessage(t *testing.T) {
 	s.AssertExpectations(t)
 }
 
+func TestOutbound_SendUpdate_ChunksLongMessages(t *testing.T) {
+	// given
+	// ... an outbound bound to a thread and a >2000-char payload
+	s := &discordSessionMock{}
+	o := newOutbound(s, "thread-1", "msg-1", maxLen)
+	long := strings.Repeat("y", maxLen+50)
+	s.On("ChannelMessageSend", "thread-1", mock.Anything).Return(nil).Twice()
+
+	// when
+	// ... SendUpdate is called with the long payload
+	err := o.SendUpdate(long)
+
+	// then
+	// ... the payload was sent in 2 chunks to the thread
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s.AssertNumberOfCalls(t, "ChannelMessageSend", 2)
+}
+
 func TestOutbound_SendUpdate_PostsInSameThread(t *testing.T) {
 	// given
 	// ... an outbound bound to a thread

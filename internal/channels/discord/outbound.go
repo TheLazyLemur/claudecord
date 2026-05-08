@@ -42,5 +42,10 @@ func (o *outbound) AddReaction(emoji string) error {
 }
 
 func (o *outbound) SendUpdate(message string) error {
-	return errors.Wrap(o.s.ChannelMessageSend(o.threadID, message), "discord update")
+	for _, chunk := range core.ChunkMessage(message, o.maxLen) {
+		if err := o.s.ChannelMessageSend(o.threadID, chunk); err != nil {
+			return errors.Wrap(err, "discord update")
+		}
+	}
+	return nil
 }
