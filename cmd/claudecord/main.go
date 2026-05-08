@@ -9,6 +9,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/TheLazyLemur/claudecord/internal/api"
+	"github.com/TheLazyLemur/claudecord/internal/channels/discord"
+	"github.com/TheLazyLemur/claudecord/internal/channels/whatsapp"
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/dashboard"
@@ -62,6 +64,17 @@ func run() error {
 	skillList, _ := skillStore.List()
 	slog.Info("skills loaded", "count", len(skillList))
 
+	// Build lightweight plugin stubs (no connections opened) to probe Capabilities
+	// before the backend factory is configured.
+	probes := buildCapabilityProbes(cfg)
+	hasReactions := false
+	for _, p := range probes {
+		if p.Capabilities().Reactions {
+			hasReactions = true
+			break
+		}
+	}
+
 	base := api.BackendFactory{
 		APIKey:               cfg.APIKey,
 		BaseURL:              cfg.BaseURL,
@@ -70,7 +83,7 @@ func run() error {
 		SkillStore:           skillStore,
 		WebSearchAPIKey:      cfg.WebSearchAPIKey,
 		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
-		EnableReactions:      cfg.DiscordEnabled(),
+		EnableReactions:      hasReactions,
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
 	}
 	baseFactory := core.BackendFactory(&base)
@@ -116,4 +129,17 @@ func run() error {
 
 	slog.Info("shutting down")
 	return nil
+}
+
+// buildCapabilityProbes returns lightweight plugin instances (no I/O opened)
+// used only to query Capabilities before wiring real connections.
+func buildCapabilityProbes(cfg *config.Config) []core.ChannelPlugin {
+	var out []core.ChannelPlugin
+	if cfg.DiscordEnabled() {
+		out = append(out, discord.New(discord.Config{}))
+	}
+	if cfg.WhatsAppEnabled() {
+		out = append(out, whatsapp.New(whatsapp.Config{}))
+	}
+	return out
 }
