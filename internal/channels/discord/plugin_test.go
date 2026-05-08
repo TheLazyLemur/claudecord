@@ -1,7 +1,6 @@
 package discord
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -23,9 +22,8 @@ func TestPlugin_AtClaudeInPlainChannel_OpensNewThread(t *testing.T) {
 	// ... a plugin bound to a fake discord session and an empty registry
 	s := &sessionFull{}
 	s.On("MessageThreadStartComplex", "channel-1", "msg-1", mock.Anything).Return("thread-new", nil).Once()
-	p := newPluginForTest(s, "bot-id", []string{"user-1"})
 	var got core.Inbound
-	_ = p.Start(context.Background(), func(in core.Inbound) { got = in })
+	p := newPluginForTest(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
 
 	// when
 	// ... a MessageCreate event arrives in a plain channel mentioning the bot
@@ -52,10 +50,9 @@ func TestPlugin_AtClaudeInOwnedThread_StaysInThread(t *testing.T) {
 	// given
 	// ... the plugin already owns thread-existing
 	s := &sessionFull{}
-	p := newPluginForTest(s, "bot-id", []string{"user-1"})
-	p.threads.markOwned("thread-existing")
 	var got core.Inbound
-	_ = p.Start(context.Background(), func(in core.Inbound) { got = in })
+	p := newPluginForTest(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
+	p.threads.markOwned("thread-existing")
 
 	// when
 	// ... an @claude message lands inside that thread
@@ -81,9 +78,8 @@ func TestPlugin_AtClaudeInForeignThread_OpensSiblingThread(t *testing.T) {
 	// ... the plugin does NOT own this thread
 	s := &sessionFull{}
 	s.On("MessageThreadStartComplex", "channel-1", "msg-7", mock.Anything).Return("thread-sibling", nil).Once()
-	p := newPluginForTest(s, "bot-id", []string{"user-1"})
 	var got core.Inbound
-	_ = p.Start(context.Background(), func(in core.Inbound) { got = in })
+	p := newPluginForTest(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
 
 	// when
 	// ... an @claude message arrives in a foreign thread
@@ -108,9 +104,8 @@ func TestPlugin_NoMention_Ignored(t *testing.T) {
 	// given
 	// ... a plugin started with a sink
 	s := &sessionFull{}
-	p := newPluginForTest(s, "bot-id", []string{"user-1"})
 	called := false
-	_ = p.Start(context.Background(), func(in core.Inbound) { called = true })
+	p := newPluginForTest(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { called = true })
 
 	// when
 	// ... a message without @claude arrives
@@ -132,9 +127,8 @@ func TestPlugin_DM_UsesDMSessionKey(t *testing.T) {
 	// given
 	// ... a plugin and a DM event
 	s := &sessionFull{}
-	p := newPluginForTest(s, "bot-id", []string{"user-1"})
 	var got core.Inbound
-	_ = p.Start(context.Background(), func(in core.Inbound) { got = in })
+	p := newPluginForTest(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
 
 	// when
 	// ... a DM message arrives
@@ -157,9 +151,8 @@ func TestPlugin_DisallowedUser_Ignored(t *testing.T) {
 	// given
 	// ... a plugin where user-2 is not allowed
 	s := &sessionFull{}
-	p := newPluginForTest(s, "bot-id", []string{"user-1"})
 	called := false
-	_ = p.Start(context.Background(), func(in core.Inbound) { called = true })
+	p := newPluginForTest(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { called = true })
 
 	// when
 	// ... a message from user-2 arrives
@@ -182,9 +175,8 @@ func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
 	// ... a session where thread creation fails
 	s := &sessionFull{}
 	s.On("MessageThreadStartComplex", "channel-1", "msg-5", mock.Anything).Return("", errors.New("discord error")).Once()
-	p := newPluginForTest(s, "bot-id", []string{"user-1"})
 	delivered := false
-	_ = p.Start(context.Background(), func(in core.Inbound) { delivered = true })
+	p := newPluginForTest(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { delivered = true })
 
 	// when
 	// ... an @claude message arrives in a plain channel

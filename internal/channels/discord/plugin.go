@@ -65,11 +65,6 @@ func (p *Plugin) Start(ctx context.Context, deliver func(core.Inbound)) error {
 	p.deliver = deliver
 	p.mu.Unlock()
 
-	// Tests inject p.session via newPluginForTest; skip live wiring when set.
-	if p.session != nil {
-		return nil
-	}
-
 	dg, err := connect(p.cfg.Token)
 	if err != nil {
 		return err
@@ -193,11 +188,12 @@ func threadName(content string) string {
 	return t
 }
 
-// newPluginForTest constructs a plugin with a pre-injected session, bypassing
-// the discordgo Open path. Test-only.
-func newPluginForTest(s sessionForPlugin, botID string, allowed []string) *Plugin {
+// newPluginForTest constructs a plugin with a pre-injected session and deliver
+// callback, bypassing the discordgo Open path. Test-only.
+func newPluginForTest(s sessionForPlugin, botID string, allowed []string, deliver func(core.Inbound)) *Plugin {
 	p := New(Config{BotID: botID, AllowedUsers: allowed})
 	p.session = s
+	p.deliver = deliver
 	return p
 }
 
