@@ -3,8 +3,10 @@ package discord
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/bwmarrin/discordgo"
@@ -17,13 +19,14 @@ const maxDiscordMessageLen = 2000
 // the plugin's tests and adapter both speak. Real discordgo events get
 // translated into this struct in Start (Task 9).
 type messageEvent struct {
-	AuthorID  string
-	ChannelID string
-	ParentID  string // populated when IsThread is true
-	MessageID string
-	Content   string
-	IsThread  bool
-	IsDM      bool
+	AuthorID    string
+	ChannelID   string
+	ParentID    string // populated when IsThread is true
+	MessageID   string
+	Content     string
+	IsThread    bool
+	IsDM        bool
+	Attachments []*discordgo.MessageAttachment
 }
 
 // Config holds the bot configuration fields needed by the plugin.
@@ -32,6 +35,12 @@ type Config struct {
 	Token        string
 	BotID        string
 	AllowedUsers []string
+	// MediaDir is the directory Discord attachments are saved to. When empty,
+	// attachment processing is disabled.
+	MediaDir string
+	// Downloader fetches raw bytes from Discord CDN URLs. When nil and MediaDir
+	// is set, New installs an HTTPDownloader with a 30 s timeout.
+	Downloader Downloader
 }
 
 // Plugin implements core.ChannelPlugin for Discord.
@@ -56,6 +65,11 @@ type sessionForPlugin interface {
 // that satisfies sessionForPlugin. Pass nil only when the plugin will be used
 // solely for capability queries (e.g. probes built before connecting).
 func New(cfg Config, s sessionForPlugin) *Plugin {
+	if cfg.MediaDir != "" && cfg.Downloader == nil {
+		cfg.Downloader = &HTTPDownloader{
+			Client: &http.Client{Timeout: 30 * time.Second},
+		}
+	}
 	return &Plugin{cfg: cfg, session: s, threads: newThreadRegistry()}
 }
 
@@ -98,10 +112,11 @@ func translateMessageCreate(m *discordgo.MessageCreate, botID string, lookupChan
 		return messageEvent{}, false
 	}
 	ev := messageEvent{
-		AuthorID:  m.Author.ID,
-		ChannelID: m.ChannelID,
-		MessageID: m.ID,
-		Content:   m.Content,
+		AuthorID:    m.Author.ID,
+		ChannelID:   m.ChannelID,
+		MessageID:   m.ID,
+		Content:     m.Content,
+		Attachments: m.Attachments,
 	}
 	// Discord delivers DMs with GuildID == "".
 	if m.GuildID == "" {
@@ -133,6 +148,26 @@ func (p *Plugin) handleMessage(ev messageEvent) {
 		return
 	}
 
+	// Extract attachments when media processing is configured.
+	var refs []core.AttachmentRef
+	if p.cfg.MediaDir != "" && p.cfg.Downloader != nil && len(ev.Attachments) > 0 {
+		mc := &discordgo.MessageCreate{Message: &discordgo.Message{Attachments: ev.Attachments}}
+		var skipped []string
+		var err error
+		refs, skipped, err = extractAttachments(mc, p.cfg.Downloader, p.cfg.MediaDir)
+		if err != nil {
+			slog.Error("extracting discord attachments", "error", err)
+		}
+		if len(skipped) > 0 {
+			notice := strings.Join(skipped, "\n")
+			if cleaned == "" {
+				cleaned = notice
+			} else {
+				cleaned = notice + "\n" + cleaned
+			}
+		}
+	}
+
 	threadID, err := p.resolveThread(ev)
 	if err != nil {
 		if reactErr := p.session.MessageReactionAdd(ev.ChannelID, ev.MessageID, "❌"); reactErr != nil {
@@ -151,6 +186,7 @@ func (p *Plugin) handleMessage(ev messageEvent) {
 	d(core.Inbound{
 		SessionKey:   sessionKey(ev, threadID),
 		Text:         cleaned,
+		Attachments:  refs,
 		Reply:        newOutbound(p.session, threadID, ev.MessageID, maxDiscordMessageLen),
 		Capabilities: p.Capabilities(),
 	})
