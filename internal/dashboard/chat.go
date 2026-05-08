@@ -59,12 +59,17 @@ func (s *Server) handleChat(content string) {
 		return
 	}
 
-	active := true
-	s.hub.Broadcast(Message{
-		Type:      "session",
-		Active:    &active,
-		SessionID: backend.SessionID(),
-	})
+	s.mu.Lock()
+	if s.lastSessionID != backend.SessionID() {
+		s.lastSessionID = backend.SessionID()
+		active := true
+		s.hub.Broadcast(Message{
+			Type:      "session",
+			Active:    &active,
+			SessionID: backend.SessionID(),
+		})
+	}
+	s.mu.Unlock()
 
 	s.hub.Broadcast(Message{
 		Type:    "chat",

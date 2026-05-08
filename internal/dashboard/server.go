@@ -31,8 +31,9 @@ type Server struct {
 	password          string
 	chatCallback      func(sessionID, text string)
 
-	mu       sync.Mutex
-	sessions map[string]time.Time // valid session tokens
+	mu            sync.Mutex
+	sessions      map[string]time.Time // valid session tokens
+	lastSessionID string               // protected by mu
 }
 
 // NewServer creates a dashboard server. chatCallback is required; it is invoked
