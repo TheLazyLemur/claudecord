@@ -50,7 +50,7 @@ func TestPlugin_AtClaudeInPlainChannel_OpensNewThread(t *testing.T) {
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
 		MessageID: "msg-1",
-		Content:   "@claude do the thing",
+		Content:   "<@bot-id> do the thing",
 		IsThread:  false,
 	})
 
@@ -80,7 +80,7 @@ func TestPlugin_AtClaudeInOwnedThread_StaysInThread(t *testing.T) {
 		ChannelID: "thread-existing",
 		ParentID:  "channel-1",
 		MessageID: "msg-9",
-		Content:   "@claude follow up",
+		Content:   "<@bot-id> follow up",
 		IsThread:  true,
 	})
 
@@ -107,7 +107,7 @@ func TestPlugin_AtClaudeInForeignThread_OpensSiblingThread(t *testing.T) {
 		ChannelID: "thread-foreign",
 		ParentID:  "channel-1",
 		MessageID: "msg-7",
-		Content:   "@claude do it",
+		Content:   "<@bot-id> do it",
 		IsThread:  true,
 	})
 
@@ -155,7 +155,7 @@ func TestPlugin_DM_UsesDMSessionKey(t *testing.T) {
 		AuthorID:  "user-1",
 		ChannelID: "dm-channel",
 		MessageID: "msg-3",
-		Content:   "@claude hello",
+		Content:   "<@bot-id> hello",
 		IsDM:      true,
 	})
 
@@ -179,7 +179,7 @@ func TestPlugin_DisallowedUser_Ignored(t *testing.T) {
 		AuthorID:  "user-2",
 		ChannelID: "channel-1",
 		MessageID: "msg-4",
-		Content:   "@claude hello",
+		Content:   "<@bot-id> hello",
 	})
 
 	// then
@@ -203,7 +203,7 @@ func TestPlugin_Inbound_CapabilitiesMatchPluginCapabilities(t *testing.T) {
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
 		MessageID: "msg-1",
-		Content:   "@claude do the thing",
+		Content:   "<@bot-id> do the thing",
 		IsThread:  false,
 	})
 
@@ -248,7 +248,7 @@ func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
 		MessageID: "msg-5",
-		Content:   "@claude hello",
+		Content:   "<@bot-id> hello",
 		IsThread:  false,
 	})
 
@@ -280,7 +280,7 @@ func TestPlugin_HandleMessage_PopulatesAttachments(t *testing.T) {
 		AuthorID:  "user-1",
 		ChannelID: "thread-1",
 		MessageID: "msg-1",
-		Content:   "@claude look at this",
+		Content:   "<@bot-id> look at this",
 		IsThread:  true,
 		Attachments: []*discordgo.MessageAttachment{
 			{
@@ -319,7 +319,7 @@ func TestPlugin_HandleMessage_SkippedAttachmentPrependedToText(t *testing.T) {
 		AuthorID:  "user-1",
 		ChannelID: "thread-1",
 		MessageID: "msg-2",
-		Content:   "@claude check this",
+		Content:   "<@bot-id> check this",
 		IsThread:  true,
 		Attachments: []*discordgo.MessageAttachment{
 			{
@@ -353,7 +353,7 @@ func TestPlugin_HandleMessage_NoMediaDir_NoAttachmentsProcessed(t *testing.T) {
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
 		MessageID: "msg-3",
-		Content:   "@claude hi",
+		Content:   "<@bot-id> hi",
 		IsThread:  false,
 		Attachments: []*discordgo.MessageAttachment{
 			{ID: "att-3", Filename: "file.png", ContentType: "image/png", URL: "https://cdn/file.png"},
@@ -364,6 +364,80 @@ func TestPlugin_HandleMessage_NoMediaDir_NoAttachmentsProcessed(t *testing.T) {
 	// ... attachments are silently skipped and the inbound has no refs
 	a.Empty(got.Attachments)
 	s.AssertExpectations(t)
+}
+
+func TestStripMention_AcceptsBotMention(t *testing.T) {
+	// given
+	// ... a bot ID and a canonical Discord mention prefix
+	botID := "123456789"
+	content := "<@123456789> do the thing"
+
+	// when
+	// ... stripMention is called
+	result, ok := stripMention(content, botID)
+
+	// then
+	// ... the mention is stripped and the remainder returned
+	if !ok {
+		t.Fatalf("expected ok=true for canonical mention")
+	}
+	if result != "do the thing" {
+		t.Fatalf("text: %q", result)
+	}
+}
+
+func TestStripMention_AcceptsBangMention(t *testing.T) {
+	// given
+	// ... a bot ID and a bang-style Discord mention prefix
+	botID := "123456789"
+	content := "<@!123456789> follow up"
+
+	// when
+	// ... stripMention is called
+	result, ok := stripMention(content, botID)
+
+	// then
+	// ... the mention is stripped and the remainder returned
+	if !ok {
+		t.Fatalf("expected ok=true for bang mention")
+	}
+	if result != "follow up" {
+		t.Fatalf("text: %q", result)
+	}
+}
+
+func TestStripMention_RejectsLiteralAtClaude(t *testing.T) {
+	// given
+	// ... a bot ID and a literal @claude string (not a real Discord mention)
+	botID := "123456789"
+	content := "@claude do the thing"
+
+	// when
+	// ... stripMention is called
+	_, ok := stripMention(content, botID)
+
+	// then
+	// ... the check fails because the format is wrong
+	if ok {
+		t.Fatalf("expected ok=false for literal @claude")
+	}
+}
+
+func TestStripMention_RejectsNoMention(t *testing.T) {
+	// given
+	// ... a bot ID and a plain message with no mention
+	botID := "123456789"
+	content := "just chatting"
+
+	// when
+	// ... stripMention is called
+	_, ok := stripMention(content, botID)
+
+	// then
+	// ... the check fails
+	if ok {
+		t.Fatalf("expected ok=false for message with no mention")
+	}
 }
 
 func TestTranslate_AttachmentsPopulated(t *testing.T) {
@@ -382,7 +456,7 @@ func TestTranslate_AttachmentsPopulated(t *testing.T) {
 			Author:      &discordgo.User{ID: "user-1"},
 			ChannelID:   "ch-1",
 			ID:          "msg-1",
-			Content:     "@claude hello",
+			Content:     "<@bot-id> hello",
 			GuildID:     "guild-1",
 			Attachments: []*discordgo.MessageAttachment{att},
 		},
