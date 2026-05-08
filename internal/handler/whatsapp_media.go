@@ -11,10 +11,14 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/pkg/errors"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"golang.org/x/text/unicode/norm"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -27,17 +31,75 @@ type Downloader interface {
 	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
 }
 
+// WAClient is what the WhatsApp plugin needs from the WhatsApp client wrapper.
+type WAClient interface {
+	core.WhatsAppMessenger
+	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
+}
+
+// WhatsAppClientWrapper wraps whatsmeow.Client, implements WAClient.
+type WhatsAppClientWrapper struct {
+	client *whatsmeow.Client
+}
+
+func NewWhatsAppClientWrapper(client *whatsmeow.Client) *WhatsAppClientWrapper {
+	return &WhatsAppClientWrapper{client: client}
+}
+
+func (c *WhatsAppClientWrapper) Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error) {
+	return c.client.Download(ctx, msg)
+}
+
+func (c *WhatsAppClientWrapper) SendText(chatJID, text string) error {
+	jid, err := types.ParseJID(chatJID)
+	if err != nil {
+		return errors.Wrap(err, "parsing chat JID")
+	}
+	msg := &waE2E.Message{Conversation: proto.String(text)}
+	_, err = c.client.SendMessage(context.Background(), jid, msg)
+	return errors.Wrap(err, "sending whatsapp message")
+}
+
+func (c *WhatsAppClientWrapper) SendTyping(chatJID string) error {
+	jid, err := types.ParseJID(chatJID)
+	if err != nil {
+		return errors.Wrap(err, "parsing chat JID")
+	}
+	ctx := context.Background()
+	if err := c.client.SendPresence(ctx, types.PresenceAvailable); err != nil {
+		return errors.Wrap(err, "sending presence")
+	}
+	return errors.Wrap(
+		c.client.SendChatPresence(ctx, jid, types.ChatPresenceComposing, types.ChatPresenceMediaText),
+		"sending chat presence",
+	)
+}
+
 type Attachment struct {
 	MIME         string
 	OriginalName string
 	Bytes        []byte
 }
 
-// extractInbound pulls caption + attachment out of a WhatsApp message event.
+// ExtractText returns the plain text body of a WhatsApp message.
+func ExtractText(msg *waE2E.Message) string {
+	if msg == nil {
+		return ""
+	}
+	text := msg.GetConversation()
+	if text == "" {
+		if ext := msg.GetExtendedTextMessage(); ext != nil {
+			text = ext.GetText()
+		}
+	}
+	return text
+}
+
+// ExtractInbound pulls caption + attachment out of a WhatsApp message event.
 // Returns (caption, nil, nil) for plain text. Returns (caption, att, nil) for
 // supported media (image, document). Other media types yield (caption, nil, nil) —
 // out of scope for this implementation.
-func extractInbound(ctx context.Context, msg *events.Message, dl Downloader) (string, *Attachment, error) {
+func ExtractInbound(ctx context.Context, msg *events.Message, dl Downloader) (string, *Attachment, error) {
 	if msg == nil || msg.Message == nil {
 		return "", nil, nil
 	}
@@ -65,7 +127,7 @@ func extractInbound(ctx context.Context, msg *events.Message, dl Downloader) (st
 		}, nil
 	}
 
-	return extractText(msg.Message), nil, nil
+	return ExtractText(msg.Message), nil, nil
 }
 
 // isImageMIME reports whether att should be size-capped at MaxImageBytes.
@@ -81,9 +143,9 @@ func SizeCap(mime string) int {
 	return MaxDocBytes
 }
 
-// saveAttachment decrypts → writes the attachment under mediaDir with a
+// SaveAttachment decrypts → writes the attachment under mediaDir with a
 // collision-resistant name. now is injected so tests can freeze time.
-func saveAttachment(mediaDir string, att *Attachment, now time.Time) (string, error) {
+func SaveAttachment(mediaDir string, att *Attachment, now time.Time) (string, error) {
 	if att == nil {
 		return "", errors.New("nil attachment")
 	}

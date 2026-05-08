@@ -86,66 +86,6 @@ func TestDiscordResponder_SendUpdate_ReusesThread(t *testing.T) {
 }
 
 
-func TestWhatsAppResponder_SendTyping(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-	client.On("SendTyping", "chat-1@s.whatsapp.net").Return(nil)
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	err := r.SendTyping()
-
-	a.NoError(err)
-	client.AssertExpectations(t)
-}
-
-func TestWhatsAppResponder_PostResponse_Short(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-	client.On("SendText", "chat-1@s.whatsapp.net", "hello").Return(nil)
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	err := r.PostResponse("hello")
-
-	a.NoError(err)
-	client.AssertExpectations(t)
-}
-
-func TestWhatsAppResponder_PostResponse_Chunked(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-	long := strings.Repeat("x", MaxWhatsAppMessageLen+100)
-	client.On("SendText", "chat-1@s.whatsapp.net", strings.Repeat("x", MaxWhatsAppMessageLen)).Return(nil)
-	client.On("SendText", "chat-1@s.whatsapp.net", strings.Repeat("x", 100)).Return(nil)
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	err := r.PostResponse(long)
-
-	a.NoError(err)
-	client.AssertExpectations(t)
-}
-
-func TestWhatsAppResponder_AddReaction_Noop(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	err := r.AddReaction("👍")
-
-	a.NoError(err)
-}
-
-func TestWhatsAppResponder_SendUpdate(t *testing.T) {
-	a := assert.New(t)
-	client := &MockWhatsAppMessenger{}
-	client.On("SendText", "chat-1@s.whatsapp.net", "working on it").Return(nil)
-
-	r := NewWhatsAppResponder(client, "chat-1@s.whatsapp.net", "sender-1@s.whatsapp.net")
-	err := r.SendUpdate("working on it")
-
-	a.NoError(err)
-	client.AssertExpectations(t)
-}
-
 func TestChunkMessage_Short(t *testing.T) {
 	a := assert.New(t)
 	a.Equal([]string{"hello"}, ChunkMessage("hello", 10))
@@ -206,17 +146,3 @@ func (m *MockDiscordClient) AddReaction(channelID, messageID, emoji string) erro
 	return args.Error(0)
 }
 
-// MockWhatsAppMessenger for tests
-type MockWhatsAppMessenger struct {
-	mock.Mock
-}
-
-func (m *MockWhatsAppMessenger) SendText(chatJID, text string) error {
-	args := m.Called(chatJID, text)
-	return args.Error(0)
-}
-
-func (m *MockWhatsAppMessenger) SendTyping(chatJID string) error {
-	args := m.Called(chatJID)
-	return args.Error(0)
-}

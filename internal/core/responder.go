@@ -1,7 +1,6 @@
 package core
 
 const MaxDiscordMessageLen = 2000
-const MaxWhatsAppMessageLen = 65536
 
 // ChunkMessage splits content into chunks of at most maxLen bytes.
 func ChunkMessage(content string, maxLen int) []string {
@@ -65,39 +64,3 @@ func (r *DiscordResponder) SendUpdate(message string) error {
 	return r.client.SendMessage(r.threadID, message)
 }
 
-// WhatsAppResponder sends responses via WhatsApp
-type WhatsAppResponder struct {
-	client    WhatsAppMessenger
-	chatJID   string
-	senderJID string
-}
-
-func NewWhatsAppResponder(client WhatsAppMessenger, chatJID, senderJID string) *WhatsAppResponder {
-	return &WhatsAppResponder{
-		client:    client,
-		chatJID:   chatJID,
-		senderJID: senderJID,
-	}
-}
-
-func (r *WhatsAppResponder) SendTyping() error {
-	return r.client.SendTyping(r.chatJID)
-}
-
-func (r *WhatsAppResponder) PostResponse(content string) error {
-	chunks := ChunkMessage(content, MaxWhatsAppMessageLen)
-	for _, chunk := range chunks {
-		if err := r.client.SendText(r.chatJID, chunk); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *WhatsAppResponder) AddReaction(emoji string) error {
-	return nil
-}
-
-func (r *WhatsAppResponder) SendUpdate(message string) error {
-	return r.client.SendText(r.chatJID, message)
-}

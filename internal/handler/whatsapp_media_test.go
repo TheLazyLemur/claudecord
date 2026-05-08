@@ -23,7 +23,7 @@ func TestSaveAttachment_FilenameWithOriginalName(t *testing.T) {
 		Bytes:        []byte("PNGDATA"),
 	}
 
-	path, err := saveAttachment(dir, att, now)
+	path, err := SaveAttachment(dir, att, now)
 	r.NoError(err)
 
 	base := filepath.Base(path)
@@ -47,7 +47,7 @@ func TestSaveAttachment_RandomStemWhenSanitizedEmpty(t *testing.T) {
 		Bytes:        []byte("data"),
 	}
 
-	path, err := saveAttachment(dir, att, now)
+	path, err := SaveAttachment(dir, att, now)
 	r.NoError(err)
 
 	base := filepath.Base(path)
@@ -68,7 +68,7 @@ func TestSaveAttachment_ExtFromMIME(t *testing.T) {
 		Bytes:        []byte("d"),
 	}
 
-	path, err := saveAttachment(dir, att, time.Now())
+	path, err := SaveAttachment(dir, att, time.Now())
 	r.NoError(err)
 
 	a.True(strings.HasSuffix(path, ".png"), "got %s", path)
@@ -85,7 +85,7 @@ func TestSaveAttachment_BinFallbackWhenMIMEUnknown(t *testing.T) {
 		Bytes:        []byte("d"),
 	}
 
-	path, err := saveAttachment(dir, att, time.Now())
+	path, err := SaveAttachment(dir, att, time.Now())
 	r.NoError(err)
 
 	a.True(strings.HasSuffix(path, ".bin"), "got %s", path)
@@ -101,7 +101,7 @@ func TestSaveAttachment_FilePermissions(t *testing.T) {
 		Bytes: []byte("d"),
 	}
 
-	path, err := saveAttachment(dir, att, time.Now())
+	path, err := SaveAttachment(dir, att, time.Now())
 	r.NoError(err)
 
 	info, err := os.Stat(path)
