@@ -7,8 +7,8 @@ type SessionKey string
 type Inbound struct {
 	SessionKey SessionKey
 	Text       string
-	// Attachments carries decrypted media refs for the current message.
-	// WhatsApp populates this; Discord currently does not.
+	// Attachments carries media refs for the current message.
+	// Populated by channels that translate inbound platform attachments (currently WhatsApp and Discord).
 	Attachments []AttachmentRef
 	Reply       Outbound
 	// Capabilities describes what the originating channel plugin supports.
