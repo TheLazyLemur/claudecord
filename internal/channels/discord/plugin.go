@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -62,18 +63,11 @@ func (p *Plugin) Start(ctx context.Context, deliver func(core.Inbound)) error {
 	p.mu.Lock()
 	p.deliver = deliver
 	p.mu.Unlock()
-	// Real discordgo wiring lands in Task 9; tests drive handleMessageForTest.
+	// Real discordgo wiring lands in Task 9.
 	return nil
 }
 
 func (p *Plugin) Stop() error { return nil }
-
-// handleMessageForTest is the seam tests use. Production discordgo handler
-// (registered in Start by Task 9) translates a *discordgo.MessageCreate into a
-// messageEvent and forwards here.
-func (p *Plugin) handleMessageForTest(ev messageEvent) {
-	p.handleMessage(ev)
-}
 
 func (p *Plugin) handleMessage(ev messageEvent) {
 	if !p.userAllowed(ev.AuthorID) {
@@ -116,6 +110,7 @@ func (p *Plugin) resolveThread(ev messageEvent) (string, error) {
 	}
 	tid, err := p.session.MessageThreadStartComplex(parent, ev.MessageID, threadName(ev.Content))
 	if err != nil {
+		slog.Warn("discord create thread failed", "channel", parent, "message", ev.MessageID, "error", err)
 		return "", errors.Wrap(err, "creating thread")
 	}
 	p.threads.markOwned(tid)
@@ -149,8 +144,8 @@ func stripMention(content string) (string, bool) {
 
 func threadName(content string) string {
 	t := strings.TrimSpace(content)
-	if len(t) > 50 {
-		t = t[:50]
+	if r := []rune(t); len(r) > 50 {
+		t = string(r[:50])
 	}
 	if t == "" {
 		t = "Claude"

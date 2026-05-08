@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
@@ -28,7 +29,7 @@ func TestPlugin_AtClaudeInPlainChannel_OpensNewThread(t *testing.T) {
 
 	// when
 	// ... a MessageCreate event arrives in a plain channel mentioning the bot
-	p.handleMessageForTest(messageEvent{
+	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
 		MessageID: "msg-1",
@@ -58,7 +59,7 @@ func TestPlugin_AtClaudeInOwnedThread_StaysInThread(t *testing.T) {
 
 	// when
 	// ... an @claude message lands inside that thread
-	p.handleMessageForTest(messageEvent{
+	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "thread-existing",
 		ParentID:  "channel-1",
@@ -86,7 +87,7 @@ func TestPlugin_AtClaudeInForeignThread_OpensSiblingThread(t *testing.T) {
 
 	// when
 	// ... an @claude message arrives in a foreign thread
-	p.handleMessageForTest(messageEvent{
+	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "thread-foreign",
 		ParentID:  "channel-1",
@@ -113,7 +114,7 @@ func TestPlugin_NoMention_Ignored(t *testing.T) {
 
 	// when
 	// ... a message without @claude arrives
-	p.handleMessageForTest(messageEvent{
+	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
 		MessageID: "msg-2",
@@ -137,7 +138,7 @@ func TestPlugin_DM_UsesDMSessionKey(t *testing.T) {
 
 	// when
 	// ... a DM message arrives
-	p.handleMessageForTest(messageEvent{
+	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "dm-channel",
 		MessageID: "msg-3",
@@ -162,7 +163,7 @@ func TestPlugin_DisallowedUser_Ignored(t *testing.T) {
 
 	// when
 	// ... a message from user-2 arrives
-	p.handleMessageForTest(messageEvent{
+	p.handleMessage(messageEvent{
 		AuthorID:  "user-2",
 		ChannelID: "channel-1",
 		MessageID: "msg-4",
@@ -174,4 +175,31 @@ func TestPlugin_DisallowedUser_Ignored(t *testing.T) {
 	if called {
 		t.Fatalf("expected message from disallowed user to be ignored")
 	}
+}
+
+func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
+	// given
+	// ... a session where thread creation fails
+	s := &sessionFull{}
+	s.On("MessageThreadStartComplex", "channel-1", "msg-5", mock.Anything).Return("", errors.New("discord error")).Once()
+	p := newPluginForTest(s, "bot-id", []string{"user-1"})
+	delivered := false
+	_ = p.Start(context.Background(), func(in core.Inbound) { delivered = true })
+
+	// when
+	// ... an @claude message arrives in a plain channel
+	p.handleMessage(messageEvent{
+		AuthorID:  "user-1",
+		ChannelID: "channel-1",
+		MessageID: "msg-5",
+		Content:   "@claude hello",
+		IsThread:  false,
+	})
+
+	// then
+	// ... no inbound was delivered
+	if delivered {
+		t.Fatalf("expected message to be dropped when thread creation fails")
+	}
+	s.AssertExpectations(t)
 }
