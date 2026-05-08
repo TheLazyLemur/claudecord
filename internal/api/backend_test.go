@@ -309,7 +309,7 @@ func TestBackend_Claim_FirstCallerOwnsLoop(t *testing.T) {
 
 	b := &Backend{}
 
-	owned := b.claim("hello")
+	owned := b.claim(core.Inbound{Text: "hello"})
 
 	a.True(owned)
 	a.True(b.running)
@@ -322,9 +322,9 @@ func TestBackend_Claim_SecondCallerEnqueues(t *testing.T) {
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
 
-	owned := b.claim("steered")
+	owned := b.claim(core.Inbound{Text: "steered"})
 
 	a.False(owned)
 	a.True(b.running)
@@ -338,11 +338,11 @@ func TestBackend_Claim_AfterReleaseWithQueuedMessagesIncludesThemInNewTurn(t *te
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
-	r.False(b.claim("queued-during-error"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
+	r.False(b.claim(core.Inbound{Text: "queued-during-error"}))
 	b.release()
 
-	owned := b.claim("fresh")
+	owned := b.claim(core.Inbound{Text: "fresh"})
 
 	a.True(owned)
 	a.True(b.running)
@@ -359,9 +359,9 @@ func TestBackend_DrainMailbox_ReturnsAndClears(t *testing.T) {
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
-	r.False(b.claim("a"))
-	r.False(b.claim("b"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
+	r.False(b.claim(core.Inbound{Text: "a"}))
+	r.False(b.claim(core.Inbound{Text: "b"}))
 
 	got := b.drainMailbox()
 
@@ -375,7 +375,7 @@ func TestBackend_FinishOrContinue_EmptyMailboxFlipsRunningFalse(t *testing.T) {
 	r := require.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
 
 	got := b.finishOrContinue()
 
@@ -388,8 +388,8 @@ func TestBackend_FinishOrContinue_NonEmptyMailboxKeepsRunning(t *testing.T) {
 	r := require.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
-	r.False(b.claim("steered"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
+	r.False(b.claim(core.Inbound{Text: "steered"}))
 
 	got := b.finishOrContinue()
 
@@ -407,13 +407,13 @@ func TestBackend_Claim_DropsWhenMailboxAtCap(t *testing.T) {
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
 	for i := 0; i < maxMailbox; i++ {
-		r.False(b.claim("queued"))
+		r.False(b.claim(core.Inbound{Text: "queued"}))
 	}
 	r.Len(b.mailbox, maxMailbox)
 
-	owned := b.claim("dropped")
+	owned := b.claim(core.Inbound{Text: "dropped"})
 
 	a.False(owned)
 	a.Len(b.mailbox, maxMailbox)
@@ -488,7 +488,7 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 	}
 	first := make(chan result, 1)
 	go func() {
-		resp, err := b.Converse(context.Background(), "hello", stubResponder{}, allowAllPerms{})
+		resp, err := b.Converse(context.Background(), core.Inbound{Text: "hello"}, stubResponder{}, allowAllPerms{})
 		first <- result{resp, err}
 	}()
 
@@ -496,7 +496,7 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 
 	steerDone := make(chan result, 1)
 	go func() {
-		resp, err := b.Converse(context.Background(), "steer me", stubResponder{}, allowAllPerms{})
+		resp, err := b.Converse(context.Background(), core.Inbound{Text: "steer me"}, stubResponder{}, allowAllPerms{})
 		steerDone <- result{resp, err}
 	}()
 

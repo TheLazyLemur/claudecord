@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"log/slog"
 	"strings"
 	"sync"
@@ -73,8 +74,8 @@ func (b *Backend) Close() error {
 
 const maxMailbox = 64
 
-func (b *Backend) Converse(ctx context.Context, msg string, out core.Outbound, perms core.PermissionChecker) (string, error) {
-	if !b.claim(msg) {
+func (b *Backend) Converse(ctx context.Context, in core.Inbound, out core.Outbound, perms core.PermissionChecker) (string, error) {
+	if !b.claim(in) {
 		return "", nil
 	}
 
@@ -85,7 +86,7 @@ func (b *Backend) Converse(ctx context.Context, msg string, out core.Outbound, p
 	return resp, err
 }
 
-func (b *Backend) claim(msg string) bool {
+func (b *Backend) claim(in core.Inbound) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -94,16 +95,50 @@ func (b *Backend) claim(msg string) bool {
 			slog.Warn("steering mailbox full, dropping message", "session", b.sessionID, "len", len(b.mailbox))
 			return false
 		}
-		b.mailbox = append(b.mailbox, msg)
+		b.mailbox = append(b.mailbox, in.Text)
 		slog.Info("steering message queued", "session", b.sessionID)
 		return false
 	}
 
 	b.running = true
-	blocks := append([]anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(msg)}, steeringBlocks(b.mailbox)...)
+	userText := renderUserMessage(in)
+	blocks := append([]anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(userText)}, steeringBlocks(b.mailbox)...)
 	b.mailbox = nil
 	b.history = append(b.history, anthropic.NewUserMessage(blocks...))
 	return true
+}
+
+// renderUserMessage builds the text content for the user turn. When the
+// inbound carries attachments, <attachment> tags are appended after the
+// message text — one tag per attachment, matching the format used by
+// RenderWhatsAppBatch so skill matchers see a consistent format.
+func renderUserMessage(in core.Inbound) string {
+	if len(in.Attachments) == 0 {
+		return in.Text
+	}
+	var b strings.Builder
+	b.WriteString(in.Text)
+	for _, a := range in.Attachments {
+		b.WriteByte('\n')
+		b.WriteString(`<attachment path="`)
+		b.WriteString(escapeXMLAttr(a.Path))
+		b.WriteString(`" mime="`)
+		b.WriteString(escapeXMLAttr(a.MIME))
+		if a.OriginalName != "" {
+			b.WriteString(`" original_name="`)
+			b.WriteString(escapeXMLAttr(a.OriginalName))
+		}
+		b.WriteString(`" />`)
+	}
+	return b.String()
+}
+
+func escapeXMLAttr(s string) string {
+	var sb strings.Builder
+	xml.EscapeText(&sb, []byte(s))
+	out := sb.String()
+	out = strings.ReplaceAll(out, "'", "&#39;")
+	return out
 }
 
 func (b *Backend) drainMailbox() []string {

@@ -8,16 +8,18 @@ import (
 )
 
 type stubBackend struct {
-	id         string
-	messages   []string
-	closeErr   error
-	closed     bool
-	converseR  string
+	id          string
+	messages    []string
+	closeErr    error
+	closed      bool
+	converseR   string
 	converseErr error
+	lastInbound Inbound
 }
 
-func (s *stubBackend) Converse(_ context.Context, msg string, _ Outbound, _ PermissionChecker) (string, error) {
-	s.messages = append(s.messages, msg)
+func (s *stubBackend) Converse(_ context.Context, in Inbound, _ Outbound, _ PermissionChecker) (string, error) {
+	s.messages = append(s.messages, in.Text)
+	s.lastInbound = in
 	return s.converseR, s.converseErr
 }
 func (s *stubBackend) SessionID() string { return s.id }
@@ -231,5 +233,40 @@ func TestHandleInbound_NoReactionsCapsForwardedToFactory(t *testing.T) {
 	// ... the factory received caps with Reactions false
 	if f.lastCaps.Reactions {
 		t.Fatalf("expected Reactions false to be forwarded, got: %+v", f.lastCaps)
+	}
+}
+
+func TestHandleInbound_AttachmentsReachBackend(t *testing.T) {
+	// given
+	// ... a stub backend and a bot
+	be := &stubBackend{id: "b1", converseR: "ok"}
+	f := &stubFactory{next: func() Backend { return be }}
+	mgr := NewSessionManager(f, nil)
+	bot := NewBot(mgr, nil)
+	r := &stubResponder{}
+	atts := []AttachmentRef{
+		{Path: "/tmp/a.png", MIME: "image/png", OriginalName: "a.png"},
+		{Path: "/tmp/b.pdf", MIME: "application/pdf", OriginalName: "b.pdf"},
+	}
+
+	// when
+	// ... an inbound with attachments is dispatched
+	_ = bot.HandleInbound(Inbound{
+		SessionKey:  "k1",
+		Text:        "look at these",
+		Attachments: atts,
+		Reply:       r,
+	})
+
+	// then
+	// ... the backend received the full inbound including attachments
+	if len(be.lastInbound.Attachments) != 2 {
+		t.Fatalf("expected 2 attachments in backend inbound, got %d", len(be.lastInbound.Attachments))
+	}
+	if be.lastInbound.Attachments[0].Path != "/tmp/a.png" {
+		t.Fatalf("unexpected first attachment path: %s", be.lastInbound.Attachments[0].Path)
+	}
+	if be.lastInbound.Attachments[1].MIME != "application/pdf" {
+		t.Fatalf("unexpected second attachment MIME: %s", be.lastInbound.Attachments[1].MIME)
 	}
 }

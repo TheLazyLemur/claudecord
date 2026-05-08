@@ -51,7 +51,7 @@ func (b *Bot) HandleInbound(in Inbound) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), b.converseTimeout)
 	defer cancel()
-	response, err := backend.Converse(ctx, in.Text, in.Reply, b.perms)
+	response, err := backend.Converse(ctx, in, in.Reply, b.perms)
 	if err != nil {
 		return errors.Wrap(err, "converse")
 	}

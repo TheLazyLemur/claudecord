@@ -4,7 +4,7 @@ import "context"
 
 // Backend abstracts the conversation layer (CLI or API)
 type Backend interface {
-	Converse(ctx context.Context, msg string, out Outbound, perms PermissionChecker) (string, error)
+	Converse(ctx context.Context, in Inbound, out Outbound, perms PermissionChecker) (string, error)
 	SessionID() string
 	Close() error
 }

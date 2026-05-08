@@ -33,7 +33,7 @@ func NewMemoryFlusher(perms PermissionChecker) FlushFunc {
 		defer cancel()
 
 		responder := &noopResponder{}
-		if _, err := current.Converse(timeoutCtx, memoryFlushPrompt, responder, perms); err != nil {
+		if _, err := current.Converse(timeoutCtx, Inbound{Text: memoryFlushPrompt}, responder, perms); err != nil {
 			slog.Warn("memory flush failed", "error", err)
 		}
 	}

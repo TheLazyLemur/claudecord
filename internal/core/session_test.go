@@ -14,7 +14,7 @@ type mockBackend struct {
 	closed    bool
 }
 
-func (m *mockBackend) Converse(ctx context.Context, msg string, responder Outbound, perms PermissionChecker) (string, error) {
+func (m *mockBackend) Converse(ctx context.Context, in Inbound, responder Outbound, perms PermissionChecker) (string, error) {
 	return "", nil
 }
 

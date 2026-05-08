@@ -17,8 +17,8 @@ type recordingBackend struct {
 	converseErr  error
 }
 
-func (r *recordingBackend) Converse(ctx context.Context, msg string, responder Outbound, perms PermissionChecker) (string, error) {
-	r.gotPrompt = msg
+func (r *recordingBackend) Converse(ctx context.Context, in Inbound, responder Outbound, perms PermissionChecker) (string, error) {
+	r.gotPrompt = in.Text
 	r.gotPerms = perms
 	r.gotResponder = responder
 	return "", r.converseErr

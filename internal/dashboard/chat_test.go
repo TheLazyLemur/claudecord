@@ -16,7 +16,7 @@ type fakeBackend struct {
 	sessionID string
 }
 
-func (f *fakeBackend) Converse(_ context.Context, _ string, _ core.Outbound, _ core.PermissionChecker) (string, error) {
+func (f *fakeBackend) Converse(_ context.Context, _ core.Inbound, _ core.Outbound, _ core.PermissionChecker) (string, error) {
 	return "", nil
 }
 func (f *fakeBackend) SessionID() string { return f.sessionID }
