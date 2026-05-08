@@ -135,6 +135,9 @@ func (p *Plugin) handleMessage(ev messageEvent) {
 
 	threadID, err := p.resolveThread(ev)
 	if err != nil {
+		if reactErr := p.session.MessageReactionAdd(ev.ChannelID, ev.MessageID, "❌"); reactErr != nil {
+			slog.Warn("discord reaction add failed", "channel", ev.ChannelID, "message", ev.MessageID, "error", reactErr)
+		}
 		return
 	}
 

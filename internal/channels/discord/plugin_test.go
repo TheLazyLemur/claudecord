@@ -209,6 +209,7 @@ func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
 	// ... a session where thread creation fails
 	s := &sessionFull{}
 	s.On("MessageThreadStartComplex", "channel-1", "msg-5", mock.Anything).Return("", errors.New("discord error")).Once()
+	s.On("MessageReactionAdd", "channel-1", "msg-5", "❌").Return(nil).Once()
 	delivered := false
 	p := newTestPlugin(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { delivered = true })
 
@@ -223,7 +224,7 @@ func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
 	})
 
 	// then
-	// ... no inbound was delivered
+	// ... no inbound was delivered and a ❌ reaction was added to the original message
 	if delivered {
 		t.Fatalf("expected message to be dropped when thread creation fails")
 	}
