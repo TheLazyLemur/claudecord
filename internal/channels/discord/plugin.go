@@ -80,28 +80,41 @@ func (p *Plugin) Start(ctx context.Context, deliver func(core.Inbound)) error {
 	}
 
 	dg.AddHandler(func(_ *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.Author == nil || m.Author.ID == p.cfg.BotID {
+		ev, ok := translateMessageCreate(m, p.cfg.BotID, dg.State.Channel)
+		if !ok {
 			return
-		}
-		ev := messageEvent{
-			AuthorID:  m.Author.ID,
-			ChannelID: m.ChannelID,
-			MessageID: m.ID,
-			Content:   m.Content,
-		}
-		// Discord delivers DMs with GuildID == "".
-		if m.GuildID == "" {
-			ev.IsDM = true
-		}
-		// Channel state tells us whether we're inside a thread.
-		if ch, err := dg.State.Channel(m.ChannelID); err == nil && ch.IsThread() {
-			ev.IsThread = true
-			ev.ParentID = ch.ParentID
 		}
 		p.handleMessage(ev)
 	})
 
 	return nil
+}
+
+// translateMessageCreate converts a discordgo MessageCreate into the
+// platform-agnostic messageEvent the plugin's handleMessage consumes.
+// lookupChannel allows the State lookup to be stubbed in tests.
+func translateMessageCreate(m *discordgo.MessageCreate, botID string, lookupChannel func(string) (*discordgo.Channel, error)) (messageEvent, bool) {
+	if m.Author == nil || m.Author.ID == botID {
+		return messageEvent{}, false
+	}
+	ev := messageEvent{
+		AuthorID:  m.Author.ID,
+		ChannelID: m.ChannelID,
+		MessageID: m.ID,
+		Content:   m.Content,
+	}
+	// Discord delivers DMs with GuildID == "".
+	if m.GuildID == "" {
+		ev.IsDM = true
+	}
+	// Channel state tells us whether we're inside a thread.
+	if lookupChannel != nil {
+		if ch, err := lookupChannel(m.ChannelID); err == nil && ch.IsThread() {
+			ev.IsThread = true
+			ev.ParentID = ch.ParentID
+		}
+	}
+	return ev, true
 }
 
 func (p *Plugin) Stop() error {
