@@ -11,7 +11,7 @@ import (
 )
 
 func TestServer_NoPassword_Returns403(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "", nil)
 	handler := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -22,7 +22,7 @@ func TestServer_NoPassword_Returns403(t *testing.T) {
 }
 
 func TestServer_LoginPage_Unauthenticated(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 	handler := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
@@ -34,7 +34,7 @@ func TestServer_LoginPage_Unauthenticated(t *testing.T) {
 }
 
 func TestServer_Index_RedirectsToLogin(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 	handler := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -46,7 +46,7 @@ func TestServer_Index_RedirectsToLogin(t *testing.T) {
 }
 
 func TestServer_Login_WrongPassword(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 	handler := s.Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("password=wrong"))
@@ -58,7 +58,7 @@ func TestServer_Login_WrongPassword(t *testing.T) {
 }
 
 func TestServer_Login_CorrectPassword_SetsCookie(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 	handler := s.Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("password=testpass"))
@@ -74,7 +74,7 @@ func TestServer_Login_CorrectPassword_SetsCookie(t *testing.T) {
 }
 
 func TestServer_Index_WithValidSession(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 	handler := s.Handler()
 
 	// Login first
@@ -95,7 +95,7 @@ func TestServer_Index_WithValidSession(t *testing.T) {
 }
 
 func TestServer_WS_Unauthenticated(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 	handler := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
@@ -106,7 +106,7 @@ func TestServer_WS_Unauthenticated(t *testing.T) {
 }
 
 func TestServer_CheckOrigin_RejectsCrossOrigin(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	req.Host = "localhost:8080"
@@ -116,7 +116,7 @@ func TestServer_CheckOrigin_RejectsCrossOrigin(t *testing.T) {
 }
 
 func TestServer_CheckOrigin_AllowsSameOrigin(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	req.Host = "localhost:8080"
@@ -126,7 +126,7 @@ func TestServer_CheckOrigin_AllowsSameOrigin(t *testing.T) {
 }
 
 func TestServer_CheckOrigin_RejectsEmptyOrigin(t *testing.T) {
-	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass")
+	s := NewServer(nil, nil, nil, nil, "", "", "", "", "testpass", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	req.Host = "localhost:8080"

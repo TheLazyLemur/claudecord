@@ -111,7 +111,7 @@ func run() error {
 		defer stop()
 	}
 
-	stopServer := startHTTPServer(cfg, hub, baseSessionMgr, defaultPerms, skillStore, skillsDir)
+	stopServer := startHTTPServer(cfg, hub, bot, baseSessionMgr, defaultPerms, skillStore, skillsDir)
 	defer stopServer()
 
 	sig := make(chan os.Signal, 1)

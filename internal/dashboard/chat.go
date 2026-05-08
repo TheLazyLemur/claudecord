@@ -48,9 +48,13 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 	}
 }
 
-// handleChat processes an inbound chat message. The server mutex protects only
-// the shared responder field; Converse runs without the lock so a slow API call
-// does not block other dashboard actions like /new_session.
+// handleChat processes an inbound chat message. When a chatCallback is wired
+// in, it delegates to the callback (plugin path). Otherwise falls back to the
+// legacy direct-dispatch path.
+//
+// The server mutex protects only the shared responder field; Converse runs
+// without the lock so a slow API call does not block other dashboard actions
+// like /new_session.
 func (s *Server) handleChat(content string) {
 	backend, err := s.sessionMgr.GetOrCreateSession()
 	if err != nil {
@@ -74,7 +78,6 @@ func (s *Server) handleChat(content string) {
 			SessionID: backend.SessionID(),
 		})
 	}
-	responder := s.responder
 	s.mu.Unlock()
 
 	s.hub.Broadcast(Message{
@@ -82,6 +85,16 @@ func (s *Server) handleChat(content string) {
 		Role:    "user",
 		Content: content,
 	})
+
+	if s.chatCallback != nil {
+		s.chatCallback(backend.SessionID(), content)
+		return
+	}
+
+	// Legacy path: dispatch directly via the session manager.
+	s.mu.Lock()
+	responder := s.responder
+	s.mu.Unlock()
 
 	ctx := context.Background()
 	response, err := backend.Converse(ctx, content, responder, s.permChecker)

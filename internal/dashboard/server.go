@@ -29,6 +29,7 @@ type Server struct {
 	agentsDefaultPath string
 	memoryDir         string
 	password          string
+	chatCallback      func(sessionID, text string)
 
 	mu        sync.Mutex
 	responder *WSResponder
@@ -36,7 +37,10 @@ type Server struct {
 }
 
 // NewServer creates a dashboard server.
-func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.PermissionChecker, skillStore skills.SkillStore, skillsDir, workDir, agentsDefaultPath, memoryDir, password string) *Server {
+// chatCallback, if non-nil, is invoked for each inbound chat message instead
+// of dispatching directly; it receives the current session UUID and the message
+// text. When nil the server falls back to its legacy direct-dispatch path.
+func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.PermissionChecker, skillStore skills.SkillStore, skillsDir, workDir, agentsDefaultPath, memoryDir, password string, chatCallback func(sessionID, text string)) *Server {
 	return &Server{
 		hub:               hub,
 		sessionMgr:        sessionMgr,
@@ -47,6 +51,7 @@ func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.Permi
 		agentsDefaultPath: agentsDefaultPath,
 		memoryDir:         memoryDir,
 		password:          password,
+		chatCallback:      chatCallback,
 		sessions:          make(map[string]time.Time),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {

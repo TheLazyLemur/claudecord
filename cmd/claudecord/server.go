@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/TheLazyLemur/claudecord/internal/channels/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/dashboard"
+	dash "github.com/TheLazyLemur/claudecord/internal/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
 )
@@ -18,13 +19,17 @@ import (
 // shutdown.
 func startHTTPServer(
 	cfg *config.Config,
-	hub *dashboard.Hub,
+	hub *dash.Hub,
+	bot *core.Bot,
 	sessionMgr *core.SessionManager,
 	perms core.PermissionChecker,
 	skillStore skills.SkillStore,
 	skillsDir string,
 ) func() {
-	dashboardServer := dashboard.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword)
+	plug := dashboard.New(dashboard.Config{Hub: hub})
+	_ = plug.Start(context.Background(), func(in core.Inbound) { _ = bot.HandleInbound(in) })
+
+	dashboardServer := dash.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword, plug.HandleChat)
 
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())
