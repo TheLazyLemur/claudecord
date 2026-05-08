@@ -55,9 +55,9 @@ type Outbound interface {
     SendUpdate(content string) error
     AddReaction(emoji string) error // no-op when Capabilities.Reactions == false
 }
-// Implementation note: Outbound is defined as `type Outbound = Responder` (a Go type alias of
-// the existing core.Responder interface) for compatibility with the current Backend.Converse(Responder, ...)
-// signature. The methods are identical to the interface shown above.
+// Implementation note: Implemented as `core.Outbound` directly. The earlier
+// `core.Responder` interface was retired during the refactor; all plugins
+// implement `Outbound`.
 
 type Capabilities struct {
     Reactions bool
