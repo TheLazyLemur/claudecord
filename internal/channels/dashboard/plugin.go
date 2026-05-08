@@ -50,6 +50,11 @@ func (p *Plugin) Stop() error { return nil }
 
 // HandleChat is the entry point called by the dashboard Server when a chat
 // message arrives. It constructs the Inbound and dispatches it to deliver.
+//
+// The sessionID parameter identifies the active backend session for the WS
+// responder only. It is intentionally NOT folded into the SessionKey: the
+// backend's SessionID rotates on every NewSession, so using it for routing
+// would make the bot treat every dashboard message as a fresh session.
 func (p *Plugin) HandleChat(sessionID, text string) {
 	p.mu.Lock()
 	d := p.deliver
@@ -64,14 +69,15 @@ func (p *Plugin) HandleChat(sessionID, text string) {
 	}
 
 	d(core.Inbound{
-		SessionKey:   SessionKey(sessionID),
+		SessionKey:   SessionKey(),
 		Text:         text,
 		Reply:        out,
 		Capabilities: p.Capabilities(),
 	})
 }
 
-// SessionKey returns the canonical session key for a dashboard session UUID.
-func SessionKey(sessionUUID string) core.SessionKey {
-	return core.SessionKey("dashboard:" + sessionUUID)
+// SessionKey returns the stable dashboard session key. The dashboard is
+// single-user/single-channel so one constant key is correct.
+func SessionKey() core.SessionKey {
+	return core.SessionKey("dashboard")
 }

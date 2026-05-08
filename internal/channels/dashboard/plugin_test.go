@@ -48,8 +48,8 @@ func TestPlugin_Start_RegisteredCallback_InvokesHandleChat(t *testing.T) {
 	setter.cb("sess-42", "hello via callback")
 
 	// then
-	// ... an inbound is dispatched with the correct session key and text
-	if got.SessionKey != "dashboard:sess-42" {
+	// ... an inbound is dispatched with the stable dashboard session key and text
+	if got.SessionKey != "dashboard" {
 		t.Fatalf("session key: %q", got.SessionKey)
 	}
 	if got.Text != "hello via callback" {
@@ -57,7 +57,7 @@ func TestPlugin_Start_RegisteredCallback_InvokesHandleChat(t *testing.T) {
 	}
 }
 
-func TestPlugin_DeliversWithSessionUUIDKey(t *testing.T) {
+func TestPlugin_DeliversWithStableSessionKey(t *testing.T) {
 	// given
 	// ... a plugin with a real hub and a captured inbound
 	hub := dash.NewHub()
@@ -71,12 +71,38 @@ func TestPlugin_DeliversWithSessionUUIDKey(t *testing.T) {
 	p.HandleChat("abc-123", "hi")
 
 	// then
-	// ... the SessionKey is dashboard-prefixed and text is preserved
-	if got.SessionKey != "dashboard:abc-123" {
+	// ... the SessionKey is the stable dashboard key and text is preserved
+	if got.SessionKey != "dashboard" {
 		t.Fatalf("session key: %q", got.SessionKey)
 	}
 	if got.Text != "hi" {
 		t.Fatalf("text: %q", got.Text)
+	}
+}
+
+func TestPlugin_HandleChat_SessionKey_StableAcrossDifferentSessionIDs(t *testing.T) {
+	// given
+	// ... a plugin that captures every inbound it dispatches
+	hub := dash.NewHub()
+	go hub.Run()
+	p := New(Config{Hub: hub})
+	var keys []core.SessionKey
+	_ = p.Start(context.Background(), func(in core.Inbound) {
+		keys = append(keys, in.SessionKey)
+	})
+
+	// when
+	// ... two HandleChat calls arrive with different backend session ids
+	p.HandleChat("api-first", "hello")
+	p.HandleChat("api-second", "follow up")
+
+	// then
+	// ... both inbounds carry the same stable SessionKey so the bot does not rotate
+	if len(keys) != 2 {
+		t.Fatalf("expected 2 inbounds, got %d", len(keys))
+	}
+	if keys[0] != keys[1] {
+		t.Fatalf("session keys differ across messages: %q vs %q", keys[0], keys[1])
 	}
 }
 
