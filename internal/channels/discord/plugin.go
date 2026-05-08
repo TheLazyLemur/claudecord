@@ -143,7 +143,7 @@ func (p *Plugin) handleMessage(ev messageEvent) {
 	if !p.userAllowed(ev.AuthorID) {
 		return
 	}
-	cleaned, ok := stripMention(ev.Content)
+	cleaned, ok := stripMention(ev.Content, p.cfg.BotID)
 	if !ok {
 		return
 	}
@@ -228,13 +228,15 @@ func (p *Plugin) userAllowed(userID string) bool {
 	return false
 }
 
-func stripMention(content string) (string, bool) {
-	const tag = "@claude"
+func stripMention(content, botID string) (string, bool) {
 	trim := strings.TrimSpace(content)
-	if !strings.HasPrefix(strings.ToLower(trim), tag) {
-		return "", false
+	candidates := []string{"<@" + botID + ">", "<@!" + botID + ">"}
+	for _, c := range candidates {
+		if strings.HasPrefix(trim, c) {
+			return strings.TrimSpace(trim[len(c):]), true
+		}
 	}
-	return strings.TrimSpace(trim[len(tag):]), true
+	return "", false
 }
 
 func threadName(content string) string {
