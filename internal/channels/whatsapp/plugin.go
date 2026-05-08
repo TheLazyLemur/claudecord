@@ -46,7 +46,7 @@ func New(cfg Config) *Plugin {
 func (p *Plugin) ID() string { return "whatsapp" }
 
 func (p *Plugin) Capabilities() core.Capabilities {
-	return core.Capabilities{Typing: true, Reactions: false}
+	return core.Capabilities{Reactions: false}
 }
 
 func (p *Plugin) Start(ctx context.Context, deliver func(core.Inbound)) error {

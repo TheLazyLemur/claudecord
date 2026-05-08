@@ -181,8 +181,8 @@ func TestPlugin_Capabilities(t *testing.T) {
 	caps := p.Capabilities()
 
 	// then
-	// ... typing yes, reactions no
-	if !caps.Typing || caps.Reactions {
+	// ... reactions no
+	if caps.Reactions {
 		t.Fatalf("unexpected caps: %+v", caps)
 	}
 }

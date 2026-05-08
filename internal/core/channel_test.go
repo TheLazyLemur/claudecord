@@ -11,7 +11,7 @@ func TestChannelPlugin_BasicShape(t *testing.T) {
 	var started, stopped bool
 	p := fakePlugin{
 		id:   "fake",
-		caps: Capabilities{Reactions: true, Typing: true},
+		caps: Capabilities{Reactions: true},
 		start: func(ctx context.Context, deliver func(Inbound)) error {
 			started = true
 			deliver(Inbound{SessionKey: "fake:1", Text: "hi"})
