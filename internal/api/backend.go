@@ -345,11 +345,15 @@ func (f *BackendFactory) Create(workDir string, caps core.Capabilities) (core.Ba
 
 	client := anthropic.NewClient(opts...)
 
-	base := "Use send_update to post progress updates for longer tasks."
-	apiTools := buildChatTools(caps.Reactions)
-	if caps.Media {
-		base += "\n" + core.WhatsAppMediaSystemPromptAddendum
+	var parts []string
+	if caps.Updates {
+		parts = append(parts, "Use send_update to post progress updates for longer tasks.")
 	}
+	if caps.Media {
+		parts = append(parts, core.WhatsAppMediaSystemPromptAddendum)
+	}
+	base := strings.Join(parts, "\n")
+	apiTools := buildChatTools(caps)
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
 	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.WebSearchAPIKey, f.ThinkingBudgetTokens), nil
@@ -368,9 +372,12 @@ func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
 	return tools
 }
 
-func buildChatTools(reactions bool) []anthropic.ToolUnionParam {
-	allTools := []core.ToolDef{core.SendUpdateTool()}
-	if reactions {
+func buildChatTools(caps core.Capabilities) []anthropic.ToolUnionParam {
+	var allTools []core.ToolDef
+	if caps.Updates {
+		allTools = append(allTools, core.SendUpdateTool())
+	}
+	if caps.Reactions {
 		allTools = append(allTools, core.ReactEmojiTool())
 	}
 	allTools = append(allTools, core.FileTools()...)

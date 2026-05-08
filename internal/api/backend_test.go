@@ -27,7 +27,7 @@ func TestBuildChatTools_ExcludesReactEmojiWhenReactionsFalse(t *testing.T) {
 
 	// when
 	// ... chat tools are built
-	tools := buildChatTools(false)
+	tools := buildChatTools(core.Capabilities{})
 
 	// then
 	// ... react_emoji is absent
@@ -44,7 +44,7 @@ func TestBuildChatTools_IncludesReactEmojiWhenReactionsTrue(t *testing.T) {
 
 	// when
 	// ... chat tools are built
-	apiTools := buildChatTools(true)
+	apiTools := buildChatTools(core.Capabilities{Reactions: true, Updates: true})
 
 	// then
 	// ... react_emoji is present
@@ -57,6 +57,117 @@ func TestBuildChatTools_IncludesReactEmojiWhenReactionsTrue(t *testing.T) {
 	}
 	assert.True(t, found, "expected react_emoji in tool list")
 }
+
+func TestBuildChatTools_IncludesSendUpdateWhenUpdatesTrue(t *testing.T) {
+	// given
+	// ... updates enabled
+
+	// when
+	// ... chat tools are built
+	apiTools := buildChatTools(core.Capabilities{Updates: true})
+
+	// then
+	// ... send_update is present
+	found := false
+	for _, tool := range apiTools {
+		if tool.OfTool != nil && tool.OfTool.Name == "send_update" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected send_update in tool list when Updates=true")
+}
+
+func TestBuildChatTools_ExcludesSendUpdateWhenUpdatesFalse(t *testing.T) {
+	// given
+	// ... updates disabled
+
+	// when
+	// ... chat tools are built
+	tools := buildChatTools(core.Capabilities{})
+
+	// then
+	// ... send_update is absent
+	for _, tool := range tools {
+		if tool.OfTool != nil {
+			assert.NotEqual(t, "send_update", tool.OfTool.Name)
+		}
+	}
+}
+
+func TestBackendFactory_Create_SystemPromptContainsSendUpdateWhenUpdatesTrue(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Updates true
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with Updates capability
+	backend, err := factory.Create("", core.Capabilities{Updates: true})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt mentions send_update
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.Contains(apiBackend.systemPrompt, "send_update")
+}
+
+func TestBackendFactory_Create_SystemPromptOmitsSendUpdateWhenUpdatesFalse(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Updates false
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created without Updates capability
+	backend, err := factory.Create("", core.Capabilities{Updates: false})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt does not mention send_update
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.NotContains(apiBackend.systemPrompt, "send_update")
+}
+
+func TestBackendFactory_Create_SystemPromptNoStrayNewlines(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory with Updates and Media both true
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with both Updates and Media set
+	backend, err := factory.Create("", core.Capabilities{Updates: true, Media: true})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt does not start with a newline and contains both sentences
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	sp := apiBackend.systemPrompt
+	r.NotEmpty(sp)
+	a.NotEqual(byte('\n'), sp[0], "system prompt must not start with a newline; got: %q", sp[:min(len(sp), 40)])
+	a.Contains(sp, "send_update")
+	a.Contains(sp, "attachment")
+}
+
 
 func TestBackendFactory_Create_IncludesReactEmojiWhenCapsReactionsTrue(t *testing.T) {
 	r := require.New(t)
