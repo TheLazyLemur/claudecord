@@ -294,6 +294,9 @@ type BackendFactory struct {
 	// WhatsAppEnabled appends the media-handling addendum to the system prompt
 	// so the model knows what to do with <attachment> tags in chat prompts.
 	WhatsAppEnabled bool
+	// EnableReactions includes the react_emoji tool when at least one plugin
+	// reports Capabilities.Reactions == true.
+	EnableReactions bool
 	// ThinkingBudgetTokens > 0 enables extended thinking on every API call.
 	ThinkingBudgetTokens int
 }
@@ -321,7 +324,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 		apiTools = buildPassiveTools()
 	} else {
 		base = "Use send_update to post progress updates for longer tasks."
-		apiTools = buildChatTools()
+		apiTools = buildChatTools(f.EnableReactions)
 	}
 	if f.WhatsAppEnabled && !f.Passive {
 		base += "\n" + core.WhatsAppMediaSystemPromptAddendum
@@ -344,8 +347,11 @@ func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
 	return tools
 }
 
-func buildChatTools() []anthropic.ToolUnionParam {
+func buildChatTools(reactions bool) []anthropic.ToolUnionParam {
 	allTools := []core.ToolDef{core.SendUpdateTool()}
+	if reactions {
+		allTools = append(allTools, core.ReactEmojiTool())
+	}
 	allTools = append(allTools, core.FileTools()...)
 	allTools = append(allTools, core.SkillTools()...)
 	return buildToolParams(allTools)

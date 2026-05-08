@@ -26,9 +26,6 @@ type Config struct {
 	Downloader     handler.Downloader
 	AllowedSenders []string
 	MediaDir       string
-	// NewSession is called when the user sends "!new" to reset the session.
-	// Optional — if nil, "!new" is silently ignored.
-	NewSession func() error
 }
 
 // Plugin implements core.ChannelPlugin for WhatsApp.
@@ -79,16 +76,6 @@ func (p *Plugin) HandleEvent(evt interface{}) {
 
 	if !p.isSenderAllowed(v.Info.Sender, v.Info.SenderAlt) {
 		slog.Info("unauthorized whatsapp sender", "sender", senderJID, "alt", v.Info.SenderAlt.String())
-		return
-	}
-
-	plainText := handler.ExtractText(v.Message)
-	if plainText == "!new" {
-		if p.cfg.NewSession != nil {
-			if err := p.cfg.NewSession(); err != nil {
-				slog.Error("creating new whatsapp session", "error", err)
-			}
-		}
 		return
 	}
 

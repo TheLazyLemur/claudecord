@@ -246,37 +246,6 @@ func TestPlugin_DisallowedSender_Ignored(t *testing.T) {
 	assert.Equal(t, 0, sink.count())
 }
 
-func TestPlugin_NewCommand_CallsNewSession(t *testing.T) {
-	a := assert.New(t)
-
-	// given
-	// ... a plugin with a NewSession callback
-	msgr := &messengerMock{}
-	dl := &downloaderMock{}
-	newSessionCalls := 0
-	p := New(Config{
-		Messenger:      msgr,
-		Downloader:     dl,
-		AllowedSenders: []string{"sender-1@s.whatsapp.net"},
-		MediaDir:       t.TempDir(),
-		NewSession:     func() error { newSessionCalls++; return nil },
-	})
-	p.setBurstDelay(testBurstDelay)
-	t.Cleanup(func() { _ = p.Stop() })
-	sink := &deliverSink{}
-	_ = p.Start(context.Background(), sink.fn())
-	evt := makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "!new")
-
-	// when
-	// ... the user sends "!new"
-	p.HandleEvent(evt)
-
-	// then
-	// ... NewSession is called and no inbound is delivered
-	a.Equal(1, newSessionCalls)
-	a.Equal(0, sink.count())
-}
-
 func TestPlugin_EmptyText_Ignored(t *testing.T) {
 	// given
 	// ... a plugin with an allowed sender

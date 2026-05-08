@@ -21,6 +21,101 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildChatTools_ExcludesReactEmojiWhenReactionsFalse(t *testing.T) {
+	// given
+	// ... reactions disabled
+
+	// when
+	// ... chat tools are built
+	tools := buildChatTools(false)
+
+	// then
+	// ... react_emoji is absent
+	for _, tool := range tools {
+		if tool.OfTool != nil {
+			assert.NotEqual(t, "react_emoji", tool.OfTool.Name)
+		}
+	}
+}
+
+func TestBuildChatTools_IncludesReactEmojiWhenReactionsTrue(t *testing.T) {
+	// given
+	// ... reactions enabled
+
+	// when
+	// ... chat tools are built
+	apiTools := buildChatTools(true)
+
+	// then
+	// ... react_emoji is present
+	found := false
+	for _, tool := range apiTools {
+		if tool.OfTool != nil && tool.OfTool.Name == "react_emoji" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected react_emoji in tool list")
+}
+
+func TestBackendFactory_Create_IncludesReactEmojiWhenEnabled(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory with EnableReactions set
+	factory := &BackendFactory{
+		APIKey:          "test",
+		DefaultWorkDir:  t.TempDir(),
+		EnableReactions: true,
+	}
+
+	// when
+	// ... a backend is created
+	backend, err := factory.Create("")
+	r.NoError(err)
+
+	// then
+	// ... the backend's tool list contains react_emoji
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	found := false
+	for _, tool := range apiBackend.tools {
+		if tool.OfTool != nil && tool.OfTool.Name == "react_emoji" {
+			found = true
+			break
+		}
+	}
+	a.True(found, "expected react_emoji in tool list when EnableReactions is true")
+}
+
+func TestBackendFactory_Create_ExcludesReactEmojiWhenDisabled(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory with EnableReactions false (default)
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created
+	backend, err := factory.Create("")
+	r.NoError(err)
+
+	// then
+	// ... react_emoji is absent from the tool list
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	for _, tool := range apiBackend.tools {
+		if tool.OfTool != nil {
+			a.NotEqual("react_emoji", tool.OfTool.Name)
+		}
+	}
+}
+
 func TestBuildToolResultBlock_TextPath(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)

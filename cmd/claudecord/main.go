@@ -70,6 +70,7 @@ func run() error {
 		SkillStore:           skillStore,
 		WebSearchAPIKey:      cfg.WebSearchAPIKey,
 		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
+		EnableReactions:      cfg.DiscordEnabled(),
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
 	}
 	baseFactory := core.BackendFactory(&base)

@@ -36,9 +36,6 @@ func startWhatsApp(cfg *config.Config, hub *dashboard.Hub, bot *core.Bot) (func(
 		Downloader:     waWrapper,
 		AllowedSenders: cfg.WhatsAppAllowedSenders,
 		MediaDir:       cfg.WhatsAppMediaDir,
-		NewSession: func() error {
-			return bot.NewSession("")
-		},
 	})
 
 	if err := plugin.Start(context.Background(), func(in core.Inbound) {

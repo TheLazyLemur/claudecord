@@ -9,9 +9,6 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 	case "chat":
 		go s.handleChat(msg.Content)
 
-	case "new_session":
-		go s.handleNewSession(msg.WorkDir)
-
 	case "get_skills":
 		s.handleGetSkills(client)
 
@@ -80,23 +77,3 @@ func (s *Server) handleChat(content string) {
 	s.chatCallback(backend.SessionID(), content)
 }
 
-func (s *Server) handleNewSession(workDir string) {
-	if err := s.sessionMgr.NewSession(workDir); err != nil {
-		slog.Error("create session", "error", err)
-		s.hub.Broadcast(Message{
-			Type:    "chat",
-			Role:    "assistant",
-			Content: "Error creating session: " + err.Error(),
-		})
-		return
-	}
-
-	backend, _ := s.sessionMgr.GetOrCreateSession()
-
-	active := true
-	s.hub.Broadcast(Message{
-		Type:      "session",
-		Active:    &active,
-		SessionID: backend.SessionID(),
-	})
-}
