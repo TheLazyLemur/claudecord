@@ -389,7 +389,7 @@ func TestPlugin_BurstBatch_DispatchesOnce(t *testing.T) {
 	a.Contains(sink.at(0).Text, "<text>three</text>")
 }
 
-func TestPlugin_AttachmentOnly_FlushedWithAttachmentTag(t *testing.T) {
+func TestPlugin_AttachmentOnly_FlushedWithAttachmentInInbound(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
@@ -407,10 +407,11 @@ func TestPlugin_AttachmentOnly_FlushedWithAttachmentTag(t *testing.T) {
 	time.Sleep(testBurstDelay + 200*time.Millisecond)
 
 	// then
-	// ... the inbound text contains both caption and attachment tag
+	// ... the inbound text contains the caption and attachments are on Inbound.Attachments
 	r.Equal(1, sink.count())
 	a.Contains(sink.at(0).Text, "<text>look</text>")
-	a.Contains(sink.at(0).Text, `mime="image/png"`)
+	r.Len(sink.at(0).Attachments, 1)
+	a.Equal("image/png", sink.at(0).Attachments[0].MIME)
 }
 
 func TestPlugin_OversizedAttachment_SkippedWithNotice(t *testing.T) {
@@ -439,7 +440,7 @@ func TestPlugin_OversizedAttachment_SkippedWithNotice(t *testing.T) {
 	msgr.AssertCalled(t, "SendText", "chat-1@g.us", mock.AnythingOfType("string"))
 }
 
-func TestPlugin_MixedTextAndAttachmentBatch_OrderPreserved(t *testing.T) {
+func TestPlugin_MixedTextAndAttachmentBatch_AttachmentsOnInbound(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
@@ -458,13 +459,13 @@ func TestPlugin_MixedTextAndAttachmentBatch_OrderPreserved(t *testing.T) {
 	time.Sleep(testBurstDelay + 200*time.Millisecond)
 
 	// then
-	// ... order is preserved in the rendered prompt
+	// ... a single inbound is delivered; text messages are in Text, image is in Attachments
 	r.Equal(1, sink.count())
 	body := sink.at(0).Text
-	idx1 := strings.Index(body, "first")
-	idx2 := strings.Index(body, "image/png")
-	idx3 := strings.Index(body, "third")
-	a.True(idx1 >= 0 && idx2 > idx1 && idx3 > idx2, "out of order: %s", body)
+	a.Contains(body, "first")
+	a.Contains(body, "third")
+	r.Len(sink.at(0).Attachments, 1)
+	a.Equal("image/png", sink.at(0).Attachments[0].MIME)
 }
 
 // --- ExtractText tests (migrated from handler package) ---

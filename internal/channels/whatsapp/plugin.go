@@ -155,6 +155,14 @@ func (p *Plugin) flush(chatJID string, msgs []core.BufferedMessage) {
 		return
 	}
 
+	// Collect attachments from all buffered messages into a flat list.
+	// Per-message attachment-to-text association is lost in a multi-message
+	// burst, but is acceptable for single-user scope.
+	var atts []core.AttachmentRef
+	for _, m := range msgs {
+		atts = append(atts, m.Attachments...)
+	}
+
 	p.mu.Lock()
 	d := p.deliver
 	p.mu.Unlock()
@@ -166,6 +174,7 @@ func (p *Plugin) flush(chatJID string, msgs []core.BufferedMessage) {
 	d(core.Inbound{
 		SessionKey:   SessionKey(chatJID),
 		Text:         prompt,
+		Attachments:  atts,
 		Reply:        out,
 		Capabilities: p.Capabilities(),
 	})
