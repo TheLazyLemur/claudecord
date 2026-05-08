@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 )
 
@@ -63,11 +64,50 @@ func (p *Plugin) Start(ctx context.Context, deliver func(core.Inbound)) error {
 	p.mu.Lock()
 	p.deliver = deliver
 	p.mu.Unlock()
-	// Real discordgo wiring lands in Task 9.
+
+	// Tests inject p.session via newPluginForTest; skip live wiring when set.
+	if p.session != nil {
+		return nil
+	}
+
+	dg, err := connect(p.cfg.Token)
+	if err != nil {
+		return err
+	}
+	p.session = sessionAdapter{dg}
+	p.cfg.BotID = dg.State.User.ID
+
+	dg.AddHandler(func(_ *discordgo.Session, m *discordgo.MessageCreate) {
+		if m.Author == nil || m.Author.ID == p.cfg.BotID {
+			return
+		}
+		ev := messageEvent{
+			AuthorID:  m.Author.ID,
+			ChannelID: m.ChannelID,
+			MessageID: m.ID,
+			Content:   m.Content,
+		}
+		// Discord delivers DMs with GuildID == "".
+		if m.GuildID == "" {
+			ev.IsDM = true
+		}
+		// Channel state tells us whether we're inside a thread.
+		if ch, err := dg.State.Channel(m.ChannelID); err == nil && ch.IsThread() {
+			ev.IsThread = true
+			ev.ParentID = ch.ParentID
+		}
+		p.handleMessage(ev)
+	})
+
 	return nil
 }
 
-func (p *Plugin) Stop() error { return nil }
+func (p *Plugin) Stop() error {
+	if dg, ok := p.session.(sessionAdapter); ok && dg.Session != nil {
+		return dg.Session.Close()
+	}
+	return nil
+}
 
 func (p *Plugin) handleMessage(ev messageEvent) {
 	if !p.userAllowed(ev.AuthorID) {
@@ -159,4 +199,31 @@ func newPluginForTest(s sessionForPlugin, botID string, allowed []string) *Plugi
 	p := New(Config{BotID: botID, AllowedUsers: allowed})
 	p.session = s
 	return p
+}
+
+// sessionAdapter wraps *discordgo.Session to satisfy sessionForPlugin.
+type sessionAdapter struct{ *discordgo.Session }
+
+func (s sessionAdapter) ChannelMessageSend(channelID, content string) error {
+	_, err := s.Session.ChannelMessageSend(channelID, content)
+	return err
+}
+
+func (s sessionAdapter) ChannelTyping(channelID string) error {
+	return s.Session.ChannelTyping(channelID)
+}
+
+func (s sessionAdapter) MessageReactionAdd(channelID, messageID, emoji string) error {
+	return s.Session.MessageReactionAdd(channelID, messageID, emoji)
+}
+
+func (s sessionAdapter) MessageThreadStartComplex(channelID, messageID, name string) (string, error) {
+	t, err := s.Session.MessageThreadStartComplex(channelID, messageID, &discordgo.ThreadStart{
+		Name:                name,
+		AutoArchiveDuration: 60,
+	})
+	if err != nil {
+		return "", err
+	}
+	return t.ID, nil
 }
