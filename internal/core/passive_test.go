@@ -11,13 +11,9 @@ import (
 
 type mockDiscordClient struct {
 	sentMessages   []sentMessage
-	createdThreads []createdThread
 	startedThreads []startedThread
-	typingChannels []string
-	addedReactions []addedReaction
 	sendErr        error
 	threadErr      error
-	reactionErr    error
 	threadID       string
 }
 
@@ -32,44 +28,14 @@ type sentMessage struct {
 	content   string
 }
 
-type createdThread struct {
-	channelID string
-	content   string
-}
-
-type addedReaction struct {
-	channelID string
-	messageID string
-	emoji     string
-}
-
 func (m *mockDiscordClient) SendMessage(channelID, content string) error {
 	m.sentMessages = append(m.sentMessages, sentMessage{channelID, content})
 	return m.sendErr
 }
 
-func (m *mockDiscordClient) CreateThread(channelID, content string) (string, error) {
-	m.createdThreads = append(m.createdThreads, createdThread{channelID, content})
-	return m.threadID, m.threadErr
-}
-
-func (m *mockDiscordClient) SendTyping(channelID string) error {
-	m.typingChannels = append(m.typingChannels, channelID)
-	return nil
-}
-
-func (m *mockDiscordClient) AddReaction(channelID, messageID, emoji string) error {
-	m.addedReactions = append(m.addedReactions, addedReaction{channelID, messageID, emoji})
-	return m.reactionErr
-}
-
 func (m *mockDiscordClient) StartThread(channelID, messageID, name string) (string, error) {
 	m.startedThreads = append(m.startedThreads, startedThread{channelID, messageID, name})
 	return m.threadID, m.threadErr
-}
-
-func (m *mockDiscordClient) WaitForReaction(channelID, messageID string, emojis []string, userID string) (string, error) {
-	return "", nil
 }
 
 type passiveMockBackend struct {

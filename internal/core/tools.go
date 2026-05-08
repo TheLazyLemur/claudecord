@@ -22,8 +22,8 @@ func strProp(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
 }
 
-// ReactEmojiTool is the optional tool registered when the active channel
-// reports Capabilities.Reactions == true.
+// ReactEmojiTool returns the tool definition for adding an emoji reaction
+// to the message the agent is responding to.
 func ReactEmojiTool() ToolDef {
 	return ToolDef{
 		Name:        "react_emoji",
