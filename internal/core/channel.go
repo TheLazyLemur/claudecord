@@ -19,6 +19,10 @@ type Inbound struct {
 type Capabilities struct {
 	Reactions bool
 	Media     bool
+	// Updates indicates the channel can sensibly accept multiple progress
+	// updates per turn (streaming-style chat). When false, the send_update
+	// tool is not registered and the system prompt does not mention it.
+	Updates bool
 }
 
 type ChannelPlugin interface {

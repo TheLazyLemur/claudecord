@@ -5,13 +5,32 @@ import (
 	"testing"
 )
 
+func TestCapabilities_UpdatesField(t *testing.T) {
+	// given
+	// ... capabilities with all fields set
+
+	// when
+	// ... constructed with Updates true
+	caps := Capabilities{Reactions: true, Media: true, Updates: true}
+
+	// then
+	// ... Updates is true and zero value is false
+	if !caps.Updates {
+		t.Fatalf("expected Updates=true, got false")
+	}
+	var zero Capabilities
+	if zero.Updates {
+		t.Fatalf("expected zero Capabilities.Updates=false, got true")
+	}
+}
+
 func TestChannelPlugin_BasicShape(t *testing.T) {
 	// given
 	// ... a fake plugin that records its lifecycle
 	var started, stopped bool
 	p := fakePlugin{
 		id:   "fake",
-		caps: Capabilities{Reactions: true},
+		caps: Capabilities{Reactions: true, Updates: true},
 		start: func(ctx context.Context, deliver func(Inbound)) error {
 			started = true
 			deliver(Inbound{SessionKey: "fake:1", Text: "hi"})
@@ -39,6 +58,9 @@ func TestChannelPlugin_BasicShape(t *testing.T) {
 	}
 	if !p.Capabilities().Reactions {
 		t.Fatalf("expected Capabilities.Reactions=true, got false")
+	}
+	if !p.Capabilities().Updates {
+		t.Fatalf("expected Capabilities.Updates=true, got false")
 	}
 }
 
