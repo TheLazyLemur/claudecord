@@ -22,6 +22,7 @@ func startDiscord(cfg *config.Config, bot *core.Bot) (func(), error) {
 		Token:        cfg.DiscordToken,
 		BotID:        dg.State.User.ID,
 		AllowedUsers: cfg.AllowedUsers,
+		MediaDir:     cfg.DiscordMediaDir,
 	}, discord.WrapSession(dg))
 
 	if err := plugin.Start(context.Background(), func(in core.Inbound) {

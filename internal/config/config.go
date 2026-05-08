@@ -43,6 +43,11 @@ type Config struct {
 	// is enabled. Must live under one of AllowedDirs.
 	WhatsAppMediaDir string
 
+	// Directory Discord attachments are saved to. Defaults to
+	// <first AllowedDirs>/discord-media when Discord is enabled. Must live
+	// under AllowedDirs.
+	DiscordMediaDir string
+
 	// Directory the memory skill stores MEMORY.md and daily logs in. Defaults
 	// to <first AllowedDirs>/claudecord-memory. Must live under AllowedDirs.
 	MemoryDir string
@@ -148,6 +153,17 @@ func Load(env map[string]string) (*Config, error) {
 		}
 	}
 
+	var discordMediaDir string
+	if discordToken != "" {
+		discordMediaDir = env["DISCORD_MEDIA_DIR"]
+		if discordMediaDir == "" {
+			discordMediaDir = filepath.Join(allowedDirs[0], "discord-media")
+		}
+		if !pathInsideAllowedDirs(discordMediaDir, allowedDirs) {
+			return nil, errors.Errorf("DISCORD_MEDIA_DIR %q must live under ALLOWED_DIRS", discordMediaDir)
+		}
+	}
+
 	agentsDefaultPath := env["AGENTS_DEFAULT_PATH"]
 	if agentsDefaultPath == "" {
 		agentsDefaultPath = "/etc/claudecord/AGENTS.md.default"
@@ -188,6 +204,7 @@ func Load(env map[string]string) (*Config, error) {
 		WhatsAppAllowedSenders: whatsAppSenders,
 		WhatsAppDBPath:         whatsAppDBPath,
 		WhatsAppMediaDir:       mediaDir,
+		DiscordMediaDir:        discordMediaDir,
 		MemoryDir:              memoryDir,
 		AgentsDefaultPath:      agentsDefaultPath,
 		ThinkingBudgetTokens:   thinkingBudget,
@@ -200,6 +217,11 @@ func (c *Config) EnsureDirs() error {
 	if c.WhatsAppMediaDir != "" {
 		if err := os.MkdirAll(c.WhatsAppMediaDir, 0o700); err != nil {
 			return errors.Wrap(err, "creating WHATSAPP_MEDIA_DIR")
+		}
+	}
+	if c.DiscordMediaDir != "" {
+		if err := os.MkdirAll(c.DiscordMediaDir, 0o700); err != nil {
+			return errors.Wrap(err, "creating DISCORD_MEDIA_DIR")
 		}
 	}
 	if c.MemoryDir != "" {
@@ -237,6 +259,7 @@ func LoadFromEnv() (*Config, error) {
 		"WHATSAPP_ALLOWED_SENDERS": os.Getenv("WHATSAPP_ALLOWED_SENDERS"),
 		"WHATSAPP_DB_PATH":         os.Getenv("WHATSAPP_DB_PATH"),
 		"WHATSAPP_MEDIA_DIR":       os.Getenv("WHATSAPP_MEDIA_DIR"),
+		"DISCORD_MEDIA_DIR":        os.Getenv("DISCORD_MEDIA_DIR"),
 		"MODEL":                    os.Getenv("MODEL"),
 		"MEMORY_DIR":               os.Getenv("MEMORY_DIR"),
 		"AGENTS_DEFAULT_PATH":      os.Getenv("AGENTS_DEFAULT_PATH"),
