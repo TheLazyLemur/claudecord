@@ -1,70 +1,36 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 
+	"github.com/TheLazyLemur/claudecord/internal/channels/discord"
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/handler"
-	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 )
 
-// startDiscord wires up Discord using the provided factories and permission
-// checkers. Returns a cleanup func that closes the session manager and the
-// Discord connection. flushFn may be nil.
-func startDiscord(
-	cfg *config.Config,
-	discordFactory core.BackendFactory,
-	passiveFactory core.BackendFactory,
-	defaultPerms core.PermissionChecker,
-	roPerms core.PermissionChecker,
-	flushFn core.FlushFunc,
-) (func(), error) {
-	discordSessionMgr := core.NewSessionManager(discordFactory, flushFn)
-	discordBot := core.NewBot(discordSessionMgr, defaultPerms)
-
-	passiveSessionMgr := core.NewSessionManager(passiveFactory, flushFn)
-
-	dg, err := discordgo.New("Bot " + cfg.DiscordToken)
-	if err != nil {
-		discordSessionMgr.Close()
-		passiveSessionMgr.Close()
-		return nil, errors.Wrap(err, "creating discord session")
-	}
-
-	discordClient := handler.NewDiscordClientWrapper(dg)
-	passiveBot := core.NewPassiveBot(passiveSessionMgr, discordClient, roPerms)
-
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
-
-	if err := dg.Open(); err != nil {
-		discordSessionMgr.Close()
-		passiveSessionMgr.Close()
-		return nil, errors.Wrap(err, "opening discord connection")
-	}
-
-	dg.UpdateGameStatus(0, "Ready")
-	slog.Info("discord connected", "botID", dg.State.User.ID, "username", dg.State.User.Username)
-
-	h := handler.NewHandler(discordBot, dg.State.User.ID, cfg.AllowedUsers, discordClient, passiveBot)
-	dg.AddHandler(h.OnMessageCreate)
-	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		h.OnInteractionCreate(s, i)
+// startDiscord constructs the Discord plugin, starts it, and returns a cleanup func.
+func startDiscord(cfg *config.Config, bot *core.Bot) (func(), error) {
+	plugin := discord.New(discord.Config{
+		Token:        cfg.DiscordToken,
+		AllowedUsers: cfg.AllowedUsers,
 	})
 
-	for _, cmd := range handler.SlashCommands() {
-		if _, err := dg.ApplicationCommandCreate(dg.State.User.ID, "", cmd); err != nil {
-			slog.Warn("registering slash command", "name", cmd.Name, "error", err)
+	if err := plugin.Start(context.Background(), func(in core.Inbound) {
+		if err := bot.HandleInbound(in); err != nil {
+			slog.Error("handling discord inbound", "error", err)
 		}
+	}); err != nil {
+		return nil, errors.Wrap(err, "starting discord plugin")
 	}
 
-	slog.Info("discord bot started", "user", dg.State.User.Username)
+	slog.Info("discord plugin started")
 
 	cleanup := func() {
-		dg.Close()
-		discordSessionMgr.Close()
-		passiveSessionMgr.Close()
+		if err := plugin.Stop(); err != nil {
+			slog.Warn("discord plugin stop", "error", err)
+		}
 	}
 	return cleanup, nil
 }

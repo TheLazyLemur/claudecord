@@ -62,7 +62,6 @@ func run() error {
 	skillList, _ := skillStore.List()
 	slog.Info("skills loaded", "count", len(skillList))
 
-	// discordFactory includes react_emoji tool; baseFactory (WA/dashboard) does not.
 	base := api.BackendFactory{
 		APIKey:               cfg.APIKey,
 		BaseURL:              cfg.BaseURL,
@@ -73,16 +72,9 @@ func run() error {
 		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
 	}
-	discord := base
-	discord.Discord = true
-	passive := base
-	passive.Passive = true
 	baseFactory := core.BackendFactory(&base)
-	discordFactory := core.BackendFactory(&discord)
-	passiveFactory := core.BackendFactory(&passive)
 
 	defaultPerms := core.PermissionChecker(permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs))
-	roPerms := core.PermissionChecker(permission.NewReadOnlyPermissionChecker(cfg.AllowedDirs))
 
 	// Memory flush runs one final agent turn before each /new-session, so
 	// the model can persist durable facts. Disable with MEMORY_FLUSH_DISABLED=1.
@@ -96,7 +88,7 @@ func run() error {
 	bot := core.NewBot(baseSessionMgr, defaultPerms)
 
 	if cfg.DiscordEnabled() {
-		stop, err := startDiscord(cfg, discordFactory, passiveFactory, defaultPerms, roPerms, flushFn)
+		stop, err := startDiscord(cfg, bot)
 		if err != nil {
 			return err
 		}
