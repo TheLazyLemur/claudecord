@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/claudecord/internal/media"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -419,7 +420,7 @@ func TestPlugin_OversizedAttachment_SkippedWithNotice(t *testing.T) {
 	// ... a plugin and a downloader that returns an oversized image
 	msgr := &messengerMock{}
 	dl := &downloaderMock{}
-	huge := make([]byte, MaxImageBytes+1)
+	huge := make([]byte, media.MaxImageBytes+1)
 	dl.On("Download", mock.Anything, mock.Anything).Return(huge, nil)
 	msgr.On("SendText", "chat-1@g.us", mock.MatchedBy(func(s string) bool {
 		return strings.HasPrefix(s, "skipped (too large):")

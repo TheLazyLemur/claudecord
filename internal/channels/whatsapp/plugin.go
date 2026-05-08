@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/claudecord/internal/media"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -118,11 +119,11 @@ func (p *Plugin) isSenderAllowed(sender, senderAlt types.JID) bool {
 	return false
 }
 
-func (p *Plugin) materializeAttachment(chatJID string, att *Attachment) ([]core.AttachmentRef, bool) {
+func (p *Plugin) materializeAttachment(chatJID string, att *media.Attachment) ([]core.AttachmentRef, bool) {
 	if att == nil {
 		return nil, true
 	}
-	if len(att.Bytes) > SizeCap(att.MIME) {
+	if len(att.Bytes) > media.SizeCap(att.MIME) {
 		label := att.OriginalName
 		if label == "" {
 			label = att.MIME
@@ -132,7 +133,7 @@ func (p *Plugin) materializeAttachment(chatJID string, att *Attachment) ([]core.
 		}
 		return nil, true
 	}
-	path, err := SaveAttachment(p.cfg.MediaDir, att, p.now())
+	path, err := media.SaveAttachment(p.cfg.MediaDir, att, p.now())
 	if err != nil {
 		slog.Error("saving whatsapp attachment", "error", err)
 		return nil, false

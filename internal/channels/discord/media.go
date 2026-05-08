@@ -4,19 +4,17 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/TheLazyLemur/claudecord/internal/channels/whatsapp"
 	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/claudecord/internal/media"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 )
 
-// Re-export WhatsApp size caps so Discord references one source of truth.
 const (
-	MaxImageBytes = whatsapp.MaxImageBytes
-	MaxDocBytes   = whatsapp.MaxDocBytes
+	MaxImageBytes = media.MaxImageBytes
+	MaxDocBytes   = media.MaxDocBytes
 )
 
 // Downloader fetches raw bytes from a URL (Discord CDN).
@@ -48,14 +46,6 @@ func (d *HTTPDownloader) Download(url string) ([]byte, error) {
 		}
 	}
 	return buf, nil
-}
-
-// sizeCap returns the byte limit for a given MIME type.
-func sizeCap(mimeType string) int {
-	if strings.HasPrefix(mimeType, "image/") {
-		return MaxImageBytes
-	}
-	return MaxDocBytes
 }
 
 // parseMediaType strips parameters (e.g. "; charset=utf-8") from a MIME type.
@@ -96,18 +86,17 @@ func extractAttachments(ev *discordgo.MessageCreate, dl Downloader, mediaDir str
 			continue
 		}
 
-		cap := sizeCap(mimeType)
-		if len(data) > cap {
+		if len(data) > media.SizeCap(mimeType) {
 			skipped = append(skipped, fmt.Sprintf("skipped (too large): %s", name))
 			continue
 		}
 
-		waAtt := &whatsapp.Attachment{
+		mediaAtt := &media.Attachment{
 			MIME:         mimeType,
 			OriginalName: name,
 			Bytes:        data,
 		}
-		path, err := whatsapp.SaveAttachment(mediaDir, waAtt, time.Now())
+		path, err := media.SaveAttachment(mediaDir, mediaAtt, time.Now())
 		if err != nil {
 			return refs, skipped, errors.Wrap(err, "saving discord attachment")
 		}
