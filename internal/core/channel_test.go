@@ -34,8 +34,11 @@ func TestChannelPlugin_BasicShape(t *testing.T) {
 	if received.SessionKey != "fake:1" || received.Text != "hi" {
 		t.Fatalf("unexpected inbound: %+v", received)
 	}
-	if p.ID() != "fake" || !p.Capabilities().Reactions {
-		t.Fatalf("metadata mismatch")
+	if p.ID() != "fake" {
+		t.Fatalf("unexpected ID: got %q, want %q", p.ID(), "fake")
+	}
+	if !p.Capabilities().Reactions {
+		t.Fatalf("expected Capabilities.Reactions=true, got false")
 	}
 }
 
