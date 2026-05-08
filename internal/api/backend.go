@@ -17,19 +17,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const passiveSystemPrompt = `You are a helpful programming assistant passively listening to a Discord channel.
-
-You will receive messages from the channel. Your job is to determine if any messages contain programming or technical questions that you can help with.
-
-IMPORTANT RULES:
-1. Only respond if you are confident the messages contain a programming/technical question
-2. If unsure or if messages are just casual chat, respond with exactly: [NO_RESPONSE]
-3. Keep answers concise and helpful
-4. You are in READ-ONLY mode - you can read files but CANNOT write, edit, or execute commands
-5. Focus on explaining concepts, answering questions, and pointing to relevant documentation
-
-If you decide to respond, provide a helpful answer. If not, respond with [NO_RESPONSE] (exactly this text, nothing else).`
-
 var _ core.Backend = (*Backend)(nil)
 
 type Backend struct {
@@ -303,7 +290,6 @@ type BackendFactory struct {
 	DefaultWorkDir string
 	SkillStore     skills.SkillStore
 	WebSearchAPIKey string
-	Passive        bool
 	// WhatsAppEnabled appends the media-handling addendum to the system prompt
 	// so the model knows what to do with <attachment> tags in chat prompts.
 	WhatsAppEnabled bool
@@ -330,16 +316,9 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 
 	client := anthropic.NewClient(opts...)
 
-	var base string
-	var apiTools []anthropic.ToolUnionParam
-	if f.Passive {
-		base = passiveSystemPrompt
-		apiTools = buildPassiveTools()
-	} else {
-		base = "Use send_update to post progress updates for longer tasks."
-		apiTools = buildChatTools(f.EnableReactions)
-	}
-	if f.WhatsAppEnabled && !f.Passive {
+	base := "Use send_update to post progress updates for longer tasks."
+	apiTools := buildChatTools(f.EnableReactions)
+	if f.WhatsAppEnabled {
 		base += "\n" + core.WhatsAppMediaSystemPromptAddendum
 	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
@@ -368,10 +347,6 @@ func buildChatTools(reactions bool) []anthropic.ToolUnionParam {
 	allTools = append(allTools, core.FileTools()...)
 	allTools = append(allTools, core.SkillTools()...)
 	return buildToolParams(allTools)
-}
-
-func buildPassiveTools() []anthropic.ToolUnionParam {
-	return buildToolParams(core.FileTools())
 }
 
 func convertInputSchema(schema map[string]any) anthropic.ToolInputSchemaParam {

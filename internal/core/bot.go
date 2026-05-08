@@ -21,12 +21,3 @@ func NewBot(sessions *SessionManager, perms PermissionChecker) *Bot {
 		converseTimeout: 10 * time.Minute,
 	}
 }
-
-// NewSession starts a fresh session with optional working directory.
-// Waits for any in-flight HandleInbound to finish before closing the old backend.
-func (b *Bot) NewSession(workDir string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	return b.sessions.NewSession(workDir)
-}
