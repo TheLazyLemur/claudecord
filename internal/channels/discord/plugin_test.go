@@ -179,6 +179,31 @@ func TestPlugin_DisallowedUser_Ignored(t *testing.T) {
 	}
 }
 
+func TestPlugin_Inbound_CapabilitiesMatchPluginCapabilities(t *testing.T) {
+	// given
+	// ... a plugin and a captured inbound
+	s := &sessionFull{}
+	s.On("MessageThreadStartComplex", "channel-1", "msg-1", mock.Anything).Return("thread-new", nil).Once()
+	var got core.Inbound
+	p := newTestPlugin(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
+
+	// when
+	// ... a message arrives and an inbound is dispatched
+	p.handleMessage(messageEvent{
+		AuthorID:  "user-1",
+		ChannelID: "channel-1",
+		MessageID: "msg-1",
+		Content:   "@claude do the thing",
+		IsThread:  false,
+	})
+
+	// then
+	// ... the inbound's Capabilities exactly match p.Capabilities()
+	if got.Capabilities != p.Capabilities() {
+		t.Fatalf("capabilities mismatch: inbound=%+v plugin=%+v", got.Capabilities, p.Capabilities())
+	}
+}
+
 func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
 	// given
 	// ... a session where thread creation fails

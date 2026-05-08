@@ -32,6 +32,24 @@ func TestPlugin_DeliversWithSessionUUIDKey(t *testing.T) {
 	}
 }
 
+func TestPlugin_Inbound_CapabilitiesMatchPluginCapabilities(t *testing.T) {
+	// given
+	// ... a plugin and a captured inbound
+	p := New(Config{})
+	var got core.Inbound
+	_ = p.Start(context.Background(), func(in core.Inbound) { got = in })
+
+	// when
+	// ... HandleChat dispatches an inbound
+	p.HandleChat("sess-1", "hello")
+
+	// then
+	// ... the inbound's Capabilities exactly match p.Capabilities()
+	if got.Capabilities != p.Capabilities() {
+		t.Fatalf("capabilities mismatch: inbound=%+v plugin=%+v", got.Capabilities, p.Capabilities())
+	}
+}
+
 func TestPlugin_Capabilities(t *testing.T) {
 	// given
 	// ... a default plugin

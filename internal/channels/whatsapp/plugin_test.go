@@ -205,6 +205,29 @@ func TestPlugin_ID(t *testing.T) {
 
 // --- HandleEvent tests ---
 
+func TestPlugin_Inbound_CapabilitiesMatchPluginCapabilities(t *testing.T) {
+	r := require.New(t)
+
+	// given
+	// ... a plugin and a delivery sink
+	msgr := &messengerMock{}
+	dl := &downloaderMock{}
+	p, sink := newTestPlugin(t, msgr, dl, []string{"sender-1@s.whatsapp.net"})
+	evt := makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "hello")
+
+	// when
+	// ... a message is handled and flushed
+	p.HandleEvent(evt)
+	time.Sleep(testBurstDelay + 200*time.Millisecond)
+
+	// then
+	// ... the inbound's Capabilities exactly match p.Capabilities()
+	r.Equal(1, sink.count())
+	if sink.at(0).Capabilities != p.Capabilities() {
+		t.Fatalf("capabilities mismatch: inbound=%+v plugin=%+v", sink.at(0).Capabilities, p.Capabilities())
+	}
+}
+
 func TestPlugin_AllowedSender_DeliversInbound(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)

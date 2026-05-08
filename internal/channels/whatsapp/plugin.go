@@ -166,7 +166,7 @@ func (p *Plugin) flush(chatJID string, msgs []core.BufferedMessage) {
 		SessionKey:   SessionKey(chatJID),
 		Text:         prompt,
 		Reply:        out,
-		Capabilities: core.Capabilities{Reactions: false},
+		Capabilities: p.Capabilities(),
 	})
 }
 
