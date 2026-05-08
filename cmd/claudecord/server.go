@@ -12,6 +12,7 @@ import (
 	dash "github.com/TheLazyLemur/claudecord/internal/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/pkg/errors"
 )
 
 // startHTTPServer mounts the webhook handler and the dashboard on a single
@@ -25,9 +26,15 @@ func startHTTPServer(
 	perms core.PermissionChecker,
 	skillStore skills.SkillStore,
 	skillsDir string,
-) func() {
+) (func(), error) {
 	plug := dashboard.New(dashboard.Config{Hub: hub})
-	_ = plug.Start(context.Background(), func(in core.Inbound) { _ = bot.HandleInbound(in) })
+	if err := plug.Start(context.Background(), func(in core.Inbound) {
+		if err := bot.HandleInbound(in); err != nil {
+			slog.Error("dashboard inbound", "error", err)
+		}
+	}); err != nil {
+		return nil, errors.Wrap(err, "start dashboard plugin")
+	}
 
 	dashboardServer := dash.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword, plug.HandleChat)
 
@@ -47,5 +54,5 @@ func startHTTPServer(
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
-	}
+	}, nil
 }

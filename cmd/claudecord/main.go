@@ -103,7 +103,10 @@ func run() error {
 		defer stop()
 	}
 
-	stopServer := startHTTPServer(cfg, hub, bot, baseSessionMgr, defaultPerms, skillStore, skillsDir)
+	stopServer, err := startHTTPServer(cfg, hub, bot, baseSessionMgr, defaultPerms, skillStore, skillsDir)
+	if err != nil {
+		return errors.Wrap(err, "start HTTP server")
+	}
 	defer stopServer()
 
 	sig := make(chan os.Signal, 1)

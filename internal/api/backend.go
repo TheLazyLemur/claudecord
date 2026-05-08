@@ -291,7 +291,6 @@ type BackendFactory struct {
 	SkillStore     skills.SkillStore
 	WebSearchAPIKey string
 	Passive        bool
-	Discord        bool
 	// WhatsAppEnabled appends the media-handling addendum to the system prompt
 	// so the model knows what to do with <attachment> tags in chat prompts.
 	WhatsAppEnabled bool
@@ -320,9 +319,6 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	if f.Passive {
 		base = core.PassiveSystemPrompt()
 		apiTools = buildPassiveTools()
-	} else if f.Discord {
-		base = "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates."
-		apiTools = buildDiscordTools()
 	} else {
 		base = "Use send_update to post progress updates for longer tasks."
 		apiTools = buildChatTools()
@@ -346,13 +342,6 @@ func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
 		tools = append(tools, anthropic.ToolUnionParam{OfTool: &tool})
 	}
 	return tools
-}
-
-func buildDiscordTools() []anthropic.ToolUnionParam {
-	allTools := []core.ToolDef{core.ReactEmojiTool(), core.SendUpdateTool()}
-	allTools = append(allTools, core.FileTools()...)
-	allTools = append(allTools, core.SkillTools()...)
-	return buildToolParams(allTools)
 }
 
 func buildChatTools() []anthropic.ToolUnionParam {
