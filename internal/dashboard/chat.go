@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"log/slog"
+
+	"github.com/TheLazyLemur/claudecord/internal/core"
 )
 
 func (s *Server) handleMessage(client *Client, msg Message) {
@@ -45,7 +47,7 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 }
 
 func (s *Server) handleChat(content string) {
-	backend, err := s.sessionMgr.GetOrCreateSession()
+	backend, err := s.sessionMgr.GetOrCreateSession(core.Capabilities{})
 	if err != nil {
 		slog.Error("get session", "error", err)
 		s.hub.Broadcast(Message{

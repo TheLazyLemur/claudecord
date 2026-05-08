@@ -27,7 +27,7 @@ type fakeBackendFactory struct {
 	backend *fakeBackend
 }
 
-func (f *fakeBackendFactory) Create(_ string) (core.Backend, error) {
+func (f *fakeBackendFactory) Create(_ string, _ core.Capabilities) (core.Backend, error) {
 	return f.backend, nil
 }
 

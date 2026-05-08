@@ -58,21 +58,20 @@ func TestBuildChatTools_IncludesReactEmojiWhenReactionsTrue(t *testing.T) {
 	assert.True(t, found, "expected react_emoji in tool list")
 }
 
-func TestBackendFactory_Create_IncludesReactEmojiWhenEnabled(t *testing.T) {
+func TestBackendFactory_Create_IncludesReactEmojiWhenCapsReactionsTrue(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)
 
 	// given
-	// ... a factory with EnableReactions set
+	// ... a factory and caps with Reactions true
 	factory := &BackendFactory{
-		APIKey:          "test",
-		DefaultWorkDir:  t.TempDir(),
-		EnableReactions: true,
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
 	}
 
 	// when
-	// ... a backend is created
-	backend, err := factory.Create("")
+	// ... a backend is created with Reactions capability
+	backend, err := factory.Create("", core.Capabilities{Reactions: true})
 	r.NoError(err)
 
 	// then
@@ -86,23 +85,23 @@ func TestBackendFactory_Create_IncludesReactEmojiWhenEnabled(t *testing.T) {
 			break
 		}
 	}
-	a.True(found, "expected react_emoji in tool list when EnableReactions is true")
+	a.True(found, "expected react_emoji in tool list when Reactions capability is true")
 }
 
-func TestBackendFactory_Create_ExcludesReactEmojiWhenDisabled(t *testing.T) {
+func TestBackendFactory_Create_ExcludesReactEmojiWhenCapsReactionsFalse(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)
 
 	// given
-	// ... a factory with EnableReactions false (default)
+	// ... a factory and caps with Reactions false (default)
 	factory := &BackendFactory{
 		APIKey:         "test",
 		DefaultWorkDir: t.TempDir(),
 	}
 
 	// when
-	// ... a backend is created
-	backend, err := factory.Create("")
+	// ... a backend is created with no Reactions capability
+	backend, err := factory.Create("", core.Capabilities{})
 	r.NoError(err)
 
 	// then
@@ -268,7 +267,7 @@ func TestBackendFactory_Create_PropagatesThinkingBudget(t *testing.T) {
 
 	// when
 	// ... a backend is created
-	backend, err := factory.Create("")
+	backend, err := factory.Create("", core.Capabilities{})
 	r.NoError(err)
 
 	// then
@@ -293,7 +292,7 @@ func TestBackendFactory_Create_FallsBackToDefaultWorkDirWhenEmpty(t *testing.T) 
 
 	// when
 	// ... a backend is created with an empty work dir
-	backend, err := factory.Create("")
+	backend, err := factory.Create("", core.Capabilities{})
 	r.NoError(err)
 
 	// then

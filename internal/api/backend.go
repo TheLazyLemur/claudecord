@@ -293,16 +293,13 @@ type BackendFactory struct {
 	// WhatsAppEnabled appends the media-handling addendum to the system prompt
 	// so the model knows what to do with <attachment> tags in chat prompts.
 	WhatsAppEnabled bool
-	// EnableReactions includes the react_emoji tool when at least one plugin
-	// reports Capabilities.Reactions == true.
-	EnableReactions bool
 	// ThinkingBudgetTokens > 0 enables extended thinking on every API call.
 	ThinkingBudgetTokens int
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
 
-func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
+func (f *BackendFactory) Create(workDir string, caps core.Capabilities) (core.Backend, error) {
 	if workDir == "" {
 		workDir = f.DefaultWorkDir
 	}
@@ -317,7 +314,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	client := anthropic.NewClient(opts...)
 
 	base := "Use send_update to post progress updates for longer tasks."
-	apiTools := buildChatTools(f.EnableReactions)
+	apiTools := buildChatTools(caps.Reactions)
 	if f.WhatsAppEnabled {
 		base += "\n" + core.WhatsAppMediaSystemPromptAddendum
 	}

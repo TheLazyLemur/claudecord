@@ -54,9 +54,10 @@ func (p *Plugin) HandleChat(sessionID, text string) {
 	}
 
 	d(core.Inbound{
-		SessionKey: SessionKey(sessionID),
-		Text:       text,
-		Reply:      out,
+		SessionKey:   SessionKey(sessionID),
+		Text:         text,
+		Reply:        out,
+		Capabilities: core.Capabilities{Reactions: false},
 	})
 }
 

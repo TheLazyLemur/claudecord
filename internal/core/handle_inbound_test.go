@@ -27,7 +27,7 @@ type stubFactory struct {
 	next    func() Backend
 }
 
-func (f *stubFactory) Create(workDir string) (Backend, error) {
+func (f *stubFactory) Create(workDir string, _ Capabilities) (Backend, error) {
 	f.created = append(f.created, workDir)
 	return f.next(), nil
 }
@@ -42,6 +42,16 @@ func (s *stubResponder) SendTyping() error                 { return nil }
 func (s *stubResponder) PostResponse(content string) error { s.posted = append(s.posted, content); return nil }
 func (s *stubResponder) AddReaction(emoji string) error    { s.reactions = append(s.reactions, emoji); return nil }
 func (s *stubResponder) SendUpdate(message string) error   { s.updates = append(s.updates, message); return nil }
+
+type capturingFactory struct {
+	backend *stubBackend
+	lastCaps Capabilities
+}
+
+func (f *capturingFactory) Create(_ string, caps Capabilities) (Backend, error) {
+	f.lastCaps = caps
+	return f.backend, nil
+}
 
 func TestHandleInbound_SameKeyContinues(t *testing.T) {
 	// given
@@ -148,5 +158,55 @@ func TestHandleInbound_ConverseErrorPropagates(t *testing.T) {
 	}
 	if !errors.Is(err, converseErr) {
 		t.Fatalf("expected error to wrap converseErr, got: %v", err)
+	}
+}
+
+func TestHandleInbound_CapabilitiesForwardedToFactory(t *testing.T) {
+	// given
+	// ... a capturing factory and a bot
+	be := &stubBackend{id: "b1", converseR: "ok"}
+	f := &capturingFactory{backend: be}
+	mgr := NewSessionManager(f, nil)
+	bot := NewBot(mgr, nil)
+	r := &stubResponder{}
+
+	// when
+	// ... an inbound arrives with Reactions capability set
+	_ = bot.HandleInbound(Inbound{
+		SessionKey:   "k1",
+		Text:         "hi",
+		Reply:        r,
+		Capabilities: Capabilities{Reactions: true},
+	})
+
+	// then
+	// ... the factory received the same capabilities when creating the session
+	if !f.lastCaps.Reactions {
+		t.Fatalf("expected Reactions capability to be forwarded to factory, got: %+v", f.lastCaps)
+	}
+}
+
+func TestHandleInbound_NoReactionsCapsForwardedToFactory(t *testing.T) {
+	// given
+	// ... a capturing factory and a bot
+	be := &stubBackend{id: "b1", converseR: "ok"}
+	f := &capturingFactory{backend: be}
+	mgr := NewSessionManager(f, nil)
+	bot := NewBot(mgr, nil)
+	r := &stubResponder{}
+
+	// when
+	// ... an inbound arrives with Reactions capability false
+	_ = bot.HandleInbound(Inbound{
+		SessionKey:   "k1",
+		Text:         "hi",
+		Reply:        r,
+		Capabilities: Capabilities{Reactions: false},
+	})
+
+	// then
+	// ... the factory received caps with Reactions false
+	if f.lastCaps.Reactions {
+		t.Fatalf("expected Reactions false to be forwarded, got: %+v", f.lastCaps)
 	}
 }

@@ -163,9 +163,10 @@ func (p *Plugin) flush(chatJID string, msgs []core.BufferedMessage) {
 
 	out := NewOutbound(p.cfg.Messenger, chatJID)
 	d(core.Inbound{
-		SessionKey: SessionKey(chatJID),
-		Text:       prompt,
-		Reply:      out,
+		SessionKey:   SessionKey(chatJID),
+		Text:         prompt,
+		Reply:        out,
+		Capabilities: core.Capabilities{Reactions: false},
 	})
 }
 

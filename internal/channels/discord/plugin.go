@@ -146,9 +146,10 @@ func (p *Plugin) handleMessage(ev messageEvent) {
 	}
 
 	d(core.Inbound{
-		SessionKey: sessionKey(ev, threadID),
-		Text:       cleaned,
-		Reply:      newOutbound(p.session, threadID, ev.MessageID, maxDiscordMessageLen),
+		SessionKey:   sessionKey(ev, threadID),
+		Text:         cleaned,
+		Reply:        newOutbound(p.session, threadID, ev.MessageID, maxDiscordMessageLen),
+		Capabilities: core.Capabilities{Reactions: true},
 	})
 }
 

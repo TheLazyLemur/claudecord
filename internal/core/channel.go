@@ -11,6 +11,9 @@ type Inbound struct {
 	// WhatsApp populates this; Discord currently does not.
 	Attachments []AttachmentRef
 	Reply       Outbound
+	// Capabilities describes what the originating channel plugin supports.
+	// Used to gate per-session tool registration (e.g. react_emoji).
+	Capabilities Capabilities
 }
 
 type Capabilities struct {

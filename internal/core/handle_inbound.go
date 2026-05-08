@@ -21,11 +21,12 @@ func (b *Bot) HandleInbound(in Inbound) error {
 	if !matches {
 		b.mu.Lock()
 		if in.SessionKey != b.activeKey {
-			if err := b.sessions.NewSession(""); err != nil {
+			if err := b.sessions.NewSession("", in.Capabilities); err != nil {
 				b.mu.Unlock()
 				return errors.Wrap(err, "rotating session on key change")
 			}
 			b.activeKey = in.SessionKey
+			b.activeCaps = in.Capabilities
 		}
 		b.mu.Unlock()
 	}
@@ -37,7 +38,7 @@ func (b *Bot) HandleInbound(in Inbound) error {
 		_ = in.Reply.SendTyping()
 	}
 
-	backend, err := b.sessions.GetOrCreateSession()
+	backend, err := b.sessions.GetOrCreateSession(b.activeCaps)
 	if err != nil {
 		return errors.Wrap(err, "getting session")
 	}
