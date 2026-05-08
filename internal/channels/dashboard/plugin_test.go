@@ -9,6 +9,54 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/core"
 )
 
+// stubChatCallbackSetter records the callback passed to it.
+type stubChatCallbackSetter struct {
+	cb func(sessionID, text string)
+}
+
+func (s *stubChatCallbackSetter) SetChatCallback(cb func(sessionID, text string)) {
+	s.cb = cb
+}
+
+func TestPlugin_Start_RegistersChatCallbackOnServer(t *testing.T) {
+	// given
+	// ... a plugin configured with a stub server
+	setter := &stubChatCallbackSetter{}
+	p := New(Config{Server: setter})
+
+	// when
+	// ... Start is called
+	_ = p.Start(context.Background(), func(_ core.Inbound) {})
+
+	// then
+	// ... the server's chat callback is now set to the plugin's HandleChat
+	if setter.cb == nil {
+		t.Fatalf("expected chat callback to be registered on server after Start")
+	}
+}
+
+func TestPlugin_Start_RegisteredCallback_InvokesHandleChat(t *testing.T) {
+	// given
+	// ... a plugin with a registered callback and a captured inbound
+	setter := &stubChatCallbackSetter{}
+	p := New(Config{Server: setter})
+	var got core.Inbound
+	_ = p.Start(context.Background(), func(in core.Inbound) { got = in })
+
+	// when
+	// ... the registered callback is invoked
+	setter.cb("sess-42", "hello via callback")
+
+	// then
+	// ... an inbound is dispatched with the correct session key and text
+	if got.SessionKey != "dashboard:sess-42" {
+		t.Fatalf("session key: %q", got.SessionKey)
+	}
+	if got.Text != "hello via callback" {
+		t.Fatalf("text: %q", got.Text)
+	}
+}
+
 func TestPlugin_DeliversWithSessionUUIDKey(t *testing.T) {
 	// given
 	// ... a plugin with a real hub and a captured inbound

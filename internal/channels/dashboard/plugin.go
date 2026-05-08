@@ -8,9 +8,16 @@ import (
 	dash "github.com/TheLazyLemur/claudecord/internal/dashboard"
 )
 
+// ChatCallbackSetter is implemented by any server that accepts a chat
+// callback registration. The dashboard Server satisfies this interface.
+type ChatCallbackSetter interface {
+	SetChatCallback(func(sessionID, text string))
+}
+
 // Config holds dependencies for the dashboard plugin.
 type Config struct {
-	Hub *dash.Hub
+	Hub    *dash.Hub
+	Server ChatCallbackSetter
 }
 
 // Plugin implements core.ChannelPlugin for the dashboard WebSocket interface.
@@ -33,6 +40,9 @@ func (p *Plugin) Start(_ context.Context, deliver func(core.Inbound)) error {
 	p.mu.Lock()
 	p.deliver = deliver
 	p.mu.Unlock()
+	if p.cfg.Server != nil {
+		p.cfg.Server.SetChatCallback(p.HandleChat)
+	}
 	return nil
 }
 

@@ -68,6 +68,14 @@ func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.Permi
 	}
 }
 
+// SetChatCallback replaces the server's chat callback. The dashboard plugin
+// calls this from Start so that it owns the wiring rather than the callsite.
+func (s *Server) SetChatCallback(cb func(sessionID, text string)) {
+	s.mu.Lock()
+	s.chatCallback = cb
+	s.mu.Unlock()
+}
+
 // Handler returns the HTTP handler for the dashboard.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()

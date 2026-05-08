@@ -27,7 +27,9 @@ func startHTTPServer(
 	skillStore skills.SkillStore,
 	skillsDir string,
 ) (func(), error) {
-	plug := dashboard.New(dashboard.Config{Hub: hub})
+	dashboardServer := dash.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword, nil)
+
+	plug := dashboard.New(dashboard.Config{Hub: hub, Server: dashboardServer})
 	if err := plug.Start(context.Background(), func(in core.Inbound) {
 		if err := bot.HandleInbound(in); err != nil {
 			slog.Error("dashboard inbound", "error", err)
@@ -35,8 +37,6 @@ func startHTTPServer(
 	}); err != nil {
 		return nil, errors.Wrap(err, "start dashboard plugin")
 	}
-
-	dashboardServer := dash.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword, plug.HandleChat)
 
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())
