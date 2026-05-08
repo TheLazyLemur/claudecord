@@ -26,15 +26,21 @@ If you decide to respond, provide a helpful answer. If not, respond with [NO_RES
 
 const noResponseMarker = "[NO_RESPONSE]"
 
+// passiveDiscordClient is the minimal Discord surface passive bot needs.
+type passiveDiscordClient interface {
+	StartThread(channelID, messageID, name string) (threadID string, err error)
+	SendMessage(channelID, content string) error
+}
+
 type PassiveBot struct {
 	sessions        *SessionManager
-	discord         DiscordClient
+	discord         passiveDiscordClient
 	perms           PermissionChecker
 	mu              sync.Mutex
 	converseTimeout time.Duration
 }
 
-func NewPassiveBot(sessions *SessionManager, discord DiscordClient, perms PermissionChecker) *PassiveBot {
+func NewPassiveBot(sessions *SessionManager, discord passiveDiscordClient, perms PermissionChecker) *PassiveBot {
 	return &PassiveBot{
 		sessions:        sessions,
 		discord:         discord,

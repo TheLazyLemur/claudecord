@@ -349,13 +349,15 @@ func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
 }
 
 func buildDiscordTools() []anthropic.ToolUnionParam {
-	allTools := append(core.DiscordTools(), core.FileTools()...)
+	allTools := []core.ToolDef{core.ReactEmojiTool(), core.SendUpdateTool()}
+	allTools = append(allTools, core.FileTools()...)
 	allTools = append(allTools, core.SkillTools()...)
 	return buildToolParams(allTools)
 }
 
 func buildChatTools() []anthropic.ToolUnionParam {
-	allTools := append(core.ChatTools(), core.FileTools()...)
+	allTools := []core.ToolDef{core.SendUpdateTool()}
+	allTools = append(allTools, core.FileTools()...)
 	allTools = append(allTools, core.SkillTools()...)
 	return buildToolParams(allTools)
 }
