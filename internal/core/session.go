@@ -27,21 +27,21 @@ func NewSessionManager(factory BackendFactory, flush FlushFunc) *SessionManager 
 	return &SessionManager{factory: factory, flush: flush}
 }
 
-// NewSession starts a fresh session, closing any existing one.
-// caps is forwarded to the factory so it can gate per-session tools.
+// NewSession starts a fresh session. The old backend is closed only after
+// the new one is created successfully, so a factory error leaves the current
+// session intact.
 func (m *SessionManager) NewSession(workDir string, caps Capabilities) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.current != nil {
-		m.runFlush(m.current)
-		m.current.Close()
-		m.current = nil
-	}
-
 	backend, err := m.factory.Create(workDir, caps)
 	if err != nil {
 		return errors.Wrap(err, "creating new session")
+	}
+
+	if m.current != nil {
+		m.runFlush(m.current)
+		m.current.Close()
 	}
 
 	m.current = backend

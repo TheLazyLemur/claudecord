@@ -322,6 +322,31 @@ func TestSessionManager_NewSession_FlushPanicDoesNotBlock(t *testing.T) {
 	a.Equal("second", sess.SessionID())
 }
 
+func TestSessionManager_NewSession_FactoryError_PreservesCurrent(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a session manager with an active backend, then a factory that will error
+	existingBackend := &mockBackend{sessionID: "existing"}
+	factory := &mockBackendFactory{backend: existingBackend}
+	mgr := NewSessionManager(factory, nil)
+	r.NoError(mgr.NewSession("", Capabilities{}))
+	factory.err = errors.New("factory boom")
+
+	// when
+	// ... NewSession is called and the factory fails
+	err := mgr.NewSession("", Capabilities{})
+
+	// then
+	// ... an error is returned, the old backend is still current and NOT closed
+	a.Error(err)
+	a.False(existingBackend.closed, "old backend must not be closed when factory fails")
+	sess, sessErr := mgr.GetSession()
+	r.NoError(sessErr)
+	a.Equal("existing", sess.SessionID())
+}
+
 type mockBackendFactory struct {
 	backend      *mockBackend
 	err          error
