@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	"context"
 	"log/slog"
 )
 
@@ -48,13 +47,6 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 	}
 }
 
-// handleChat processes an inbound chat message. When a chatCallback is wired
-// in, it delegates to the callback (plugin path). Otherwise falls back to the
-// legacy direct-dispatch path.
-//
-// The server mutex protects only the shared responder field; Converse runs
-// without the lock so a slow API call does not block other dashboard actions
-// like /new_session.
 func (s *Server) handleChat(content string) {
 	backend, err := s.sessionMgr.GetOrCreateSession()
 	if err != nil {
@@ -67,18 +59,12 @@ func (s *Server) handleChat(content string) {
 		return
 	}
 
-	s.mu.Lock()
-	if s.responder == nil || s.responder.sessionID != backend.SessionID() {
-		s.responder = NewWSResponder(s.hub, backend.SessionID())
-
-		active := true
-		s.hub.Broadcast(Message{
-			Type:      "session",
-			Active:    &active,
-			SessionID: backend.SessionID(),
-		})
-	}
-	s.mu.Unlock()
+	active := true
+	s.hub.Broadcast(Message{
+		Type:      "session",
+		Active:    &active,
+		SessionID: backend.SessionID(),
+	})
 
 	s.hub.Broadcast(Message{
 		Type:    "chat",
@@ -86,36 +72,7 @@ func (s *Server) handleChat(content string) {
 		Content: content,
 	})
 
-	if s.chatCallback != nil {
-		s.chatCallback(backend.SessionID(), content)
-		return
-	}
-
-	// Legacy path: dispatch directly via the session manager.
-	s.mu.Lock()
-	responder := s.responder
-	s.mu.Unlock()
-
-	ctx := context.Background()
-	response, err := backend.Converse(ctx, content, responder, s.permChecker)
-	if err != nil {
-		slog.Error("converse", "error", err)
-		s.hub.Broadcast(Message{
-			Type:    "chat",
-			Role:    "assistant",
-			Content: "Error: " + err.Error(),
-		})
-		return
-	}
-
-	if response != "" {
-		s.hub.Broadcast(Message{
-			Type:      "chat",
-			Role:      "assistant",
-			Content:   response,
-			SessionID: backend.SessionID(),
-		})
-	}
+	s.chatCallback(backend.SessionID(), content)
 }
 
 func (s *Server) handleNewSession(workDir string) {
@@ -130,10 +87,6 @@ func (s *Server) handleNewSession(workDir string) {
 	}
 
 	backend, _ := s.sessionMgr.GetOrCreateSession()
-
-	s.mu.Lock()
-	s.responder = NewWSResponder(s.hub, backend.SessionID())
-	s.mu.Unlock()
 
 	active := true
 	s.hub.Broadcast(Message{

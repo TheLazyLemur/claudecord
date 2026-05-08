@@ -31,15 +31,13 @@ type Server struct {
 	password          string
 	chatCallback      func(sessionID, text string)
 
-	mu        sync.Mutex
-	responder *WSResponder
-	sessions  map[string]time.Time // valid session tokens
+	mu       sync.Mutex
+	sessions map[string]time.Time // valid session tokens
 }
 
-// NewServer creates a dashboard server.
-// chatCallback, if non-nil, is invoked for each inbound chat message instead
-// of dispatching directly; it receives the current session UUID and the message
-// text. When nil the server falls back to its legacy direct-dispatch path.
+// NewServer creates a dashboard server. chatCallback is required; it is invoked
+// for each inbound chat message and receives the current session UUID and the
+// message text.
 func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.PermissionChecker, skillStore skills.SkillStore, skillsDir, workDir, agentsDefaultPath, memoryDir, password string, chatCallback func(sessionID, text string)) *Server {
 	return &Server{
 		hub:               hub,

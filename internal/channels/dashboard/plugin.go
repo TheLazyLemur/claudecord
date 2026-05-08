@@ -60,16 +60,6 @@ func (p *Plugin) HandleChat(sessionID, text string) {
 	})
 }
 
-// deliverForTest is the test seam used to inject inbounds directly.
-func (p *Plugin) deliverForTest(in core.Inbound) {
-	p.mu.Lock()
-	d := p.deliver
-	p.mu.Unlock()
-	if d != nil {
-		d(in)
-	}
-}
-
 // SessionKey returns the canonical session key for a dashboard session UUID.
 func SessionKey(sessionUUID string) core.SessionKey {
 	return core.SessionKey("dashboard:" + sessionUUID)

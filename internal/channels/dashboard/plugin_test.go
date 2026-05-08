@@ -4,24 +4,31 @@ import (
 	"context"
 	"testing"
 
+	dash "github.com/TheLazyLemur/claudecord/internal/dashboard"
+
 	"github.com/TheLazyLemur/claudecord/internal/core"
 )
 
 func TestPlugin_DeliversWithSessionUUIDKey(t *testing.T) {
 	// given
-	// ... a plugin and a captured inbound
-	p := New(Config{})
+	// ... a plugin with a real hub and a captured inbound
+	hub := dash.NewHub()
+	go hub.Run()
+	p := New(Config{Hub: hub})
 	var got core.Inbound
 
 	// when
-	// ... the plugin delivers a synthetic inbound with a session id
+	// ... HandleChat is called with a session id and message text
 	_ = p.Start(context.Background(), func(in core.Inbound) { got = in })
-	p.deliverForTest(core.Inbound{SessionKey: SessionKey("abc-123"), Text: "hi"})
+	p.HandleChat("abc-123", "hi")
 
 	// then
-	// ... the SessionKey is dashboard-prefixed
+	// ... the SessionKey is dashboard-prefixed and text is preserved
 	if got.SessionKey != "dashboard:abc-123" {
 		t.Fatalf("session key: %q", got.SessionKey)
+	}
+	if got.Text != "hi" {
+		t.Fatalf("text: %q", got.Text)
 	}
 }
 
