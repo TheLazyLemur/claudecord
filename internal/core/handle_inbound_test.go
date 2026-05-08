@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -51,6 +52,28 @@ type capturingFactory struct {
 func (f *capturingFactory) Create(_ string, caps Capabilities) (Backend, error) {
 	f.lastCaps = caps
 	return f.backend, nil
+}
+
+func TestHandleInbound_RejectsEmptySessionKey(t *testing.T) {
+	// given
+	// ... a bot with a valid backend factory
+	be := &stubBackend{id: "b1"}
+	f := &stubFactory{next: func() Backend { return be }}
+	mgr := NewSessionManager(f, nil)
+	bot := NewBot(mgr, nil)
+
+	// when
+	// ... an inbound with an empty SessionKey is dispatched
+	err := bot.HandleInbound(Inbound{})
+
+	// then
+	// ... a non-nil error mentioning SessionKey is returned
+	if err == nil {
+		t.Fatalf("expected non-nil error for empty SessionKey")
+	}
+	if !strings.Contains(err.Error(), "SessionKey") {
+		t.Fatalf("expected error to mention SessionKey, got: %v", err)
+	}
 }
 
 func TestHandleInbound_SameKeyContinues(t *testing.T) {

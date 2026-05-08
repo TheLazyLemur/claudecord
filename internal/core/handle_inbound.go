@@ -14,6 +14,10 @@ import (
 // under RLock; a key mismatch upgrades to a write lock and rotates the session,
 // blocking until in-flight messages drain (same as NewSession behaviour).
 func (b *Bot) HandleInbound(in Inbound) error {
+	if in.SessionKey == "" {
+		return errors.New("inbound: empty SessionKey")
+	}
+
 	b.mu.RLock()
 	matches := in.SessionKey == b.activeKey
 	b.mu.RUnlock()
