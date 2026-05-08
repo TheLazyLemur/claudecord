@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,15 +58,15 @@ func (m *mockPermissionChecker) Check(toolName string, input ToolInput) (bool, s
 }
 
 type botMockBackend struct {
-	sessionID       string
-	closed          bool
-	converseResp    string
-	converseErr     error
-	converseCalled  bool
-	converseFunc    func(ctx context.Context) (string, error)
-	lastMsg         string
-	lastResponder   Outbound
-	lastPerms       PermissionChecker
+	sessionID      string
+	closed         bool
+	converseResp   string
+	converseErr    error
+	converseCalled bool
+	converseFunc   func(ctx context.Context) (string, error)
+	lastMsg        string
+	lastResponder  Outbound
+	lastPerms      PermissionChecker
 }
 
 func (m *botMockBackend) Converse(ctx context.Context, msg string, responder Outbound, perms PermissionChecker) (string, error) {
@@ -104,117 +103,6 @@ func (f *botMockFactory) Create(workDir string) (Backend, error) {
 
 // --- Tests ---
 
-func TestBot_HandleMessage_SendsTypingIndicator(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
-	factory := &botMockFactory{backend: backend}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory, nil), perms)
-	responder := &mockResponder{}
-
-	// when
-	err := bot.HandleMessage(responder, "hello")
-
-	// then
-	r.NoError(err)
-	a.True(responder.typingCalled)
-}
-
-func TestBot_HandleMessage_CallsBackendConverse(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
-	factory := &botMockFactory{backend: backend}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory, nil), perms)
-	responder := &mockResponder{}
-
-	// when
-	err := bot.HandleMessage(responder, "test message")
-
-	// then
-	r.NoError(err)
-	a.True(backend.converseCalled)
-	a.Equal("test message", backend.lastMsg)
-	a.Equal(responder, backend.lastResponder)
-	a.Equal(perms, backend.lastPerms)
-}
-
-func TestBot_HandleMessage_PostsResponseFromBackend(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	backend := &botMockBackend{sessionID: "s1", converseResp: "Hello there!"}
-	factory := &botMockFactory{backend: backend}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory, nil), perms)
-	responder := &mockResponder{}
-
-	// when
-	err := bot.HandleMessage(responder, "hi")
-
-	// then
-	r.NoError(err)
-	r.Len(responder.responses, 1)
-	a.Equal("Hello there!", responder.responses[0])
-}
-
-func TestBot_HandleMessage_NoResponseIfEmpty(t *testing.T) {
-	a := assert.New(t)
-	r := require.New(t)
-
-	// given
-	backend := &botMockBackend{sessionID: "s1", converseResp: ""}
-	factory := &botMockFactory{backend: backend}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory, nil), perms)
-	responder := &mockResponder{}
-
-	// when
-	err := bot.HandleMessage(responder, "hi")
-
-	// then
-	r.NoError(err)
-	a.Len(responder.responses, 0)
-}
-
-func TestBot_HandleMessage_SessionError(t *testing.T) {
-	// given
-	factory := &botMockFactory{err: errors.New("spawn failed")}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory, nil), perms)
-	responder := &mockResponder{}
-
-	// when
-	err := bot.HandleMessage(responder, "hello")
-
-	// then
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "spawn failed")
-}
-
-func TestBot_HandleMessage_ConverseError(t *testing.T) {
-	// given
-	backend := &botMockBackend{sessionID: "s1", converseErr: errors.New("converse failed")}
-	factory := &botMockFactory{backend: backend}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory, nil), perms)
-	responder := &mockResponder{}
-
-	// when
-	err := bot.HandleMessage(responder, "hello")
-
-	// then
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "converse failed")
-}
-
 func TestBot_NewSession_StartsNewSession(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
@@ -228,7 +116,7 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 	responder := &mockResponder{}
 
 	// create initial session
-	_ = bot.HandleMessage(responder, "init")
+	_ = bot.HandleInbound(Inbound{SessionKey: "k1", Text: "init", Reply: responder})
 	factory.backend = backend2
 
 	// when
@@ -239,7 +127,7 @@ func TestBot_NewSession_StartsNewSession(t *testing.T) {
 	a.True(backend1.closed)
 }
 
-func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
+func TestBot_NewSession_WaitsForInflightHandleInbound(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
@@ -260,10 +148,10 @@ func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
 	responder := &mockResponder{}
 
 	// when
-	// ... HandleMessage is in-flight (blocked in Converse)
+	// ... HandleInbound is in-flight (blocked in Converse)
 	handleDone := make(chan error, 1)
 	go func() {
-		handleDone <- bot.HandleMessage(responder, "hello")
+		handleDone <- bot.HandleInbound(Inbound{SessionKey: "k1", Text: "hello", Reply: responder})
 	}()
 	<-converseStarted
 
@@ -278,9 +166,9 @@ func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
 	// ... backend must NOT be closed while Converse is running
 	select {
 	case <-newSessionDone:
-		t.Fatal("NewSession returned before HandleMessage finished")
+		t.Fatal("NewSession returned before HandleInbound finished")
 	case <-time.After(50 * time.Millisecond):
-		// expected: NewSession is blocked waiting for HandleMessage
+		// expected: NewSession is blocked waiting for HandleInbound
 	}
 	a.False(backend1.closed, "backend closed while Converse in-flight")
 
@@ -289,27 +177,4 @@ func TestBot_NewSession_WaitsForInflightHandleMessage(t *testing.T) {
 	r.NoError(<-handleDone)
 	r.NoError(<-newSessionDone)
 	a.True(backend1.closed)
-}
-
-func TestBot_HandleMessage_ConverseTimeout(t *testing.T) {
-	a := assert.New(t)
-
-	// given
-	backend := &botMockBackend{sessionID: "s1"}
-	backend.converseFunc = func(ctx context.Context) (string, error) {
-		<-ctx.Done()
-		return "", ctx.Err()
-	}
-	factory := &botMockFactory{backend: backend}
-	perms := &mockPermissionChecker{allowAll: true}
-	bot := NewBot(NewSessionManager(factory, nil), perms)
-	bot.converseTimeout = 50 * time.Millisecond
-	responder := &mockResponder{}
-
-	// when
-	err := bot.HandleMessage(responder, "hello")
-
-	// then
-	a.Error(err)
-	a.Contains(err.Error(), "context deadline exceeded")
 }

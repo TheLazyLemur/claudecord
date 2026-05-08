@@ -1,12 +1,8 @@
 package core
 
 import (
-	"context"
-	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 type Bot struct {
@@ -26,39 +22,8 @@ func NewBot(sessions *SessionManager, perms PermissionChecker) *Bot {
 	}
 }
 
-// HandleMessage processes a message via the backend
-func (b *Bot) HandleMessage(out Outbound, userMessage string) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	slog.Info("HandleMessage start", "msg", userMessage)
-	out.SendTyping()
-
-	slog.Info("getting session")
-	backend, err := b.sessions.GetOrCreateSession()
-	if err != nil {
-		return errors.Wrap(err, "getting session")
-	}
-	slog.Info("got session", "sessionID", backend.SessionID())
-
-	ctx, cancel := context.WithTimeout(context.Background(), b.converseTimeout)
-	defer cancel()
-	response, err := backend.Converse(ctx, userMessage, out, b.perms)
-	if err != nil {
-		return errors.Wrap(err, "conversing")
-	}
-
-	if response != "" {
-		if err := out.PostResponse(response); err != nil {
-			return errors.Wrap(err, "posting response")
-		}
-	}
-
-	return nil
-}
-
 // NewSession starts a fresh session with optional working directory.
-// Waits for any in-flight HandleMessage to finish before closing the old backend.
+// Waits for any in-flight HandleInbound to finish before closing the old backend.
 func (b *Bot) NewSession(workDir string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()

@@ -17,6 +17,19 @@ import (
 	"github.com/pkg/errors"
 )
 
+const passiveSystemPrompt = `You are a helpful programming assistant passively listening to a Discord channel.
+
+You will receive messages from the channel. Your job is to determine if any messages contain programming or technical questions that you can help with.
+
+IMPORTANT RULES:
+1. Only respond if you are confident the messages contain a programming/technical question
+2. If unsure or if messages are just casual chat, respond with exactly: [NO_RESPONSE]
+3. Keep answers concise and helpful
+4. You are in READ-ONLY mode - you can read files but CANNOT write, edit, or execute commands
+5. Focus on explaining concepts, answering questions, and pointing to relevant documentation
+
+If you decide to respond, provide a helpful answer. If not, respond with [NO_RESPONSE] (exactly this text, nothing else).`
+
 var _ core.Backend = (*Backend)(nil)
 
 type Backend struct {
@@ -320,7 +333,7 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 	var base string
 	var apiTools []anthropic.ToolUnionParam
 	if f.Passive {
-		base = core.PassiveSystemPrompt()
+		base = passiveSystemPrompt
 		apiTools = buildPassiveTools()
 	} else {
 		base = "Use send_update to post progress updates for longer tasks."
