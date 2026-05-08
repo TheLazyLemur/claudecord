@@ -44,7 +44,9 @@ func (b *Bot) HandleInbound(in Inbound) error {
 
 	slog.Info("dispatching inbound", "key", string(in.SessionKey), "session", backend.SessionID())
 
-	response, err := backend.Converse(context.Background(), in.Text, in.Reply, b.perms)
+	ctx, cancel := context.WithTimeout(context.Background(), b.converseTimeout)
+	defer cancel()
+	response, err := backend.Converse(ctx, in.Text, in.Reply, b.perms)
 	if err != nil {
 		return errors.Wrap(err, "converse")
 	}

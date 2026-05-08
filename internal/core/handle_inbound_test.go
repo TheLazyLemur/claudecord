@@ -7,16 +7,17 @@ import (
 )
 
 type stubBackend struct {
-	id        string
-	messages  []string
-	closeErr  error
-	closed    bool
-	converseR string
+	id         string
+	messages   []string
+	closeErr   error
+	closed     bool
+	converseR  string
+	converseErr error
 }
 
 func (s *stubBackend) Converse(_ context.Context, msg string, _ Responder, _ PermissionChecker) (string, error) {
 	s.messages = append(s.messages, msg)
-	return s.converseR, nil
+	return s.converseR, s.converseErr
 }
 func (s *stubBackend) SessionID() string { return s.id }
 func (s *stubBackend) Close() error      { s.closed = true; return s.closeErr }
@@ -123,5 +124,29 @@ func TestHandleInbound_FlushErrorIsSwallowed(t *testing.T) {
 	}
 	if got := len(be2.messages); got != 1 {
 		t.Fatalf("second backend messages: %v", be2.messages)
+	}
+}
+
+func TestHandleInbound_ConverseErrorPropagates(t *testing.T) {
+	// given
+	// ... a backend whose Converse returns an error
+	converseErr := errors.New("upstream failure")
+	be := &stubBackend{id: "b1", converseErr: converseErr}
+	f := &stubFactory{next: func() Backend { return be }}
+	mgr := NewSessionManager(f, nil)
+	bot := NewBot(mgr, nil)
+	r := &stubResponder{}
+
+	// when
+	// ... an inbound is dispatched
+	err := bot.HandleInbound(Inbound{SessionKey: "k1", Text: "hi", Reply: r})
+
+	// then
+	// ... HandleInbound returns a non-nil error wrapping the converse error
+	if err == nil {
+		t.Fatalf("expected non-nil error, got nil")
+	}
+	if !errors.Is(err, converseErr) {
+		t.Fatalf("expected error to wrap converseErr, got: %v", err)
 	}
 }
