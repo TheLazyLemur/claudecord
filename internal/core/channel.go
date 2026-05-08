@@ -18,6 +18,7 @@ type Inbound struct {
 
 type Capabilities struct {
 	Reactions bool
+	Media     bool
 }
 
 type ChannelPlugin interface {

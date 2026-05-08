@@ -69,7 +69,6 @@ func run() error {
 		DefaultWorkDir:       cfg.ClaudeCWD,
 		SkillStore:           skillStore,
 		WebSearchAPIKey:      cfg.WebSearchAPIKey,
-		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
 	}
 	baseFactory := core.BackendFactory(&base)

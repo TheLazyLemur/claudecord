@@ -319,15 +319,12 @@ func buildToolResultBlock(id, result string, isError bool) anthropic.ContentBloc
 
 // BackendFactory creates API backends
 type BackendFactory struct {
-	APIKey         string
-	BaseURL        string
-	Model          string
-	DefaultWorkDir string
-	SkillStore     skills.SkillStore
-	WebSearchAPIKey string
-	// WhatsAppEnabled appends the media-handling addendum to the system prompt
-	// so the model knows what to do with <attachment> tags in chat prompts.
-	WhatsAppEnabled bool
+	APIKey               string
+	BaseURL              string
+	Model                string
+	DefaultWorkDir       string
+	SkillStore           skills.SkillStore
+	WebSearchAPIKey      string
 	// ThinkingBudgetTokens > 0 enables extended thinking on every API call.
 	ThinkingBudgetTokens int
 }
@@ -350,7 +347,7 @@ func (f *BackendFactory) Create(workDir string, caps core.Capabilities) (core.Ba
 
 	base := "Use send_update to post progress updates for longer tasks."
 	apiTools := buildChatTools(caps.Reactions)
-	if f.WhatsAppEnabled {
+	if caps.Media {
 		base += "\n" + core.WhatsAppMediaSystemPromptAddendum
 	}
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)

@@ -236,6 +236,31 @@ func TestHandleInbound_NoReactionsCapsForwardedToFactory(t *testing.T) {
 	}
 }
 
+func TestHandleInbound_MediaCapabilityForwardedToFactory(t *testing.T) {
+	// given
+	// ... a capturing factory and a bot
+	be := &stubBackend{id: "b1", converseR: "ok"}
+	f := &capturingFactory{backend: be}
+	mgr := NewSessionManager(f, nil)
+	bot := NewBot(mgr, nil)
+	r := &stubResponder{}
+
+	// when
+	// ... an inbound arrives with Media capability set
+	_ = bot.HandleInbound(Inbound{
+		SessionKey:   "k1",
+		Text:         "hi",
+		Reply:        r,
+		Capabilities: Capabilities{Media: true},
+	})
+
+	// then
+	// ... the factory received caps with Media true
+	if !f.lastCaps.Media {
+		t.Fatalf("expected Media capability to be forwarded to factory, got: %+v", f.lastCaps)
+	}
+}
+
 func TestHandleInbound_AttachmentsReachBackend(t *testing.T) {
 	// given
 	// ... a stub backend and a bot

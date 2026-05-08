@@ -550,6 +550,52 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 	a.True(found, "body=%s", body)
 }
 
+func TestBackendFactory_Create_MediaCapsAddsSystemPromptAddendum(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Media true
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with Media capability
+	backend, err := factory.Create("", core.Capabilities{Media: true})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt contains the media addendum
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.Contains(apiBackend.systemPrompt, "attachment")
+}
+
+func TestBackendFactory_Create_NoMediaCapsNoAddendum(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Media false
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created without Media capability
+	backend, err := factory.Create("", core.Capabilities{Media: false})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt does not contain the media addendum
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.NotContains(apiBackend.systemPrompt, "attachment")
+}
+
 func TestConverse_AppendsAttachmentTags(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)
