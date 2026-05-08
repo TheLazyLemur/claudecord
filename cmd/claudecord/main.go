@@ -76,8 +76,9 @@ func run() error {
 
 	defaultPerms := core.PermissionChecker(permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs))
 
-	// Memory flush runs one final agent turn before each /new-session, so
-	// the model can persist durable facts. Disable with MEMORY_FLUSH_DISABLED=1.
+	// Memory flush runs one final agent turn before each session reset (triggered
+	// by a SessionKey change), so the model can persist durable facts. Disable
+	// with MEMORY_FLUSH_DISABLED=1.
 	var flushFn core.FlushFunc
 	if os.Getenv("MEMORY_FLUSH_DISABLED") != "1" {
 		flushFn = core.NewMemoryFlusher(defaultPerms)
