@@ -24,18 +24,6 @@ func RenderWhatsAppBatch(msgs []BufferedMessage) string {
 			b.WriteString(escapeXML(m.Content))
 			b.WriteString("</text>\n")
 		}
-		for _, a := range m.Attachments {
-			b.WriteString(`  <attachment path="`)
-			b.WriteString(escapeXMLAttr(a.Path))
-			b.WriteString(`" mime="`)
-			b.WriteString(escapeXMLAttr(a.MIME))
-			if a.OriginalName != "" {
-				b.WriteString(`" original_name="`)
-				b.WriteString(escapeXMLAttr(a.OriginalName))
-			}
-			b.WriteString(`" />`)
-			b.WriteByte('\n')
-		}
 		b.WriteString("</message>")
 	}
 	return b.String()

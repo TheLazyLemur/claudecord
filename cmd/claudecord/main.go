@@ -62,7 +62,6 @@ func run() error {
 	skillList, _ := skillStore.List()
 	slog.Info("skills loaded", "count", len(skillList))
 
-	// discordFactory includes react_emoji tool; baseFactory (WA/dashboard) does not.
 	base := api.BackendFactory{
 		APIKey:               cfg.APIKey,
 		BaseURL:              cfg.BaseURL,
@@ -70,22 +69,15 @@ func run() error {
 		DefaultWorkDir:       cfg.ClaudeCWD,
 		SkillStore:           skillStore,
 		WebSearchAPIKey:      cfg.WebSearchAPIKey,
-		WhatsAppEnabled:      cfg.WhatsAppEnabled(),
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
 	}
-	discord := base
-	discord.Discord = true
-	passive := base
-	passive.Passive = true
 	baseFactory := core.BackendFactory(&base)
-	discordFactory := core.BackendFactory(&discord)
-	passiveFactory := core.BackendFactory(&passive)
 
 	defaultPerms := core.PermissionChecker(permission.NewAutoApprovePermissionChecker(cfg.AllowedDirs))
-	roPerms := core.PermissionChecker(permission.NewReadOnlyPermissionChecker(cfg.AllowedDirs))
 
-	// Memory flush runs one final agent turn before each /new-session, so
-	// the model can persist durable facts. Disable with MEMORY_FLUSH_DISABLED=1.
+	// Memory flush runs one final agent turn before each session reset (triggered
+	// by a SessionKey change), so the model can persist durable facts. Disable
+	// with MEMORY_FLUSH_DISABLED=1.
 	var flushFn core.FlushFunc
 	if os.Getenv("MEMORY_FLUSH_DISABLED") != "1" {
 		flushFn = core.NewMemoryFlusher(defaultPerms)
@@ -96,7 +88,7 @@ func run() error {
 	bot := core.NewBot(baseSessionMgr, defaultPerms)
 
 	if cfg.DiscordEnabled() {
-		stop, err := startDiscord(cfg, discordFactory, passiveFactory, defaultPerms, roPerms, flushFn)
+		stop, err := startDiscord(cfg, bot)
 		if err != nil {
 			return err
 		}
@@ -111,7 +103,10 @@ func run() error {
 		defer stop()
 	}
 
-	stopServer := startHTTPServer(cfg, hub, baseSessionMgr, defaultPerms, skillStore, skillsDir)
+	stopServer, err := startHTTPServer(cfg, hub, bot, baseSessionMgr, defaultPerms, skillStore, skillsDir)
+	if err != nil {
+		return errors.Wrap(err, "start HTTP server")
+	}
 	defer stopServer()
 
 	sig := make(chan os.Signal, 1)
@@ -121,3 +116,4 @@ func run() error {
 	slog.Info("shutting down")
 	return nil
 }
+

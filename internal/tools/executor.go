@@ -42,7 +42,7 @@ func truncateOutput(s string, maxLen int) string {
 
 // Deps holds all dependencies needed by tool executors.
 type Deps struct {
-	Responder       core.Responder
+	Outbound        core.Outbound
 	SkillStore      skills.SkillStore
 	WebSearchAPIKey string
 }
@@ -51,9 +51,9 @@ type Deps struct {
 func Execute(name string, input core.ToolInput, deps Deps) (string, bool) {
 	switch name {
 	case "react_emoji":
-		return executeReactEmoji(input, deps.Responder)
+		return executeReactEmoji(input, deps.Outbound)
 	case "send_update":
-		return executeSendUpdate(input, deps.Responder)
+		return executeSendUpdate(input, deps.Outbound)
 	case "Read":
 		return executeRead(input)
 	case "Bash":
@@ -71,7 +71,7 @@ func Execute(name string, input core.ToolInput, deps Deps) (string, bool) {
 	}
 }
 
-func executeReactEmoji(input core.ToolInput, responder core.Responder) (string, bool) {
+func executeReactEmoji(input core.ToolInput, responder core.Outbound) (string, bool) {
 	if input.Emoji == "" {
 		return "missing emoji argument", true
 	}
@@ -83,7 +83,7 @@ func executeReactEmoji(input core.ToolInput, responder core.Responder) (string, 
 	return "reaction added", false
 }
 
-func executeSendUpdate(input core.ToolInput, responder core.Responder) (string, bool) {
+func executeSendUpdate(input core.ToolInput, responder core.Outbound) (string, bool) {
 	if input.Message == "" {
 		return "missing message argument", true
 	}

@@ -476,3 +476,89 @@ func TestLoad_MemoryDirMustBeInsideAllowedDirs(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must live under ALLOWED_DIRS")
 }
+
+// --- DiscordMediaDir tests ---
+
+func TestLoad_DiscordMediaDirDefaultsUnderFirstAllowedDir(t *testing.T) {
+	// given
+	// ... a Discord-only config with no DISCORD_MEDIA_DIR set
+	dir := mustTempMediaDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":      "tok",
+		"ALLOWED_USERS":      "123",
+		"ALLOWED_DIRS":       dir,
+		"CLAUDECORD_API_KEY": "sk-test",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... DiscordMediaDir defaults to <first ALLOWED_DIR>/discord-media
+	require.NoError(t, err)
+	assert.Equal(t, dir+"/discord-media", cfg.DiscordMediaDir)
+	require.NoError(t, cfg.EnsureDirs())
+	info, err := os.Stat(cfg.DiscordMediaDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestLoad_DiscordMediaDirOverride(t *testing.T) {
+	// given
+	// ... a Discord-only config with DISCORD_MEDIA_DIR set explicitly
+	dir := mustTempMediaDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":      "tok",
+		"ALLOWED_USERS":      "123",
+		"ALLOWED_DIRS":       dir,
+		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_MEDIA_DIR":  dir + "/attachments",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... DiscordMediaDir uses the override
+	require.NoError(t, err)
+	assert.Equal(t, dir+"/attachments", cfg.DiscordMediaDir)
+}
+
+func TestLoad_DiscordMediaDirMustBeInsideAllowedDirs(t *testing.T) {
+	// given
+	// ... DISCORD_MEDIA_DIR set outside ALLOWED_DIRS
+	dir := mustTempMediaDir()
+	env := map[string]string{
+		"DISCORD_TOKEN":      "tok",
+		"ALLOWED_USERS":      "123",
+		"ALLOWED_DIRS":       dir,
+		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_MEDIA_DIR":  "/somewhere/else",
+	}
+
+	// when
+	// ... config is loaded
+	_, err := Load(env)
+
+	// then
+	// ... an error is returned
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must live under ALLOWED_DIRS")
+}
+
+func TestLoad_DiscordMediaDirNotSetWhenDiscordDisabled(t *testing.T) {
+	// given
+	// ... a WhatsApp-only config (no Discord token)
+	env := validWhatsAppEnv()
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... DiscordMediaDir is empty
+	require.NoError(t, err)
+	assert.Empty(t, cfg.DiscordMediaDir)
+}

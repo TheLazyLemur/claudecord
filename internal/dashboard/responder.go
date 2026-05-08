@@ -1,6 +1,6 @@
 package dashboard
 
-// WSResponder implements core.Responder for the dashboard.
+// WSResponder implements core.Outbound for the dashboard.
 type WSResponder struct {
 	hub       *Hub
 	sessionID string

@@ -22,36 +22,26 @@ func strProp(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
 }
 
-// DiscordTools returns tool definitions for Discord interaction
-func DiscordTools() []ToolDef {
-	return []ToolDef{
-		{
-			Name:        "react_emoji",
-			Description: "Add emoji reaction to current Discord message. Call this first when you receive a message.",
-			InputSchema: objSchema(map[string]any{
-				"emoji": strProp("Unicode emoji character (e.g. 👀, 👍, 🚀)"),
-			}, "emoji"),
-		},
-		{
-			Name:        "send_update",
-			Description: "Send a progress update message to a thread on the original Discord message. Use this to keep the user informed about what you're doing.",
-			InputSchema: objSchema(map[string]any{
-				"message": strProp("The update message to send"),
-			}, "message"),
-		},
+// ReactEmojiTool returns the tool definition for adding an emoji reaction
+// to the message the agent is responding to.
+func ReactEmojiTool() ToolDef {
+	return ToolDef{
+		Name:        "react_emoji",
+		Description: "Add an emoji reaction to the message you are responding to.",
+		InputSchema: objSchema(map[string]any{
+			"emoji": strProp("Unicode emoji character (e.g. 👀, 👍, 🚀)"),
+		}, "emoji"),
 	}
 }
 
-// ChatTools returns non-Discord chat tools (send_update only, no react_emoji)
-func ChatTools() []ToolDef {
-	return []ToolDef{
-		{
-			Name:        "send_update",
-			Description: "Send a progress update message. Use this to keep the user informed about what you're doing.",
-			InputSchema: objSchema(map[string]any{
-				"message": strProp("The update message to send"),
-			}, "message"),
-		},
+// SendUpdateTool is registered for every channel.
+func SendUpdateTool() ToolDef {
+	return ToolDef{
+		Name:        "send_update",
+		Description: "Send a progress update message in the current conversation. Use to keep the user informed about what you're doing.",
+		InputSchema: objSchema(map[string]any{
+			"message": strProp("The update message to send"),
+		}, "message"),
 	}
 }
 

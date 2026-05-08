@@ -4,15 +4,11 @@ type PermissionChecker interface {
 	Check(toolName string, input ToolInput) (allow bool, reason string)
 }
 
-type DiscordClient interface {
-	SendMessage(channelID, content string) error
-	CreateThread(channelID, content string) (threadID string, err error)
-	StartThread(channelID, messageID, name string) (threadID string, err error)
-	SendTyping(channelID string) error
-	AddReaction(channelID, messageID, emoji string) error
-}
-
-type Responder interface {
+// Outbound is the per-message send-side of a channel. It is owned by a single
+// Inbound and bound to the originating chat surface (Discord thread, WhatsApp
+// chat, dashboard WebSocket). Every channel plugin's reply type implements
+// this interface.
+type Outbound interface {
 	SendTyping() error
 	PostResponse(content string) error
 	AddReaction(emoji string) error

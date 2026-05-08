@@ -1,7 +1,6 @@
-package handler
+package media
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"mime"
@@ -12,78 +11,19 @@ import (
 	"unicode"
 
 	"github.com/pkg/errors"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types/events"
 	"golang.org/x/text/unicode/norm"
 )
 
-const (
-	MaxImageBytes = 10 * 1024 * 1024
-	MaxDocBytes   = 50 * 1024 * 1024
-)
-
-// Downloader is the subset of whatsmeow.Client we need for decrypting media.
-type Downloader interface {
-	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
-}
-
+// Attachment holds a decrypted or downloaded media payload.
 type Attachment struct {
 	MIME         string
 	OriginalName string
 	Bytes        []byte
 }
 
-// extractInbound pulls caption + attachment out of a WhatsApp message event.
-// Returns (caption, nil, nil) for plain text. Returns (caption, att, nil) for
-// supported media (image, document). Other media types yield (caption, nil, nil) —
-// out of scope for this implementation.
-func extractInbound(ctx context.Context, msg *events.Message, dl Downloader) (string, *Attachment, error) {
-	if msg == nil || msg.Message == nil {
-		return "", nil, nil
-	}
-
-	if img := msg.Message.GetImageMessage(); img != nil {
-		bytes, err := dl.Download(ctx, img)
-		if err != nil {
-			return "", nil, errors.Wrap(err, "downloading image")
-		}
-		return img.GetCaption(), &Attachment{
-			MIME:  img.GetMimetype(),
-			Bytes: bytes,
-		}, nil
-	}
-
-	if doc := msg.Message.GetDocumentMessage(); doc != nil {
-		bytes, err := dl.Download(ctx, doc)
-		if err != nil {
-			return "", nil, errors.Wrap(err, "downloading document")
-		}
-		return doc.GetCaption(), &Attachment{
-			MIME:         doc.GetMimetype(),
-			OriginalName: doc.GetFileName(),
-			Bytes:        bytes,
-		}, nil
-	}
-
-	return extractText(msg.Message), nil, nil
-}
-
-// isImageMIME reports whether att should be size-capped at MaxImageBytes.
-func isImageMIME(mime string) bool {
-	return strings.HasPrefix(mime, "image/")
-}
-
-// SizeCap returns the byte limit for an attachment given its MIME family.
-func SizeCap(mime string) int {
-	if isImageMIME(mime) {
-		return MaxImageBytes
-	}
-	return MaxDocBytes
-}
-
-// saveAttachment decrypts → writes the attachment under mediaDir with a
-// collision-resistant name. now is injected so tests can freeze time.
-func saveAttachment(mediaDir string, att *Attachment, now time.Time) (string, error) {
+// SaveAttachment writes the attachment under mediaDir with a collision-resistant
+// name derived from now, the original filename, and a random suffix.
+func SaveAttachment(mediaDir string, att *Attachment, now time.Time) (string, error) {
 	if att == nil {
 		return "", errors.New("nil attachment")
 	}
@@ -112,8 +52,6 @@ func saveAttachment(mediaDir string, att *Attachment, now time.Time) (string, er
 }
 
 // chooseStemAndExt produces (sanitized-original-or-empty, .ext).
-// Stem is empty when sanitization left nothing usable; caller falls back to a
-// random hex stem in that case.
 func chooseStemAndExt(att *Attachment) (string, string) {
 	stem := ""
 	ext := ""
@@ -165,8 +103,8 @@ func extFromMIME(m string) string {
 	return ""
 }
 
-// sanitizeName: strip separators + leading dots + control chars,
-// NFC-normalize, collapse whitespace, cap to 100 runes.
+// sanitizeName strips separators, control chars, leading dots; NFC-normalizes;
+// collapses whitespace; caps to 100 runes.
 func sanitizeName(s string) string {
 	s = norm.NFC.String(s)
 

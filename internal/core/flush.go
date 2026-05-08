@@ -14,6 +14,14 @@ const memoryFlushPrompt = "This conversation is ending. " +
 	"Be brief — only commit things actually established this session. " +
 	"Do not respond with any other text."
 
+// noopResponder implements Outbound by discarding all output.
+type noopResponder struct{}
+
+func (n *noopResponder) SendTyping() error                 { return nil }
+func (n *noopResponder) PostResponse(content string) error { return nil }
+func (n *noopResponder) AddReaction(emoji string) error    { return nil }
+func (n *noopResponder) SendUpdate(message string) error   { return nil }
+
 // NewMemoryFlusher returns a FlushFunc that fires one final agent turn
 // against the outgoing backend, instructing the model to commit unsaved
 // memory state via the memory skill scripts. The flush has a hard 30s
@@ -25,7 +33,7 @@ func NewMemoryFlusher(perms PermissionChecker) FlushFunc {
 		defer cancel()
 
 		responder := &noopResponder{}
-		if _, err := current.Converse(timeoutCtx, memoryFlushPrompt, responder, perms); err != nil {
+		if _, err := current.Converse(timeoutCtx, Inbound{Text: memoryFlushPrompt}, responder, perms); err != nil {
 			slog.Warn("memory flush failed", "error", err)
 		}
 	}

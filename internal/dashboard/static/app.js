@@ -13,7 +13,6 @@ let skillFiles = [];
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendBtn = document.getElementById('sendBtn');
-const newSessionBtn = document.getElementById('newSessionBtn');
 const sessionInfo = document.getElementById('sessionInfo');
 const sessionID = document.getElementById('sessionID');
 const typingIndicator = document.getElementById('typingIndicator');
@@ -215,11 +214,6 @@ function updateSession(active, id) {
   } else {
     sessionInfo.classList.add('hidden');
   }
-}
-
-function newSession() {
-  send({ type: 'new_session', workDir: '' });
-  chatMessages.innerHTML = '';
 }
 
 // Logs
@@ -544,7 +538,6 @@ chatInput.onkeydown = (e) => {
   }
 };
 
-newSessionBtn.onclick = newSession;
 clearLogsBtn.onclick = clearLogs;
 refreshSkillsBtn.onclick = () => send({ type: 'get_skills' });
 newSkillBtn.onclick = newSkill;

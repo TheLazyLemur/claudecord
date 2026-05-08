@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// AttachmentRef points at a decrypted media file already on disk.
-// WhatsApp-only today; Discord paths leave Attachments nil.
+// AttachmentRef points at a downloaded/decrypted media file already on disk.
 type AttachmentRef struct {
 	Path         string
 	MIME         string

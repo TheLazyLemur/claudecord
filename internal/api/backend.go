@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"log/slog"
 	"strings"
 	"sync"
@@ -73,19 +74,19 @@ func (b *Backend) Close() error {
 
 const maxMailbox = 64
 
-func (b *Backend) Converse(ctx context.Context, msg string, responder core.Responder, perms core.PermissionChecker) (string, error) {
-	if !b.claim(msg) {
+func (b *Backend) Converse(ctx context.Context, in core.Inbound, out core.Outbound, perms core.PermissionChecker) (string, error) {
+	if !b.claim(in) {
 		return "", nil
 	}
 
-	resp, err := b.runConversationLoop(ctx, responder, perms)
+	resp, err := b.runConversationLoop(ctx, out, perms)
 	if err != nil {
 		b.release()
 	}
 	return resp, err
 }
 
-func (b *Backend) claim(msg string) bool {
+func (b *Backend) claim(in core.Inbound) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -94,16 +95,50 @@ func (b *Backend) claim(msg string) bool {
 			slog.Warn("steering mailbox full, dropping message", "session", b.sessionID, "len", len(b.mailbox))
 			return false
 		}
-		b.mailbox = append(b.mailbox, msg)
+		b.mailbox = append(b.mailbox, in.Text)
 		slog.Info("steering message queued", "session", b.sessionID)
 		return false
 	}
 
 	b.running = true
-	blocks := append([]anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(msg)}, steeringBlocks(b.mailbox)...)
+	userText := renderUserMessage(in)
+	blocks := append([]anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(userText)}, steeringBlocks(b.mailbox)...)
 	b.mailbox = nil
 	b.history = append(b.history, anthropic.NewUserMessage(blocks...))
 	return true
+}
+
+// renderUserMessage builds the text content for the user turn. When the
+// inbound carries attachments, <attachment> tags are appended after the
+// message text — one tag per attachment, matching the format used by
+// RenderWhatsAppBatch so skill matchers see a consistent format.
+func renderUserMessage(in core.Inbound) string {
+	if len(in.Attachments) == 0 {
+		return in.Text
+	}
+	var b strings.Builder
+	b.WriteString(in.Text)
+	for _, a := range in.Attachments {
+		b.WriteByte('\n')
+		b.WriteString(`<attachment path="`)
+		b.WriteString(escapeXMLAttr(a.Path))
+		b.WriteString(`" mime="`)
+		b.WriteString(escapeXMLAttr(a.MIME))
+		if a.OriginalName != "" {
+			b.WriteString(`" original_name="`)
+			b.WriteString(escapeXMLAttr(a.OriginalName))
+		}
+		b.WriteString(`" />`)
+	}
+	return b.String()
+}
+
+func escapeXMLAttr(s string) string {
+	var sb strings.Builder
+	xml.EscapeText(&sb, []byte(s))
+	out := sb.String()
+	out = strings.ReplaceAll(out, "'", "&#39;")
+	return out
 }
 
 func (b *Backend) drainMailbox() []string {
@@ -149,7 +184,7 @@ func steeringBlocks(msgs []string) []anthropic.ContentBlockParamUnion {
 	return blocks
 }
 
-func (b *Backend) runConversationLoop(ctx context.Context, responder core.Responder, perms core.PermissionChecker) (string, error) {
+func (b *Backend) runConversationLoop(ctx context.Context, out core.Outbound, perms core.PermissionChecker) (string, error) {
 	var finalResponse string
 
 	for {
@@ -177,7 +212,7 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 			continue
 		}
 
-		toolResults, err := b.executeTools(ctx, toolUses, responder, perms)
+		toolResults, err := b.executeTools(ctx, toolUses, out, perms)
 		if err != nil {
 			return finalResponse, errors.Wrap(err, "tool execution failed")
 		}
@@ -228,7 +263,7 @@ func splitContent(resp *anthropic.Message) (text string, tools []anthropic.ToolU
 	return
 }
 
-func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, responder core.Responder, perms core.PermissionChecker) ([]anthropic.ContentBlockParamUnion, error) {
+func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, out core.Outbound, perms core.PermissionChecker) ([]anthropic.ContentBlockParamUnion, error) {
 	var results []anthropic.ContentBlockParamUnion
 
 	for _, tu := range toolUses {
@@ -246,7 +281,7 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 			continue
 		}
 
-		deps := tools.Deps{Responder: responder, SkillStore: b.skillStore, WebSearchAPIKey: b.webSearchAPIKey}
+		deps := tools.Deps{Outbound: out, SkillStore: b.skillStore, WebSearchAPIKey: b.webSearchAPIKey}
 		result, isError := tools.Execute(tu.Name, input, deps)
 		results = append(results, buildToolResultBlock(tu.ID, result, isError))
 	}
@@ -284,24 +319,19 @@ func buildToolResultBlock(id, result string, isError bool) anthropic.ContentBloc
 
 // BackendFactory creates API backends
 type BackendFactory struct {
-	APIKey         string
-	BaseURL        string
-	Model          string
-	DefaultWorkDir string
-	SkillStore     skills.SkillStore
-	WebSearchAPIKey string
-	Passive        bool
-	Discord        bool
-	// WhatsAppEnabled appends the media-handling addendum to the system prompt
-	// so the model knows what to do with <attachment> tags in chat prompts.
-	WhatsAppEnabled bool
+	APIKey               string
+	BaseURL              string
+	Model                string
+	DefaultWorkDir       string
+	SkillStore           skills.SkillStore
+	WebSearchAPIKey      string
 	// ThinkingBudgetTokens > 0 enables extended thinking on every API call.
 	ThinkingBudgetTokens int
 }
 
 var _ core.BackendFactory = (*BackendFactory)(nil)
 
-func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
+func (f *BackendFactory) Create(workDir string, caps core.Capabilities) (core.Backend, error) {
 	if workDir == "" {
 		workDir = f.DefaultWorkDir
 	}
@@ -315,21 +345,15 @@ func (f *BackendFactory) Create(workDir string) (core.Backend, error) {
 
 	client := anthropic.NewClient(opts...)
 
-	var base string
-	var apiTools []anthropic.ToolUnionParam
-	if f.Passive {
-		base = core.PassiveSystemPrompt()
-		apiTools = buildPassiveTools()
-	} else if f.Discord {
-		base = "When you receive a message, first call react_emoji with '👀' to acknowledge. For longer tasks, use send_update to post progress updates."
-		apiTools = buildDiscordTools()
-	} else {
-		base = "Use send_update to post progress updates for longer tasks."
-		apiTools = buildChatTools()
+	var parts []string
+	if caps.Updates {
+		parts = append(parts, "Use send_update to post progress updates for longer tasks.")
 	}
-	if f.WhatsAppEnabled && !f.Passive {
-		base += "\n" + core.WhatsAppMediaSystemPromptAddendum
+	if caps.Media {
+		parts = append(parts, core.WhatsAppMediaSystemPromptAddendum)
 	}
+	base := strings.Join(parts, "\n")
+	apiTools := buildChatTools(caps)
 	systemPrompt := core.BuildSystemPrompt(base, f.SkillStore)
 
 	return NewBackend(client, f.Model, systemPrompt, workDir, apiTools, f.SkillStore, f.WebSearchAPIKey, f.ThinkingBudgetTokens), nil
@@ -348,20 +372,17 @@ func buildToolParams(defs []core.ToolDef) []anthropic.ToolUnionParam {
 	return tools
 }
 
-func buildDiscordTools() []anthropic.ToolUnionParam {
-	allTools := append(core.DiscordTools(), core.FileTools()...)
+func buildChatTools(caps core.Capabilities) []anthropic.ToolUnionParam {
+	var allTools []core.ToolDef
+	if caps.Updates {
+		allTools = append(allTools, core.SendUpdateTool())
+	}
+	if caps.Reactions {
+		allTools = append(allTools, core.ReactEmojiTool())
+	}
+	allTools = append(allTools, core.FileTools()...)
 	allTools = append(allTools, core.SkillTools()...)
 	return buildToolParams(allTools)
-}
-
-func buildChatTools() []anthropic.ToolUnionParam {
-	allTools := append(core.ChatTools(), core.FileTools()...)
-	allTools = append(allTools, core.SkillTools()...)
-	return buildToolParams(allTools)
-}
-
-func buildPassiveTools() []anthropic.ToolUnionParam {
-	return buildToolParams(core.FileTools())
 }
 
 func convertInputSchema(schema map[string]any) anthropic.ToolInputSchemaParam {

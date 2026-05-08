@@ -14,7 +14,7 @@ type mockBackend struct {
 	closed    bool
 }
 
-func (m *mockBackend) Converse(ctx context.Context, msg string, responder Responder, perms PermissionChecker) (string, error) {
+func (m *mockBackend) Converse(ctx context.Context, in Inbound, responder Outbound, perms PermissionChecker) (string, error) {
 	return "", nil
 }
 
@@ -38,7 +38,7 @@ func TestSessionManager_NewSession_CreatesSession(t *testing.T) {
 	mgr := NewSessionManager(factory, nil)
 
 	// when
-	err := mgr.NewSession("")
+	err := mgr.NewSession("", Capabilities{})
 
 	// then
 	r.NoError(err)
@@ -59,7 +59,7 @@ func TestSessionManager_NewSession_PassesWorkDirToFactory(t *testing.T) {
 	mgr := NewSessionManager(factory, nil)
 
 	// when
-	err := mgr.NewSession("/custom/work/dir")
+	err := mgr.NewSession("/custom/work/dir", Capabilities{})
 
 	// then
 	r.NoError(err)
@@ -75,14 +75,14 @@ func TestSessionManager_NewSession_ClosesOldAndCreatesNewWithDifferentWorkDir(t 
 	secondBackend := &mockBackend{sessionID: "session-2"}
 	factory := &mockBackendFactory{backend: firstBackend}
 	mgr := NewSessionManager(factory, nil)
-	r.NoError(mgr.NewSession("/first/dir"))
+	r.NoError(mgr.NewSession("/first/dir", Capabilities{}))
 	a.Equal("/first/dir", factory.lastWorkDir)
 
 	// prepare second backend
 	factory.backend = secondBackend
 
 	// when - new session with different dir
-	err := mgr.NewSession("/second/dir")
+	err := mgr.NewSession("/second/dir", Capabilities{})
 
 	// then
 	r.NoError(err)
@@ -101,12 +101,12 @@ func TestSessionManager_NewSession_ClosesPreviousSession(t *testing.T) {
 	secondBackend := &mockBackend{sessionID: "session-2"}
 	factory := &mockBackendFactory{backend: firstBackend}
 	mgr := NewSessionManager(factory, nil)
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 
 	factory.backend = secondBackend
 
 	// when
-	err := mgr.NewSession("")
+	err := mgr.NewSession("", Capabilities{})
 
 	// then
 	r.NoError(err)
@@ -126,7 +126,7 @@ func TestSessionManager_GetOrCreateSession_CreatesIfNone(t *testing.T) {
 	mgr := NewSessionManager(factory, nil)
 
 	// when
-	sess, err := mgr.GetOrCreateSession()
+	sess, err := mgr.GetOrCreateSession(Capabilities{})
 
 	// then
 	r.NoError(err)
@@ -144,11 +144,11 @@ func TestSessionManager_GetOrCreateSession_ReturnsExisting(t *testing.T) {
 		backend: &mockBackend{sessionID: "existing"},
 	}
 	mgr := NewSessionManager(factory, nil)
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 	factory.createCalled = false
 
 	// when
-	sess, err := mgr.GetOrCreateSession()
+	sess, err := mgr.GetOrCreateSession(Capabilities{})
 
 	// then
 	r.NoError(err)
@@ -178,7 +178,7 @@ func TestSessionManager_Close_ClosesCurrentSession(t *testing.T) {
 	backend := &mockBackend{sessionID: "to-close"}
 	factory := &mockBackendFactory{backend: backend}
 	mgr := NewSessionManager(factory, nil)
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 
 	// when
 	err := mgr.Close()
@@ -209,7 +209,7 @@ func TestSessionManager_NewSession_FactoryError(t *testing.T) {
 	mgr := NewSessionManager(factory, nil)
 
 	// when
-	err := mgr.NewSession("")
+	err := mgr.NewSession("", Capabilities{})
 
 	// then
 	a.Error(err)
@@ -237,12 +237,12 @@ func TestSessionManager_NewSession_RunsFlushBeforeClose(t *testing.T) {
 	}
 
 	mgr := NewSessionManager(factory, flushFn)
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 	factory.backend = secondBackend
 
 	// when
 	// ... a new session is started
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 
 	// then
 	// ... the flush func was called against the previous backend before it was closed
@@ -266,7 +266,7 @@ func TestSessionManager_NewSession_NoFlushOnFirstSession(t *testing.T) {
 
 	// when
 	// ... NewSession is called for the very first time
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 
 	// then
 	// ... the flush func was not called
@@ -282,12 +282,12 @@ func TestSessionManager_NewSession_NilFlushIsNoop(t *testing.T) {
 	second := &mockBackend{sessionID: "second"}
 	factory := &mockBackendFactory{backend: first}
 	mgr := NewSessionManager(factory, nil)
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 	factory.backend = second
 
 	// when
 	// ... NewSession is called again with no flush func
-	err := mgr.NewSession("")
+	err := mgr.NewSession("", Capabilities{})
 
 	// then
 	// ... no panic, behaves like the unflushed manager
@@ -307,12 +307,12 @@ func TestSessionManager_NewSession_FlushPanicDoesNotBlock(t *testing.T) {
 		panic("boom")
 	}
 	mgr := NewSessionManager(factory, flushFn)
-	r.NoError(mgr.NewSession(""))
+	r.NoError(mgr.NewSession("", Capabilities{}))
 	factory.backend = second
 
 	// when
 	// ... NewSession is called and the flush func panics
-	err := mgr.NewSession("")
+	err := mgr.NewSession("", Capabilities{})
 
 	// then
 	// ... the panic is recovered and the new session is created
@@ -322,6 +322,31 @@ func TestSessionManager_NewSession_FlushPanicDoesNotBlock(t *testing.T) {
 	a.Equal("second", sess.SessionID())
 }
 
+func TestSessionManager_NewSession_FactoryError_PreservesCurrent(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	// given
+	// ... a session manager with an active backend, then a factory that will error
+	existingBackend := &mockBackend{sessionID: "existing"}
+	factory := &mockBackendFactory{backend: existingBackend}
+	mgr := NewSessionManager(factory, nil)
+	r.NoError(mgr.NewSession("", Capabilities{}))
+	factory.err = errors.New("factory boom")
+
+	// when
+	// ... NewSession is called and the factory fails
+	err := mgr.NewSession("", Capabilities{})
+
+	// then
+	// ... an error is returned, the old backend is still current and NOT closed
+	a.Error(err)
+	a.False(existingBackend.closed, "old backend must not be closed when factory fails")
+	sess, sessErr := mgr.GetSession()
+	r.NoError(sessErr)
+	a.Equal("existing", sess.SessionID())
+}
+
 type mockBackendFactory struct {
 	backend      *mockBackend
 	err          error
@@ -329,7 +354,7 @@ type mockBackendFactory struct {
 	lastWorkDir  string
 }
 
-func (f *mockBackendFactory) Create(workDir string) (Backend, error) {
+func (f *mockBackendFactory) Create(workDir string, _ Capabilities) (Backend, error) {
 	f.createCalled = true
 	f.lastWorkDir = workDir
 	if f.err != nil {

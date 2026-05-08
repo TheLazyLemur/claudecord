@@ -27,20 +27,21 @@ func NewSessionManager(factory BackendFactory, flush FlushFunc) *SessionManager 
 	return &SessionManager{factory: factory, flush: flush}
 }
 
-// NewSession starts a fresh session, closing any existing one
-func (m *SessionManager) NewSession(workDir string) error {
+// NewSession starts a fresh session. The old backend is closed only after
+// the new one is created successfully, so a factory error leaves the current
+// session intact.
+func (m *SessionManager) NewSession(workDir string, caps Capabilities) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	backend, err := m.factory.Create(workDir, caps)
+	if err != nil {
+		return errors.Wrap(err, "creating new session")
+	}
 
 	if m.current != nil {
 		m.runFlush(m.current)
 		m.current.Close()
-		m.current = nil
-	}
-
-	backend, err := m.factory.Create(workDir)
-	if err != nil {
-		return errors.Wrap(err, "creating new session")
 	}
 
 	m.current = backend
@@ -59,8 +60,9 @@ func (m *SessionManager) runFlush(current Backend) {
 	m.flush(context.Background(), current)
 }
 
-// GetOrCreateSession returns current session or creates one if none exists
-func (m *SessionManager) GetOrCreateSession() (Backend, error) {
+// GetOrCreateSession returns current session or creates one if none exists.
+// caps is forwarded to the factory when a new session must be created.
+func (m *SessionManager) GetOrCreateSession(caps Capabilities) (Backend, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -68,7 +70,7 @@ func (m *SessionManager) GetOrCreateSession() (Backend, error) {
 		return m.current, nil
 	}
 
-	backend, err := m.factory.Create("")
+	backend, err := m.factory.Create("", caps)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating session")
 	}

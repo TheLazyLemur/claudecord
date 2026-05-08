@@ -6,34 +6,56 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestChatTools_ReturnsSendUpdateOnly(t *testing.T) {
-	a := assert.New(t)
+func TestSendUpdateTool_Name(t *testing.T) {
+	// given
+	// ... the SendUpdateTool builder
 
-	tools := ChatTools()
+	// when
+	// ... called
+	tool := SendUpdateTool()
 
-	a.Len(tools, 1)
-	a.Equal("send_update", tools[0].Name)
+	// then
+	// ... tool name is send_update
+	assert.Equal(t, "send_update", tool.Name)
 }
 
-func TestChatTools_ExcludesReactEmoji(t *testing.T) {
-	a := assert.New(t)
+func TestReactEmojiTool_Name(t *testing.T) {
+	// given
+	// ... the ReactEmojiTool builder
 
-	tools := ChatTools()
+	// when
+	// ... called
+	tool := ReactEmojiTool()
 
-	for _, t := range tools {
-		a.NotEqual("react_emoji", t.Name)
-	}
+	// then
+	// ... tool name is react_emoji
+	assert.Equal(t, "react_emoji", tool.Name)
 }
 
-func TestDiscordTools_IncludesReactEmoji(t *testing.T) {
-	a := assert.New(t)
+func TestReactEmojiTool_RequiresEmojiParam(t *testing.T) {
+	// given
+	// ... the ReactEmojiTool builder
 
-	tools := DiscordTools()
+	// when
+	// ... called
+	tool := ReactEmojiTool()
 
-	names := make([]string, len(tools))
-	for i, t := range tools {
-		names[i] = t.Name
-	}
-	a.Contains(names, "react_emoji")
-	a.Contains(names, "send_update")
+	// then
+	// ... required fields include emoji
+	required, _ := tool.InputSchema["required"].([]string)
+	assert.Contains(t, required, "emoji")
+}
+
+func TestSendUpdateTool_RequiresMessageParam(t *testing.T) {
+	// given
+	// ... the SendUpdateTool builder
+
+	// when
+	// ... called
+	tool := SendUpdateTool()
+
+	// then
+	// ... required fields include message
+	required, _ := tool.InputSchema["required"].([]string)
+	assert.Contains(t, required, "message")
 }

@@ -21,6 +21,211 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildChatTools_ExcludesReactEmojiWhenReactionsFalse(t *testing.T) {
+	// given
+	// ... reactions disabled
+
+	// when
+	// ... chat tools are built
+	tools := buildChatTools(core.Capabilities{})
+
+	// then
+	// ... react_emoji is absent
+	for _, tool := range tools {
+		if tool.OfTool != nil {
+			assert.NotEqual(t, "react_emoji", tool.OfTool.Name)
+		}
+	}
+}
+
+func TestBuildChatTools_IncludesReactEmojiWhenReactionsTrue(t *testing.T) {
+	// given
+	// ... reactions enabled
+
+	// when
+	// ... chat tools are built
+	apiTools := buildChatTools(core.Capabilities{Reactions: true, Updates: true})
+
+	// then
+	// ... react_emoji is present
+	found := false
+	for _, tool := range apiTools {
+		if tool.OfTool != nil && tool.OfTool.Name == "react_emoji" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected react_emoji in tool list")
+}
+
+func TestBuildChatTools_IncludesSendUpdateWhenUpdatesTrue(t *testing.T) {
+	// given
+	// ... updates enabled
+
+	// when
+	// ... chat tools are built
+	apiTools := buildChatTools(core.Capabilities{Updates: true})
+
+	// then
+	// ... send_update is present
+	found := false
+	for _, tool := range apiTools {
+		if tool.OfTool != nil && tool.OfTool.Name == "send_update" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected send_update in tool list when Updates=true")
+}
+
+func TestBuildChatTools_ExcludesSendUpdateWhenUpdatesFalse(t *testing.T) {
+	// given
+	// ... updates disabled
+
+	// when
+	// ... chat tools are built
+	tools := buildChatTools(core.Capabilities{})
+
+	// then
+	// ... send_update is absent
+	for _, tool := range tools {
+		if tool.OfTool != nil {
+			assert.NotEqual(t, "send_update", tool.OfTool.Name)
+		}
+	}
+}
+
+func TestBackendFactory_Create_SystemPromptContainsSendUpdateWhenUpdatesTrue(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Updates true
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with Updates capability
+	backend, err := factory.Create("", core.Capabilities{Updates: true})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt mentions send_update
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.Contains(apiBackend.systemPrompt, "send_update")
+}
+
+func TestBackendFactory_Create_SystemPromptOmitsSendUpdateWhenUpdatesFalse(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Updates false
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created without Updates capability
+	backend, err := factory.Create("", core.Capabilities{Updates: false})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt does not mention send_update
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.NotContains(apiBackend.systemPrompt, "send_update")
+}
+
+func TestBackendFactory_Create_SystemPromptNoStrayNewlines(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory with Updates and Media both true
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with both Updates and Media set
+	backend, err := factory.Create("", core.Capabilities{Updates: true, Media: true})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt does not start with a newline and contains both sentences
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	sp := apiBackend.systemPrompt
+	r.NotEmpty(sp)
+	a.NotEqual(byte('\n'), sp[0], "system prompt must not start with a newline; got: %q", sp[:min(len(sp), 40)])
+	a.Contains(sp, "send_update")
+	a.Contains(sp, "attachment")
+}
+
+
+func TestBackendFactory_Create_IncludesReactEmojiWhenCapsReactionsTrue(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Reactions true
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with Reactions capability
+	backend, err := factory.Create("", core.Capabilities{Reactions: true})
+	r.NoError(err)
+
+	// then
+	// ... the backend's tool list contains react_emoji
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	found := false
+	for _, tool := range apiBackend.tools {
+		if tool.OfTool != nil && tool.OfTool.Name == "react_emoji" {
+			found = true
+			break
+		}
+	}
+	a.True(found, "expected react_emoji in tool list when Reactions capability is true")
+}
+
+func TestBackendFactory_Create_ExcludesReactEmojiWhenCapsReactionsFalse(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Reactions false (default)
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with no Reactions capability
+	backend, err := factory.Create("", core.Capabilities{})
+	r.NoError(err)
+
+	// then
+	// ... react_emoji is absent from the tool list
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	for _, tool := range apiBackend.tools {
+		if tool.OfTool != nil {
+			a.NotEqual("react_emoji", tool.OfTool.Name)
+		}
+	}
+}
+
 func TestBuildToolResultBlock_TextPath(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)
@@ -173,7 +378,7 @@ func TestBackendFactory_Create_PropagatesThinkingBudget(t *testing.T) {
 
 	// when
 	// ... a backend is created
-	backend, err := factory.Create("")
+	backend, err := factory.Create("", core.Capabilities{})
 	r.NoError(err)
 
 	// then
@@ -198,7 +403,7 @@ func TestBackendFactory_Create_FallsBackToDefaultWorkDirWhenEmpty(t *testing.T) 
 
 	// when
 	// ... a backend is created with an empty work dir
-	backend, err := factory.Create("")
+	backend, err := factory.Create("", core.Capabilities{})
 	r.NoError(err)
 
 	// then
@@ -215,7 +420,7 @@ func TestBackend_Claim_FirstCallerOwnsLoop(t *testing.T) {
 
 	b := &Backend{}
 
-	owned := b.claim("hello")
+	owned := b.claim(core.Inbound{Text: "hello"})
 
 	a.True(owned)
 	a.True(b.running)
@@ -228,9 +433,9 @@ func TestBackend_Claim_SecondCallerEnqueues(t *testing.T) {
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
 
-	owned := b.claim("steered")
+	owned := b.claim(core.Inbound{Text: "steered"})
 
 	a.False(owned)
 	a.True(b.running)
@@ -244,11 +449,11 @@ func TestBackend_Claim_AfterReleaseWithQueuedMessagesIncludesThemInNewTurn(t *te
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
-	r.False(b.claim("queued-during-error"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
+	r.False(b.claim(core.Inbound{Text: "queued-during-error"}))
 	b.release()
 
-	owned := b.claim("fresh")
+	owned := b.claim(core.Inbound{Text: "fresh"})
 
 	a.True(owned)
 	a.True(b.running)
@@ -265,9 +470,9 @@ func TestBackend_DrainMailbox_ReturnsAndClears(t *testing.T) {
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
-	r.False(b.claim("a"))
-	r.False(b.claim("b"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
+	r.False(b.claim(core.Inbound{Text: "a"}))
+	r.False(b.claim(core.Inbound{Text: "b"}))
 
 	got := b.drainMailbox()
 
@@ -281,7 +486,7 @@ func TestBackend_FinishOrContinue_EmptyMailboxFlipsRunningFalse(t *testing.T) {
 	r := require.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
 
 	got := b.finishOrContinue()
 
@@ -294,8 +499,8 @@ func TestBackend_FinishOrContinue_NonEmptyMailboxKeepsRunning(t *testing.T) {
 	r := require.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
-	r.False(b.claim("steered"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
+	r.False(b.claim(core.Inbound{Text: "steered"}))
 
 	got := b.finishOrContinue()
 
@@ -313,13 +518,13 @@ func TestBackend_Claim_DropsWhenMailboxAtCap(t *testing.T) {
 	a := assert.New(t)
 
 	b := &Backend{}
-	r.True(b.claim("first"))
+	r.True(b.claim(core.Inbound{Text: "first"}))
 	for i := 0; i < maxMailbox; i++ {
-		r.False(b.claim("queued"))
+		r.False(b.claim(core.Inbound{Text: "queued"}))
 	}
 	r.Len(b.mailbox, maxMailbox)
 
-	owned := b.claim("dropped")
+	owned := b.claim(core.Inbound{Text: "dropped"})
 
 	a.False(owned)
 	a.Len(b.mailbox, maxMailbox)
@@ -394,7 +599,7 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 	}
 	first := make(chan result, 1)
 	go func() {
-		resp, err := b.Converse(context.Background(), "hello", stubResponder{}, allowAllPerms{})
+		resp, err := b.Converse(context.Background(), core.Inbound{Text: "hello"}, stubResponder{}, allowAllPerms{})
 		first <- result{resp, err}
 	}()
 
@@ -402,7 +607,7 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 
 	steerDone := make(chan result, 1)
 	go func() {
-		resp, err := b.Converse(context.Background(), "steer me", stubResponder{}, allowAllPerms{})
+		resp, err := b.Converse(context.Background(), core.Inbound{Text: "steer me"}, stubResponder{}, allowAllPerms{})
 		steerDone <- result{resp, err}
 	}()
 
@@ -454,6 +659,94 @@ func TestBackend_Converse_QueuedMessageContinuesLoopAtNaturalEnd(t *testing.T) {
 		}
 	}
 	a.True(found, "body=%s", body)
+}
+
+func TestBackendFactory_Create_MediaCapsAddsSystemPromptAddendum(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Media true
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created with Media capability
+	backend, err := factory.Create("", core.Capabilities{Media: true})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt contains the media addendum
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.Contains(apiBackend.systemPrompt, "attachment")
+}
+
+func TestBackendFactory_Create_NoMediaCapsNoAddendum(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... a factory and caps with Media false
+	factory := &BackendFactory{
+		APIKey:         "test",
+		DefaultWorkDir: t.TempDir(),
+	}
+
+	// when
+	// ... a backend is created without Media capability
+	backend, err := factory.Create("", core.Capabilities{Media: false})
+	r.NoError(err)
+
+	// then
+	// ... the system prompt does not contain the media addendum
+	apiBackend, ok := backend.(*Backend)
+	r.True(ok)
+	a.NotContains(apiBackend.systemPrompt, "attachment")
+}
+
+func TestConverse_AppendsAttachmentTags(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	// given
+	// ... an inbound with 2 attachments
+	in := core.Inbound{
+		Text: "look at these",
+		Attachments: []core.AttachmentRef{
+			{Path: "/tmp/photo.png", MIME: "image/png", OriginalName: "photo.png"},
+			{Path: "/tmp/doc.pdf", MIME: "application/pdf", OriginalName: "doc.pdf"},
+		},
+	}
+
+	// when
+	// ... renderUserMessage is called with the inbound
+	got := renderUserMessage(in)
+
+	// then
+	// ... both attachment tags appear in the output
+	r.Contains(got, "look at these")
+	a.Contains(got, `<attachment path="/tmp/photo.png" mime="image/png" original_name="photo.png" />`)
+	a.Contains(got, `<attachment path="/tmp/doc.pdf" mime="application/pdf" original_name="doc.pdf" />`)
+}
+
+func TestConverse_NoAttachments_NoTags(t *testing.T) {
+	a := assert.New(t)
+
+	// given
+	// ... a backend and an inbound with no attachments
+	in := core.Inbound{Text: "plain message"}
+
+	// when
+	// ... renderUserMessage is called
+	got := renderUserMessage(in)
+
+	// then
+	// ... no attachment tags appear
+	a.Equal("plain message", got)
+	a.NotContains(got, "<attachment")
 }
 
 func writeMessageJSON(w http.ResponseWriter, id, text, stopReason string) {

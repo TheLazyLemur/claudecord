@@ -27,8 +27,10 @@ func TestRenderWhatsAppBatch_AttachmentOnlyOmitsTextElement(t *testing.T) {
 			},
 		},
 	})
+	// Attachment-only message: no text element, no attachment tag (tags now
+	// rendered by the API backend via Inbound.Attachments).
 	assert.NotContains(t, out, "<text>")
-	assert.Contains(t, out, `<attachment path="/p/photo.png" mime="image/png" />`)
+	assert.NotContains(t, out, "<attachment")
 }
 
 func TestRenderWhatsAppBatch_TextAndAttachment(t *testing.T) {
@@ -41,21 +43,20 @@ func TestRenderWhatsAppBatch_TextAndAttachment(t *testing.T) {
 		},
 	})
 	assert.Contains(t, out, "<text>look</text>")
-	assert.Contains(t, out, `original_name="photo.png"`)
+	// Attachment tags are no longer inline; they are rendered by the API backend.
+	assert.NotContains(t, out, "<attachment")
 }
 
 func TestRenderWhatsAppBatch_PreservesMessageOrder(t *testing.T) {
 	out := RenderWhatsAppBatch([]BufferedMessage{
 		{Content: "one"},
-		{
-			Attachments: []AttachmentRef{{Path: "/p/two.pdf", MIME: "application/pdf"}},
-		},
+		{Content: "two"},
 		{Content: "three"},
 	})
 
 	// Each <message> appears exactly once, in order.
 	idx1 := strings.Index(out, "one")
-	idx2 := strings.Index(out, "two.pdf")
+	idx2 := strings.Index(out, "two")
 	idx3 := strings.Index(out, "three")
 	assert.True(t, idx1 < idx2 && idx2 < idx3, "out=%q", out)
 }
@@ -70,20 +71,16 @@ func TestRenderWhatsAppBatch_XMLEscapesText(t *testing.T) {
 }
 
 func TestRenderWhatsAppBatch_XMLEscapesAttributes(t *testing.T) {
+	// Attachment tags are rendered by the API backend (renderUserMessage), not
+	// by RenderWhatsAppBatch. This test verifies text content with special chars
+	// is still XML-escaped in the <text> element.
 	out := RenderWhatsAppBatch([]BufferedMessage{
 		{
-			Attachments: []AttachmentRef{
-				{
-					Path:         `/p/a"b.png`,
-					MIME:         "image/png",
-					OriginalName: `weird"name.png`,
-				},
-			},
+			Content: `say "hello" & goodbye`,
 		},
 	})
-	// Quotes inside attribute values are escaped, so the attribute boundaries stay valid.
-	assert.NotContains(t, out, `a"b.png"`)
-	assert.Contains(t, out, "&#34;")
+	assert.NotContains(t, out, `"hello"`)
+	assert.Contains(t, out, "&amp;")
 }
 
 func TestRenderWhatsAppBatch_MultipleAttachmentsSameMessage(t *testing.T) {
@@ -96,7 +93,7 @@ func TestRenderWhatsAppBatch_MultipleAttachmentsSameMessage(t *testing.T) {
 			},
 		},
 	})
-	// Both attachments inside a single <message>.
+	// Attachment tags are no longer emitted inline; the message wrapper is present.
 	assert.Equal(t, 1, strings.Count(out, "<message>"))
-	assert.Equal(t, 2, strings.Count(out, "<attachment "))
+	assert.Equal(t, 0, strings.Count(out, "<attachment "))
 }

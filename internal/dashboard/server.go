@@ -29,14 +29,17 @@ type Server struct {
 	agentsDefaultPath string
 	memoryDir         string
 	password          string
+	chatCallback      func(sessionID, text string)
 
-	mu        sync.Mutex
-	responder *WSResponder
-	sessions  map[string]time.Time // valid session tokens
+	mu            sync.Mutex
+	sessions      map[string]time.Time // valid session tokens
+	lastSessionID string               // protected by mu
 }
 
-// NewServer creates a dashboard server.
-func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.PermissionChecker, skillStore skills.SkillStore, skillsDir, workDir, agentsDefaultPath, memoryDir, password string) *Server {
+// NewServer creates a dashboard server. chatCallback is required; it is invoked
+// for each inbound chat message and receives the current session UUID and the
+// message text.
+func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.PermissionChecker, skillStore skills.SkillStore, skillsDir, workDir, agentsDefaultPath, memoryDir, password string, chatCallback func(sessionID, text string)) *Server {
 	return &Server{
 		hub:               hub,
 		sessionMgr:        sessionMgr,
@@ -47,6 +50,7 @@ func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.Permi
 		agentsDefaultPath: agentsDefaultPath,
 		memoryDir:         memoryDir,
 		password:          password,
+		chatCallback:      chatCallback,
 		sessions:          make(map[string]time.Time),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -62,6 +66,14 @@ func NewServer(hub *Hub, sessionMgr *core.SessionManager, permChecker core.Permi
 			},
 		},
 	}
+}
+
+// SetChatCallback replaces the server's chat callback. The dashboard plugin
+// calls this from Start so that it owns the wiring rather than the callsite.
+func (s *Server) SetChatCallback(cb func(sessionID, text string)) {
+	s.mu.Lock()
+	s.chatCallback = cb
+	s.mu.Unlock()
 }
 
 // Handler returns the HTTP handler for the dashboard.

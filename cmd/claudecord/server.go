@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/TheLazyLemur/claudecord/internal/channels/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/dashboard"
+	dash "github.com/TheLazyLemur/claudecord/internal/dashboard"
 	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/pkg/errors"
 )
 
 // startHTTPServer mounts the webhook handler and the dashboard on a single
@@ -18,13 +20,23 @@ import (
 // shutdown.
 func startHTTPServer(
 	cfg *config.Config,
-	hub *dashboard.Hub,
+	hub *dash.Hub,
+	bot *core.Bot,
 	sessionMgr *core.SessionManager,
 	perms core.PermissionChecker,
 	skillStore skills.SkillStore,
 	skillsDir string,
-) func() {
-	dashboardServer := dashboard.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword)
+) (func(), error) {
+	dashboardServer := dash.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword, nil)
+
+	plug := dashboard.New(dashboard.Config{Hub: hub, Server: dashboardServer})
+	if err := plug.Start(context.Background(), func(in core.Inbound) {
+		if err := bot.HandleInbound(in); err != nil {
+			slog.Error("dashboard inbound", "error", err)
+		}
+	}); err != nil {
+		return nil, errors.Wrap(err, "start dashboard plugin")
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", handler.NewWebhookHandler())
@@ -42,5 +54,5 @@ func startHTTPServer(
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
-	}
+	}, nil
 }

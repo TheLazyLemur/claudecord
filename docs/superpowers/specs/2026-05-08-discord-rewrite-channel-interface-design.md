@@ -55,6 +55,9 @@ type Outbound interface {
     SendUpdate(content string) error
     AddReaction(emoji string) error // no-op when Capabilities.Reactions == false
 }
+// Implementation note: Implemented as `core.Outbound` directly. The earlier
+// `core.Responder` interface was retired during the refactor; all plugins
+// implement `Outbound`.
 
 type Capabilities struct {
     Reactions bool

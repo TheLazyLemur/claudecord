@@ -55,7 +55,7 @@ func TestExecute_ReactEmoji(t *testing.T) {
 	a := assert.New(t)
 	r := &mockResponder{}
 
-	result, isErr := Execute("react_emoji", core.ToolInput{Emoji: "👀"}, Deps{Responder: r})
+	result, isErr := Execute("react_emoji", core.ToolInput{Emoji: "👀"}, Deps{Outbound: r})
 
 	a.Equal("reaction added", result)
 	a.False(isErr)
@@ -65,7 +65,7 @@ func TestExecute_ReactEmoji(t *testing.T) {
 func TestExecute_ReactEmoji_MissingArg(t *testing.T) {
 	a := assert.New(t)
 
-	result, isErr := Execute("react_emoji", core.ToolInput{}, Deps{Responder: &mockResponder{}})
+	result, isErr := Execute("react_emoji", core.ToolInput{}, Deps{Outbound: &mockResponder{}})
 
 	a.Equal("missing emoji argument", result)
 	a.True(isErr)
@@ -75,7 +75,7 @@ func TestExecute_SendUpdate(t *testing.T) {
 	a := assert.New(t)
 	r := &mockResponder{}
 
-	result, isErr := Execute("send_update", core.ToolInput{Message: "working on it"}, Deps{Responder: r})
+	result, isErr := Execute("send_update", core.ToolInput{Message: "working on it"}, Deps{Outbound: r})
 
 	a.Equal("update sent", result)
 	a.False(isErr)
@@ -85,7 +85,7 @@ func TestExecute_SendUpdate(t *testing.T) {
 func TestExecute_SendUpdate_MissingArg(t *testing.T) {
 	a := assert.New(t)
 
-	result, isErr := Execute("send_update", core.ToolInput{}, Deps{Responder: &mockResponder{}})
+	result, isErr := Execute("send_update", core.ToolInput{}, Deps{Outbound: &mockResponder{}})
 
 	a.Equal("missing message argument", result)
 	a.True(isErr)

@@ -1,17 +1,15 @@
 package dashboard
 
 import (
-	"context"
 	"log/slog"
+
+	"github.com/TheLazyLemur/claudecord/internal/core"
 )
 
 func (s *Server) handleMessage(client *Client, msg Message) {
 	switch msg.Type {
 	case "chat":
 		go s.handleChat(msg.Content)
-
-	case "new_session":
-		go s.handleNewSession(msg.WorkDir)
 
 	case "get_skills":
 		s.handleGetSkills(client)
@@ -48,11 +46,8 @@ func (s *Server) handleMessage(client *Client, msg Message) {
 	}
 }
 
-// handleChat processes an inbound chat message. The server mutex protects only
-// the shared responder field; Converse runs without the lock so a slow API call
-// does not block other dashboard actions like /new_session.
 func (s *Server) handleChat(content string) {
-	backend, err := s.sessionMgr.GetOrCreateSession()
+	backend, err := s.sessionMgr.GetOrCreateSession(core.Capabilities{})
 	if err != nil {
 		slog.Error("get session", "error", err)
 		s.hub.Broadcast(Message{
@@ -64,9 +59,8 @@ func (s *Server) handleChat(content string) {
 	}
 
 	s.mu.Lock()
-	if s.responder == nil || s.responder.sessionID != backend.SessionID() {
-		s.responder = NewWSResponder(s.hub, backend.SessionID())
-
+	if s.lastSessionID != backend.SessionID() {
+		s.lastSessionID = backend.SessionID()
 		active := true
 		s.hub.Broadcast(Message{
 			Type:      "session",
@@ -74,7 +68,6 @@ func (s *Server) handleChat(content string) {
 			SessionID: backend.SessionID(),
 		})
 	}
-	responder := s.responder
 	s.mu.Unlock()
 
 	s.hub.Broadcast(Message{
@@ -83,49 +76,6 @@ func (s *Server) handleChat(content string) {
 		Content: content,
 	})
 
-	ctx := context.Background()
-	response, err := backend.Converse(ctx, content, responder, s.permChecker)
-	if err != nil {
-		slog.Error("converse", "error", err)
-		s.hub.Broadcast(Message{
-			Type:    "chat",
-			Role:    "assistant",
-			Content: "Error: " + err.Error(),
-		})
-		return
-	}
-
-	if response != "" {
-		s.hub.Broadcast(Message{
-			Type:      "chat",
-			Role:      "assistant",
-			Content:   response,
-			SessionID: backend.SessionID(),
-		})
-	}
+	s.chatCallback(backend.SessionID(), content)
 }
 
-func (s *Server) handleNewSession(workDir string) {
-	if err := s.sessionMgr.NewSession(workDir); err != nil {
-		slog.Error("create session", "error", err)
-		s.hub.Broadcast(Message{
-			Type:    "chat",
-			Role:    "assistant",
-			Content: "Error creating session: " + err.Error(),
-		})
-		return
-	}
-
-	backend, _ := s.sessionMgr.GetOrCreateSession()
-
-	s.mu.Lock()
-	s.responder = NewWSResponder(s.hub, backend.SessionID())
-	s.mu.Unlock()
-
-	active := true
-	s.hub.Broadcast(Message{
-		Type:      "session",
-		Active:    &active,
-		SessionID: backend.SessionID(),
-	})
-}
