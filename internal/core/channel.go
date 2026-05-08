@@ -5,8 +5,10 @@ import "context"
 type SessionKey string
 
 type Inbound struct {
-	SessionKey  SessionKey
-	Text        string
+	SessionKey SessionKey
+	Text       string
+	// Attachments carries decrypted media refs for the current message.
+	// WhatsApp populates this; Discord currently does not.
 	Attachments []AttachmentRef
 	Reply       Outbound
 }
