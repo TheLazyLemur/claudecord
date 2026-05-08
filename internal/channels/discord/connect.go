@@ -5,9 +5,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// connect opens a discordgo session with the message intents we need.
+// Connect opens a discordgo session with the message intents we need.
 // Caller owns the returned session and must call Close.
-func connect(token string) (*discordgo.Session, error) {
+func Connect(token string) (*discordgo.Session, error) {
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating discord session")

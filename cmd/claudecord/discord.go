@@ -10,12 +10,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-// startDiscord constructs the Discord plugin, starts it, and returns a cleanup func.
+// startDiscord opens the Discord session, constructs the plugin, starts it,
+// and returns a cleanup func.
 func startDiscord(cfg *config.Config, bot *core.Bot) (func(), error) {
+	dg, err := discord.Connect(cfg.DiscordToken)
+	if err != nil {
+		return nil, errors.Wrap(err, "connecting discord")
+	}
+
 	plugin := discord.New(discord.Config{
 		Token:        cfg.DiscordToken,
+		BotID:        dg.State.User.ID,
 		AllowedUsers: cfg.AllowedUsers,
-	})
+	}, discord.WrapSession(dg))
 
 	if err := plugin.Start(context.Background(), func(in core.Inbound) {
 		if err := bot.HandleInbound(in); err != nil {

@@ -136,7 +136,7 @@ func run() error {
 func buildCapabilityProbes(cfg *config.Config) []core.ChannelPlugin {
 	var out []core.ChannelPlugin
 	if cfg.DiscordEnabled() {
-		out = append(out, discord.New(discord.Config{}))
+		out = append(out, discord.New(discord.Config{}, nil))
 	}
 	if cfg.WhatsAppEnabled() {
 		out = append(out, whatsapp.New(whatsapp.Config{}))

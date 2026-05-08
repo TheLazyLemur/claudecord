@@ -50,8 +50,13 @@ type sessionForPlugin interface {
 	MessageThreadStartComplex(channelID, messageID, name string) (string, error)
 }
 
-func New(cfg Config) *Plugin {
-	return &Plugin{cfg: cfg, threads: newThreadRegistry()}
+// New constructs a Plugin with a caller-owned session. The production caller
+// opens a real discordgo session via Connect(token), wraps it with WrapSession,
+// and sets BotID from dg.State.User.ID before calling Start. Tests pass a mock
+// that satisfies sessionForPlugin. Pass nil only when the plugin will be used
+// solely for capability queries (e.g. probes built before connecting).
+func New(cfg Config, s sessionForPlugin) *Plugin {
+	return &Plugin{cfg: cfg, session: s, threads: newThreadRegistry()}
 }
 
 func (p *Plugin) ID() string { return "discord" }
@@ -65,12 +70,14 @@ func (p *Plugin) Start(ctx context.Context, deliver func(core.Inbound)) error {
 	p.deliver = deliver
 	p.mu.Unlock()
 
-	dg, err := connect(p.cfg.Token)
-	if err != nil {
-		return err
+	if p.session == nil {
+		return errors.New("discord plugin started without a session")
 	}
-	p.session = sessionAdapter{dg}
-	p.cfg.BotID = dg.State.User.ID
+	dg, ok := p.session.(sessionAdapter)
+	if !ok {
+		// Test session injected — register nothing on the real discordgo session.
+		return nil
+	}
 
 	dg.AddHandler(func(_ *discordgo.Session, m *discordgo.MessageCreate) {
 		if m.Author == nil || m.Author.ID == p.cfg.BotID {
@@ -188,13 +195,10 @@ func threadName(content string) string {
 	return t
 }
 
-// newPluginForTest constructs a plugin with a pre-injected session and deliver
-// callback, bypassing the discordgo Open path. Test-only.
-func newPluginForTest(s sessionForPlugin, botID string, allowed []string, deliver func(core.Inbound)) *Plugin {
-	p := New(Config{BotID: botID, AllowedUsers: allowed})
-	p.session = s
-	p.deliver = deliver
-	return p
+// WrapSession wraps a *discordgo.Session into the sessionForPlugin interface
+// that Plugin expects. Used by the production callsite after Connect returns.
+func WrapSession(dg *discordgo.Session) sessionForPlugin {
+	return sessionAdapter{dg}
 }
 
 // sessionAdapter wraps *discordgo.Session to satisfy sessionForPlugin.
