@@ -440,6 +440,32 @@ func TestStripMention_RejectsNoMention(t *testing.T) {
 	}
 }
 
+func TestPlugin_OwnedThread_StateCacheRace_StillStaysInThread(t *testing.T) {
+	// given
+	// ... the plugin already owns thread-existing, but IsThread is false (State cache stale)
+	s := &sessionFull{}
+	var got core.Inbound
+	p := newTestPlugin(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
+	p.threads.markOwned("thread-existing")
+
+	// when
+	// ... an @claude message arrives in that thread with IsThread=false due to State cache race
+	p.handleMessage(messageEvent{
+		AuthorID:  "user-1",
+		ChannelID: "thread-existing",
+		MessageID: "msg-10",
+		Content:   "<@bot-id> follow up",
+		IsThread:  false,
+	})
+
+	// then
+	// ... no new thread is created and SessionKey reuses the thread id
+	s.AssertNotCalled(t, "MessageThreadStartComplex", mock.Anything, mock.Anything, mock.Anything)
+	if got.SessionKey != "discord:thread:thread-existing" {
+		t.Fatalf("session key: %q", got.SessionKey)
+	}
+}
+
 func TestTranslate_AttachmentsPopulated(t *testing.T) {
 	a := assert.New(t)
 

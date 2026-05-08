@@ -196,7 +196,7 @@ func (p *Plugin) resolveThread(ev messageEvent) (string, error) {
 	if ev.IsDM {
 		return ev.ChannelID, nil
 	}
-	if ev.IsThread && p.threads.owns(ev.ChannelID) {
+	if p.threads.owns(ev.ChannelID) {
 		return ev.ChannelID, nil
 	}
 	parent := ev.ChannelID
