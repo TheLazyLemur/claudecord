@@ -27,12 +27,12 @@ func NewBot(sessions *SessionManager, perms PermissionChecker) *Bot {
 }
 
 // HandleMessage processes a message via the backend
-func (b *Bot) HandleMessage(responder Responder, userMessage string) error {
+func (b *Bot) HandleMessage(out Outbound, userMessage string) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	slog.Info("HandleMessage start", "msg", userMessage)
-	responder.SendTyping()
+	out.SendTyping()
 
 	slog.Info("getting session")
 	backend, err := b.sessions.GetOrCreateSession()
@@ -43,13 +43,13 @@ func (b *Bot) HandleMessage(responder Responder, userMessage string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), b.converseTimeout)
 	defer cancel()
-	response, err := backend.Converse(ctx, userMessage, responder, b.perms)
+	response, err := backend.Converse(ctx, userMessage, out, b.perms)
 	if err != nil {
 		return errors.Wrap(err, "conversing")
 	}
 
 	if response != "" {
-		if err := responder.PostResponse(response); err != nil {
+		if err := out.PostResponse(response); err != nil {
 			return errors.Wrap(err, "posting response")
 		}
 	}

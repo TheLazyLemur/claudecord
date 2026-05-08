@@ -66,11 +66,11 @@ type botMockBackend struct {
 	converseCalled  bool
 	converseFunc    func(ctx context.Context) (string, error)
 	lastMsg         string
-	lastResponder   Responder
+	lastResponder   Outbound
 	lastPerms       PermissionChecker
 }
 
-func (m *botMockBackend) Converse(ctx context.Context, msg string, responder Responder, perms PermissionChecker) (string, error) {
+func (m *botMockBackend) Converse(ctx context.Context, msg string, responder Outbound, perms PermissionChecker) (string, error) {
 	m.converseCalled = true
 	m.lastMsg = msg
 	m.lastResponder = responder

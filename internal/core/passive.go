@@ -119,7 +119,8 @@ func PassiveSystemPrompt() string {
 	return passiveSystemPrompt
 }
 
-// noopResponder is used by passive bot since it doesn't support discord tools
+// noopResponder implements Outbound by discarding all output.
+// Used by the passive bot and the memory flusher.
 type noopResponder struct{}
 
 func (n *noopResponder) SendTyping() error                 { return nil }

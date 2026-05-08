@@ -15,7 +15,7 @@ type stubBackend struct {
 	converseErr error
 }
 
-func (s *stubBackend) Converse(_ context.Context, msg string, _ Responder, _ PermissionChecker) (string, error) {
+func (s *stubBackend) Converse(_ context.Context, msg string, _ Outbound, _ PermissionChecker) (string, error) {
 	s.messages = append(s.messages, msg)
 	return s.converseR, s.converseErr
 }

@@ -47,7 +47,7 @@ type passiveMockBackend struct {
 	lastMsg      string
 }
 
-func (m *passiveMockBackend) Converse(ctx context.Context, msg string, responder Responder, perms PermissionChecker) (string, error) {
+func (m *passiveMockBackend) Converse(ctx context.Context, msg string, responder Outbound, perms PermissionChecker) (string, error) {
 	m.lastMsg = msg
 	if m.converseFunc != nil {
 		return m.converseFunc(ctx)

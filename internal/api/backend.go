@@ -73,12 +73,12 @@ func (b *Backend) Close() error {
 
 const maxMailbox = 64
 
-func (b *Backend) Converse(ctx context.Context, msg string, responder core.Responder, perms core.PermissionChecker) (string, error) {
+func (b *Backend) Converse(ctx context.Context, msg string, out core.Outbound, perms core.PermissionChecker) (string, error) {
 	if !b.claim(msg) {
 		return "", nil
 	}
 
-	resp, err := b.runConversationLoop(ctx, responder, perms)
+	resp, err := b.runConversationLoop(ctx, out, perms)
 	if err != nil {
 		b.release()
 	}
@@ -149,7 +149,7 @@ func steeringBlocks(msgs []string) []anthropic.ContentBlockParamUnion {
 	return blocks
 }
 
-func (b *Backend) runConversationLoop(ctx context.Context, responder core.Responder, perms core.PermissionChecker) (string, error) {
+func (b *Backend) runConversationLoop(ctx context.Context, out core.Outbound, perms core.PermissionChecker) (string, error) {
 	var finalResponse string
 
 	for {
@@ -177,7 +177,7 @@ func (b *Backend) runConversationLoop(ctx context.Context, responder core.Respon
 			continue
 		}
 
-		toolResults, err := b.executeTools(ctx, toolUses, responder, perms)
+		toolResults, err := b.executeTools(ctx, toolUses, out, perms)
 		if err != nil {
 			return finalResponse, errors.Wrap(err, "tool execution failed")
 		}
@@ -228,7 +228,7 @@ func splitContent(resp *anthropic.Message) (text string, tools []anthropic.ToolU
 	return
 }
 
-func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, responder core.Responder, perms core.PermissionChecker) ([]anthropic.ContentBlockParamUnion, error) {
+func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUseBlock, out core.Outbound, perms core.PermissionChecker) ([]anthropic.ContentBlockParamUnion, error) {
 	var results []anthropic.ContentBlockParamUnion
 
 	for _, tu := range toolUses {
@@ -246,7 +246,7 @@ func (b *Backend) executeTools(ctx context.Context, toolUses []anthropic.ToolUse
 			continue
 		}
 
-		deps := tools.Deps{Responder: responder, SkillStore: b.skillStore, WebSearchAPIKey: b.webSearchAPIKey}
+		deps := tools.Deps{Outbound: out, SkillStore: b.skillStore, WebSearchAPIKey: b.webSearchAPIKey}
 		result, isError := tools.Execute(tu.Name, input, deps)
 		results = append(results, buildToolResultBlock(tu.ID, result, isError))
 	}

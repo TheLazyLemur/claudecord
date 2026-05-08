@@ -13,15 +13,12 @@ type Inbound struct {
 	Reply       Outbound
 }
 
-// Outbound is the send-side of a channel for a single inbound message.
-// It's an alias of Responder so existing Backend.Converse signatures continue
-// to work; the new name documents intent at call sites that build channel
-// plugins.
-type Outbound = Responder
-
 type Capabilities struct {
 	Reactions bool
-	Typing    bool
+	// Typing indicates the plugin can send typing indicators. Currently
+	// unused in dispatch — every active plugin supports typing, so the flag
+	// has no signal. Retained for future plugins that may lack typing support.
+	Typing bool
 }
 
 type ChannelPlugin interface {
