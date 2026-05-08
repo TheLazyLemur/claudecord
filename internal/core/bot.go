@@ -13,6 +13,7 @@ type Bot struct {
 	sessions        *SessionManager
 	perms           PermissionChecker
 	mu              sync.RWMutex
+	activeKey       SessionKey
 	converseTimeout time.Duration
 }
 
