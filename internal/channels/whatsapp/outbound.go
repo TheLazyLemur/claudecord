@@ -6,13 +6,12 @@ const maxMessageLen = 65536
 
 // Outbound sends responses to a WhatsApp chat.
 type Outbound struct {
-	client    core.WhatsAppMessenger
-	chatJID   string
-	senderJID string
+	client  core.WhatsAppMessenger
+	chatJID string
 }
 
-func NewOutbound(client core.WhatsAppMessenger, chatJID, senderJID string) *Outbound {
-	return &Outbound{client: client, chatJID: chatJID, senderJID: senderJID}
+func NewOutbound(client core.WhatsAppMessenger, chatJID string) *Outbound {
+	return &Outbound{client: client, chatJID: chatJID}
 }
 
 func (r *Outbound) SendTyping() error {

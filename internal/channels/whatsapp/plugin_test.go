@@ -81,7 +81,7 @@ func newTestPlugin(t *testing.T, msgr *messengerMock, dl *downloaderMock, allowe
 		AllowedSenders: allowed,
 		MediaDir:       t.TempDir(),
 	})
-	p.SetBurstDelay(testBurstDelay)
+	p.setBurstDelay(testBurstDelay)
 	t.Cleanup(func() { _ = p.Stop() })
 	sink := &deliverSink{}
 	_ = p.Start(context.Background(), sink.fn())
@@ -186,8 +186,21 @@ func TestPlugin_Capabilities(t *testing.T) {
 	if !caps.Typing || caps.Reactions {
 		t.Fatalf("unexpected caps: %+v", caps)
 	}
-	if p.ID() != "whatsapp" {
-		t.Fatalf("id: %q", p.ID())
+}
+
+func TestPlugin_ID(t *testing.T) {
+	// given
+	// ... a default plugin
+	p := New(Config{Messenger: &messengerMock{}})
+
+	// when
+	// ... id is queried
+	id := p.ID()
+
+	// then
+	// ... it is "whatsapp"
+	if id != "whatsapp" {
+		t.Fatalf("id: %q", id)
 	}
 }
 
@@ -248,7 +261,7 @@ func TestPlugin_NewCommand_CallsNewSession(t *testing.T) {
 		MediaDir:       t.TempDir(),
 		NewSession:     func() error { newSessionCalls++; return nil },
 	})
-	p.SetBurstDelay(testBurstDelay)
+	p.setBurstDelay(testBurstDelay)
 	t.Cleanup(func() { _ = p.Stop() })
 	sink := &deliverSink{}
 	_ = p.Start(context.Background(), sink.fn())
@@ -371,9 +384,9 @@ func TestPlugin_BurstBatch_DispatchesOnce(t *testing.T) {
 
 	// when
 	// ... three messages arrive within the burst window
-	for _, text := range []string{"one", "two", "three"} {
-		p.HandleEvent(makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", text))
-	}
+	p.HandleEvent(makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "one"))
+	p.HandleEvent(makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "two"))
+	p.HandleEvent(makeMessageEvent("sender-1@s.whatsapp.net", "chat-1@g.us", "three"))
 	time.Sleep(testBurstDelay + 200*time.Millisecond)
 
 	// then
@@ -409,7 +422,6 @@ func TestPlugin_AttachmentOnly_FlushedWithAttachmentTag(t *testing.T) {
 }
 
 func TestPlugin_OversizedAttachment_SkippedWithNotice(t *testing.T) {
-	a := assert.New(t)
 	r := require.New(t)
 
 	// given
@@ -433,7 +445,6 @@ func TestPlugin_OversizedAttachment_SkippedWithNotice(t *testing.T) {
 	// ... nothing is delivered and a skip notice is sent
 	r.Equal(0, sink.count())
 	msgr.AssertCalled(t, "SendText", "chat-1@g.us", mock.AnythingOfType("string"))
-	a.True(true) // smoke
 }
 
 func TestPlugin_MixedTextAndAttachmentBatch_OrderPreserved(t *testing.T) {

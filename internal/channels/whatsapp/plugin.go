@@ -162,7 +162,6 @@ func (p *Plugin) flush(chatJID string, msgs []core.BufferedMessage) {
 	if len(msgs) == 0 {
 		return
 	}
-	senderJID := msgs[len(msgs)-1].AuthorID
 
 	prompt := core.RenderWhatsAppBatch(msgs)
 	if prompt == "" {
@@ -176,7 +175,7 @@ func (p *Plugin) flush(chatJID string, msgs []core.BufferedMessage) {
 		return
 	}
 
-	out := NewOutbound(p.cfg.Messenger, chatJID, senderJID)
+	out := NewOutbound(p.cfg.Messenger, chatJID)
 	d(core.Inbound{
 		SessionKey: SessionKey(chatJID),
 		Text:       prompt,
@@ -194,8 +193,8 @@ func (p *Plugin) deliverForTest(in core.Inbound) {
 	}
 }
 
-// SetBurstDelay overrides the default debounce delay. Tests use this.
-func (p *Plugin) SetBurstDelay(d time.Duration) {
+// setBurstDelay overrides the default debounce delay. Tests use this.
+func (p *Plugin) setBurstDelay(d time.Duration) {
 	p.buffer.Stop()
 	p.buffer = core.NewDebouncedBuffer(d, p.flush)
 }
