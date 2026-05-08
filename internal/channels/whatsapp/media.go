@@ -1,4 +1,4 @@
-package handler
+package whatsapp
 
 import (
 	"context"
@@ -28,6 +28,7 @@ type Downloader interface {
 	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
 }
 
+// Attachment holds a decrypted media payload extracted from a WhatsApp message.
 type Attachment struct {
 	MIME         string
 	OriginalName string

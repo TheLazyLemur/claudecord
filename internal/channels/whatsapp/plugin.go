@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -23,7 +22,7 @@ type Config struct {
 	Messenger core.WhatsAppMessenger
 	// Downloader handles media decryption. May be nil when media support is
 	// not needed (e.g. in unit tests that only test text paths).
-	Downloader     handler.Downloader
+	Downloader     Downloader
 	AllowedSenders []string
 	MediaDir       string
 }
@@ -79,7 +78,7 @@ func (p *Plugin) HandleEvent(evt interface{}) {
 		return
 	}
 
-	caption, att, err := handler.ExtractInbound(context.Background(), v, p.cfg.Downloader)
+	caption, att, err := ExtractInbound(context.Background(), v, p.cfg.Downloader)
 	if err != nil {
 		slog.Error("extracting inbound whatsapp media", "error", err)
 		return
@@ -119,11 +118,11 @@ func (p *Plugin) isSenderAllowed(sender, senderAlt types.JID) bool {
 	return false
 }
 
-func (p *Plugin) materializeAttachment(chatJID string, att *handler.Attachment) ([]core.AttachmentRef, bool) {
+func (p *Plugin) materializeAttachment(chatJID string, att *Attachment) ([]core.AttachmentRef, bool) {
 	if att == nil {
 		return nil, true
 	}
-	if len(att.Bytes) > handler.SizeCap(att.MIME) {
+	if len(att.Bytes) > SizeCap(att.MIME) {
 		label := att.OriginalName
 		if label == "" {
 			label = att.MIME
@@ -133,7 +132,7 @@ func (p *Plugin) materializeAttachment(chatJID string, att *handler.Attachment) 
 		}
 		return nil, true
 	}
-	path, err := handler.SaveAttachment(p.cfg.MediaDir, att, p.now())
+	path, err := SaveAttachment(p.cfg.MediaDir, att, p.now())
 	if err != nil {
 		slog.Error("saving whatsapp attachment", "error", err)
 		return nil, false

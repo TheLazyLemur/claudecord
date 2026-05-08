@@ -10,7 +10,6 @@ import (
 	"github.com/TheLazyLemur/claudecord/internal/config"
 	"github.com/TheLazyLemur/claudecord/internal/core"
 	"github.com/TheLazyLemur/claudecord/internal/dashboard"
-	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/mdp/qrterminal/v3"
 	"github.com/pkg/errors"
 	waow "go.mau.fi/whatsmeow"
@@ -29,7 +28,7 @@ func startWhatsApp(cfg *config.Config, hub *dashboard.Hub, bot *core.Bot) (func(
 		return nil, errors.Wrap(err, "getting whatsapp device")
 	}
 	waClient := waow.NewClient(device, nil)
-	waWrapper := handler.NewWhatsAppClientWrapper(waClient)
+	waWrapper := whatsapp.NewClientWrapper(waClient)
 
 	plugin := whatsapp.New(whatsapp.Config{
 		Messenger:      waWrapper,

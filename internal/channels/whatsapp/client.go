@@ -1,4 +1,4 @@
-package handler
+package whatsapp
 
 import (
 	"context"
@@ -10,21 +10,22 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// WhatsAppClientWrapper wraps whatsmeow.Client, implementing both Downloader
+// ClientWrapper wraps whatsmeow.Client, implementing both Downloader
 // and core.WhatsAppMessenger.
-type WhatsAppClientWrapper struct {
+type ClientWrapper struct {
 	client *whatsmeow.Client
 }
 
-func NewWhatsAppClientWrapper(client *whatsmeow.Client) *WhatsAppClientWrapper {
-	return &WhatsAppClientWrapper{client: client}
+// NewClientWrapper constructs a ClientWrapper from a whatsmeow.Client.
+func NewClientWrapper(client *whatsmeow.Client) *ClientWrapper {
+	return &ClientWrapper{client: client}
 }
 
-func (c *WhatsAppClientWrapper) Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error) {
+func (c *ClientWrapper) Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error) {
 	return c.client.Download(ctx, msg)
 }
 
-func (c *WhatsAppClientWrapper) SendText(chatJID, text string) error {
+func (c *ClientWrapper) SendText(chatJID, text string) error {
 	jid, err := types.ParseJID(chatJID)
 	if err != nil {
 		return errors.Wrap(err, "parsing chat JID")
@@ -34,7 +35,7 @@ func (c *WhatsAppClientWrapper) SendText(chatJID, text string) error {
 	return errors.Wrap(err, "sending whatsapp message")
 }
 
-func (c *WhatsAppClientWrapper) SendTyping(chatJID string) error {
+func (c *ClientWrapper) SendTyping(chatJID string) error {
 	jid, err := types.ParseJID(chatJID)
 	if err != nil {
 		return errors.Wrap(err, "parsing chat JID")

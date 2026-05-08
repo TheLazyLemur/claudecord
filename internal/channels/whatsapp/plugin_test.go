@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/handler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -397,7 +396,7 @@ func TestPlugin_OversizedAttachment_SkippedWithNotice(t *testing.T) {
 	// ... a plugin and a downloader that returns an oversized image
 	msgr := &messengerMock{}
 	dl := &downloaderMock{}
-	huge := make([]byte, handler.MaxImageBytes+1)
+	huge := make([]byte, MaxImageBytes+1)
 	dl.On("Download", mock.Anything, mock.Anything).Return(huge, nil)
 	msgr.On("SendText", "chat-1@g.us", mock.MatchedBy(func(s string) bool {
 		return strings.HasPrefix(s, "skipped (too large):")
@@ -444,7 +443,7 @@ func TestPlugin_MixedTextAndAttachmentBatch_OrderPreserved(t *testing.T) {
 	a.True(idx1 >= 0 && idx2 > idx1 && idx3 > idx2, "out of order: %s", body)
 }
 
-// --- handler.ExtractText tests (migrated from handler package) ---
+// --- ExtractText tests (migrated from handler package) ---
 
 func TestExtractText_Conversation(t *testing.T) {
 	a := assert.New(t)
@@ -455,7 +454,7 @@ func TestExtractText_Conversation(t *testing.T) {
 
 	// when
 	// ... text is extracted
-	text := handler.ExtractText(msg)
+	text := ExtractText(msg)
 
 	// then
 	// ... the conversation text is returned
@@ -475,7 +474,7 @@ func TestExtractText_ExtendedTextMessage(t *testing.T) {
 
 	// when
 	// ... text is extracted
-	text := handler.ExtractText(msg)
+	text := ExtractText(msg)
 
 	// then
 	// ... the extended text is returned
@@ -491,7 +490,7 @@ func TestExtractText_Empty(t *testing.T) {
 
 	// when
 	// ... text is extracted
-	text := handler.ExtractText(msg)
+	text := ExtractText(msg)
 
 	// then
 	// ... empty string is returned
