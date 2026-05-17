@@ -20,7 +20,7 @@ See also: `CLAUDE.md` "Memory skill" section, OpenClaw memory docs at
 
 ## Gap analysis vs OpenClaw
 
-| OpenClaw feature | Claudecord state | Gap impact |
+| OpenClaw feature | Switchboard state | Gap impact |
 |---|---|---|
 | Memory-flush before context compaction | None | Low today (no compaction; `/new-session` is a hard reset). Becomes high-leverage if rolling sessions are added. |
 | Dreaming / consolidation cron | None | Medium. Manual curation works while `MEMORY.md` is small; degrades as it grows. |
