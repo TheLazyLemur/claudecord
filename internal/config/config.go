@@ -50,7 +50,7 @@ type Config struct {
 	DiscordMediaDir string
 
 	// Directory the memory skill stores MEMORY.md and daily logs in. Defaults
-	// to <first AllowedDirs>/claudecord-memory. Must live under AllowedDirs.
+	// to <first AllowedDirs>/switchboard-memory. Must live under AllowedDirs.
 	MemoryDir string
 
 	// Path to the bundled default AGENTS.md, used to seed <AgentCWD>/AGENTS.md
@@ -184,7 +184,7 @@ func Load(env map[string]string) (*Config, error) {
 
 	memoryDir := env["MEMORY_DIR"]
 	if memoryDir == "" {
-		memoryDir = filepath.Join(allowedDirs[0], "claudecord-memory")
+		memoryDir = defaultMemoryDir(allowedDirs[0])
 	}
 	if !pathInsideAllowedDirs(memoryDir, allowedDirs) {
 		return nil, errors.Errorf("MEMORY_DIR %q must live under ALLOWED_DIRS", memoryDir)
@@ -242,6 +242,22 @@ func pathInsideAllowedDirs(path string, allowedDirs []string) bool {
 		}
 	}
 	return false
+}
+
+// defaultMemoryDir picks the memory directory when MEMORY_DIR is unset. It
+// prefers <base>/switchboard-memory but falls back to a pre-existing legacy
+// <base>/claudecord-memory directory so renamed installs keep their memory.
+func defaultMemoryDir(base string) string {
+	newDir := filepath.Join(base, "switchboard-memory")
+	if info, err := os.Stat(newDir); err == nil && info.IsDir() {
+		return newDir
+	}
+	legacyDir := filepath.Join(base, "claudecord-memory")
+	if info, err := os.Stat(legacyDir); err == nil && info.IsDir() {
+		slog.Warn("using legacy memory directory; rename it to switchboard-memory", "dir", legacyDir)
+		return legacyDir
+	}
+	return newDir
 }
 
 // LoadFromEnv loads config from os environment variables.

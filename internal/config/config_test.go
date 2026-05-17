@@ -436,7 +436,7 @@ func TestLoad_MemoryDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 	}
 	cfg, err := Load(env)
 	require.NoError(t, err)
-	assert.Equal(t, dir+"/claudecord-memory", cfg.MemoryDir)
+	assert.Equal(t, dir+"/switchboard-memory", cfg.MemoryDir)
 	require.NoError(t, cfg.EnsureDirs())
 
 	info, err := os.Stat(cfg.MemoryDir)
@@ -461,6 +461,51 @@ func TestLoad_MemoryDirOverride(t *testing.T) {
 	info, err := os.Stat(cfg.MemoryDir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
+}
+
+func TestLoad_MemoryDirFallsBackToLegacyDir(t *testing.T) {
+	// given
+	// ... an allowed dir that already contains a claudecord-memory folder
+	dir := mustTempMediaDir()
+	require.NoError(t, os.Mkdir(dir+"/claudecord-memory", 0o700))
+	env := map[string]string{
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "1",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
+	}
+
+	// when
+	// ... config is loaded with MEMORY_DIR unset
+	cfg, err := Load(env)
+
+	// then
+	// ... MemoryDir uses the existing legacy folder
+	require.NoError(t, err)
+	assert.Equal(t, dir+"/claudecord-memory", cfg.MemoryDir)
+}
+
+func TestLoad_MemoryDirPrefersNewDirWhenBothExist(t *testing.T) {
+	// given
+	// ... an allowed dir containing both legacy and new memory folders
+	dir := mustTempMediaDir()
+	require.NoError(t, os.Mkdir(dir+"/claudecord-memory", 0o700))
+	require.NoError(t, os.Mkdir(dir+"/switchboard-memory", 0o700))
+	env := map[string]string{
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "1",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
+	}
+
+	// when
+	// ... config is loaded with MEMORY_DIR unset
+	cfg, err := Load(env)
+
+	// then
+	// ... MemoryDir uses the new folder
+	require.NoError(t, err)
+	assert.Equal(t, dir+"/switchboard-memory", cfg.MemoryDir)
 }
 
 func TestLoad_MemoryDirMustBeInsideAllowedDirs(t *testing.T) {
