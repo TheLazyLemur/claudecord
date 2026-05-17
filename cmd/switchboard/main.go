@@ -39,7 +39,7 @@ func run() error {
 		return errors.Wrap(err, "exporting MEMORY_DIR")
 	}
 
-	if err := core.BootstrapAgentsMd(cfg.ClaudeCWD, cfg.AgentsDefaultPath); err != nil {
+	if err := core.BootstrapAgentsMd(cfg.AgentCWD, cfg.AgentsDefaultPath); err != nil {
 		slog.Warn("bootstrap AGENTS.md", "error", err)
 	}
 
@@ -66,7 +66,7 @@ func run() error {
 		APIKey:               cfg.APIKey,
 		BaseURL:              cfg.BaseURL,
 		Model:                cfg.Model,
-		DefaultWorkDir:       cfg.ClaudeCWD,
+		DefaultWorkDir:       cfg.AgentCWD,
 		SkillStore:           skillStore,
 		WebSearchAPIKey:      cfg.WebSearchAPIKey,
 		ThinkingBudgetTokens: cfg.ThinkingBudgetTokens,
@@ -116,4 +116,3 @@ func run() error {
 	slog.Info("shutting down")
 	return nil
 }
-

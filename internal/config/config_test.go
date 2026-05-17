@@ -10,10 +10,10 @@ import (
 
 func validDiscordEnv() map[string]string {
 	return map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	}
 }
 
@@ -22,13 +22,13 @@ func validWhatsAppEnv() map[string]string {
 	return map[string]string{
 		"WHATSAPP_ALLOWED_SENDERS": "123456@lid",
 		"ALLOWED_DIRS":             dir,
-		"CLAUDECORD_API_KEY":       "sk-test",
+		"SWITCHBOARD_API_KEY":      "sk-test",
 		"WHATSAPP_MEDIA_DIR":       dir + "/media",
 	}
 }
 
 func mustTempMediaDir() string {
-	dir, err := os.MkdirTemp("", "claudecord-cfg-test-")
+	dir, err := os.MkdirTemp("", "switchboard-cfg-test-")
 	if err != nil {
 		panic(err)
 	}
@@ -39,8 +39,8 @@ func mustTempMediaDir() string {
 
 func TestLoad_RequiresAtLeastOnePlatform(t *testing.T) {
 	_, err := Load(map[string]string{
-		"ALLOWED_DIRS":       "/tmp",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"ALLOWED_DIRS":        "/tmp",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one platform")
@@ -74,9 +74,9 @@ func TestLoad_BothPlatformsSuccess(t *testing.T) {
 
 func TestLoad_DiscordRequiresAllowedUsers(t *testing.T) {
 	_, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "token",
-		"ALLOWED_DIRS":       "/tmp",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "token",
+		"ALLOWED_DIRS":        "/tmp",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ALLOWED_USERS required")
@@ -84,10 +84,10 @@ func TestLoad_DiscordRequiresAllowedUsers(t *testing.T) {
 
 func TestLoad_DiscordValidatesAllowedUsersNumeric(t *testing.T) {
 	_, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "token",
-		"ALLOWED_DIRS":       "/tmp",
-		"ALLOWED_USERS":      "notanumber",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "token",
+		"ALLOWED_DIRS":        "/tmp",
+		"ALLOWED_USERS":       "notanumber",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be numeric")
@@ -147,57 +147,57 @@ func TestLoad_RequiresAPIKey(t *testing.T) {
 		"ALLOWED_USERS": "123",
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "CLAUDECORD_API_KEY required")
+	assert.Contains(t, err.Error(), "SWITCHBOARD_API_KEY required")
 }
 
 func TestLoad_Success(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user, /tmp",
-		"ALLOWED_USERS":      "123, 456",
-		"CLAUDECORD_API_KEY": "sk-test-key",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user, /tmp",
+		"ALLOWED_USERS":       "123, 456",
+		"SWITCHBOARD_API_KEY": "sk-test-key",
 	})
 	require.NoError(t, err)
 
 	assert.Equal(t, "mytoken", cfg.DiscordToken)
 	assert.Equal(t, []string{"/home/user", "/tmp"}, cfg.AllowedDirs)
 	assert.Equal(t, []string{"123", "456"}, cfg.AllowedUsers)
-	assert.Equal(t, "/home/user", cfg.ClaudeCWD)
+	assert.Equal(t, "/home/user", cfg.AgentCWD)
 	assert.Equal(t, "sk-test-key", cfg.APIKey)
 }
 
 func TestLoad_BaseURLSet(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":       "mytoken",
-		"ALLOWED_DIRS":        "/home/user",
-		"ALLOWED_USERS":       "123",
-		"CLAUDECORD_API_KEY":  "sk-test-key",
-		"CLAUDECORD_BASE_URL": "https://proxy.example.com",
-		"MODEL":               "kimi-k2.6",
+		"DISCORD_TOKEN":        "mytoken",
+		"ALLOWED_DIRS":         "/home/user",
+		"ALLOWED_USERS":        "123",
+		"SWITCHBOARD_API_KEY":  "sk-test-key",
+		"SWITCHBOARD_BASE_URL": "https://proxy.example.com",
+		"MODEL":                "kimi-k2.6",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "https://proxy.example.com", cfg.BaseURL)
 }
 
-func TestLoad_ClaudeCWDOverride(t *testing.T) {
+func TestLoad_AgentCWDOverride(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDE_CWD":         "/custom/path",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"AGENT_CWD":           "/custom/path",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "/custom/path", cfg.ClaudeCWD)
+	assert.Equal(t, "/custom/path", cfg.AgentCWD)
 }
 
 func TestLoad_DashboardPassword(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
-		"DASHBOARD_PASSWORD": "secret123",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"DASHBOARD_PASSWORD":  "secret123",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "secret123", cfg.DashboardPassword)
@@ -205,10 +205,10 @@ func TestLoad_DashboardPassword(t *testing.T) {
 
 func TestLoad_DashboardPasswordOptional(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	})
 	require.NoError(t, err)
 	assert.Empty(t, cfg.DashboardPassword)
@@ -219,10 +219,10 @@ func TestLoad_AgentsDefaultPathDefault(t *testing.T) {
 	// ... env without AGENTS_DEFAULT_PATH set
 	dir := t.TempDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       dir,
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        dir,
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	}
 
 	// when
@@ -232,7 +232,7 @@ func TestLoad_AgentsDefaultPathDefault(t *testing.T) {
 	// then
 	// ... AgentsDefaultPath defaults to the docker bundle location
 	require.NoError(t, err)
-	assert.Equal(t, "/etc/claudecord/AGENTS.md.default", cfg.AgentsDefaultPath)
+	assert.Equal(t, "/etc/switchboard/AGENTS.md.default", cfg.AgentsDefaultPath)
 }
 
 func TestLoad_AgentsDefaultPathOverride(t *testing.T) {
@@ -243,7 +243,7 @@ func TestLoad_AgentsDefaultPathOverride(t *testing.T) {
 		"DISCORD_TOKEN":       "mytoken",
 		"ALLOWED_DIRS":        dir,
 		"ALLOWED_USERS":       "123",
-		"CLAUDECORD_API_KEY":  "sk-test",
+		"SWITCHBOARD_API_KEY": "sk-test",
 		"AGENTS_DEFAULT_PATH": "/custom/AGENTS.md",
 	}
 
@@ -259,11 +259,11 @@ func TestLoad_AgentsDefaultPathOverride(t *testing.T) {
 
 func TestLoad_WebSearchAPIKey(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
-		"WEB_SEARCH_API_KEY": "brave-test-key",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"WEB_SEARCH_API_KEY":  "brave-test-key",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "brave-test-key", cfg.WebSearchAPIKey)
@@ -271,10 +271,10 @@ func TestLoad_WebSearchAPIKey(t *testing.T) {
 
 func TestLoad_WebSearchAPIKeyOptional(t *testing.T) {
 	cfg, err := Load(map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       "/home/user",
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	})
 	require.NoError(t, err)
 	assert.Empty(t, cfg.WebSearchAPIKey)
@@ -290,7 +290,7 @@ func TestLoad_ModelDefaultsToSonnetWithoutBaseURL(t *testing.T) {
 
 func TestLoad_ModelDefaultsToKimiWhenBaseURLSet(t *testing.T) {
 	env := validDiscordEnv()
-	env["CLAUDECORD_BASE_URL"] = "https://kimi.example.com"
+	env["SWITCHBOARD_BASE_URL"] = "https://kimi.example.com"
 	cfg, err := Load(env)
 	require.NoError(t, err)
 	assert.Equal(t, DefaultKimiModel, cfg.Model)
@@ -298,7 +298,7 @@ func TestLoad_ModelDefaultsToKimiWhenBaseURLSet(t *testing.T) {
 
 func TestLoad_ModelExplicitWithBaseURL(t *testing.T) {
 	env := validDiscordEnv()
-	env["CLAUDECORD_BASE_URL"] = "https://kimi.example.com"
+	env["SWITCHBOARD_BASE_URL"] = "https://kimi.example.com"
 	env["MODEL"] = "kimi-k2.6"
 	cfg, err := Load(env)
 	require.NoError(t, err)
@@ -311,10 +311,10 @@ func thinkingTestEnv(t *testing.T) map[string]string {
 	t.Helper()
 	dir := t.TempDir()
 	return map[string]string{
-		"DISCORD_TOKEN":      "mytoken",
-		"ALLOWED_DIRS":       dir,
-		"ALLOWED_USERS":      "123",
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        dir,
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
 	}
 }
 
@@ -401,7 +401,7 @@ func TestLoad_WhatsAppMediaDirMustBeInsideAllowedDirs(t *testing.T) {
 	env := map[string]string{
 		"WHATSAPP_ALLOWED_SENDERS": "123456@lid",
 		"ALLOWED_DIRS":             dir,
-		"CLAUDECORD_API_KEY":       "sk-test",
+		"SWITCHBOARD_API_KEY":      "sk-test",
 		"WHATSAPP_MEDIA_DIR":       "/somewhere/else",
 	}
 	_, err := Load(env)
@@ -429,10 +429,10 @@ func TestLoad_WhatsAppMediaDirNotRequiredWhenWhatsAppDisabled(t *testing.T) {
 func TestLoad_MemoryDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":      "tok",
-		"ALLOWED_USERS":      "1",
-		"ALLOWED_DIRS":       dir,
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "1",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
 	}
 	cfg, err := Load(env)
 	require.NoError(t, err)
@@ -447,11 +447,11 @@ func TestLoad_MemoryDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 func TestLoad_MemoryDirOverride(t *testing.T) {
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":      "tok",
-		"ALLOWED_USERS":      "1",
-		"ALLOWED_DIRS":       dir,
-		"CLAUDECORD_API_KEY": "sk-test",
-		"MEMORY_DIR":         dir + "/notes",
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "1",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"MEMORY_DIR":          dir + "/notes",
 	}
 	cfg, err := Load(env)
 	require.NoError(t, err)
@@ -466,11 +466,11 @@ func TestLoad_MemoryDirOverride(t *testing.T) {
 func TestLoad_MemoryDirMustBeInsideAllowedDirs(t *testing.T) {
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":      "tok",
-		"ALLOWED_USERS":      "1",
-		"ALLOWED_DIRS":       dir,
-		"CLAUDECORD_API_KEY": "sk-test",
-		"MEMORY_DIR":         "/somewhere/else",
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "1",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"MEMORY_DIR":          "/somewhere/else",
 	}
 	_, err := Load(env)
 	require.Error(t, err)
@@ -484,10 +484,10 @@ func TestLoad_DiscordMediaDirDefaultsUnderFirstAllowedDir(t *testing.T) {
 	// ... a Discord-only config with no DISCORD_MEDIA_DIR set
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":      "tok",
-		"ALLOWED_USERS":      "123",
-		"ALLOWED_DIRS":       dir,
-		"CLAUDECORD_API_KEY": "sk-test",
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "123",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
 	}
 
 	// when
@@ -509,11 +509,11 @@ func TestLoad_DiscordMediaDirOverride(t *testing.T) {
 	// ... a Discord-only config with DISCORD_MEDIA_DIR set explicitly
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":      "tok",
-		"ALLOWED_USERS":      "123",
-		"ALLOWED_DIRS":       dir,
-		"CLAUDECORD_API_KEY": "sk-test",
-		"DISCORD_MEDIA_DIR":  dir + "/attachments",
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "123",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"DISCORD_MEDIA_DIR":   dir + "/attachments",
 	}
 
 	// when
@@ -531,11 +531,11 @@ func TestLoad_DiscordMediaDirMustBeInsideAllowedDirs(t *testing.T) {
 	// ... DISCORD_MEDIA_DIR set outside ALLOWED_DIRS
 	dir := mustTempMediaDir()
 	env := map[string]string{
-		"DISCORD_TOKEN":      "tok",
-		"ALLOWED_USERS":      "123",
-		"ALLOWED_DIRS":       dir,
-		"CLAUDECORD_API_KEY": "sk-test",
-		"DISCORD_MEDIA_DIR":  "/somewhere/else",
+		"DISCORD_TOKEN":       "tok",
+		"ALLOWED_USERS":       "123",
+		"ALLOWED_DIRS":        dir,
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"DISCORD_MEDIA_DIR":   "/somewhere/else",
 	}
 
 	// when
@@ -561,4 +561,111 @@ func TestLoad_DiscordMediaDirNotSetWhenDiscordDisabled(t *testing.T) {
 	// ... DiscordMediaDir is empty
 	require.NoError(t, err)
 	assert.Empty(t, cfg.DiscordMediaDir)
+}
+
+// --- Env var rename / legacy fallback tests ---
+
+func TestLoad_APIKeyFromLegacyEnvVar(t *testing.T) {
+	// given
+	// ... env with only the legacy CLAUDECORD_API_KEY set
+	env := map[string]string{
+		"DISCORD_TOKEN":      "mytoken",
+		"ALLOWED_DIRS":       "/home/user",
+		"ALLOWED_USERS":      "123",
+		"CLAUDECORD_API_KEY": "sk-legacy",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... the legacy key still populates APIKey
+	require.NoError(t, err)
+	assert.Equal(t, "sk-legacy", cfg.APIKey)
+}
+
+func TestLoad_NewAPIKeyTakesPrecedenceOverLegacy(t *testing.T) {
+	// given
+	// ... env with both the new and legacy API key set
+	env := map[string]string{
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-new",
+		"CLAUDECORD_API_KEY":  "sk-legacy",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... the new key wins
+	require.NoError(t, err)
+	assert.Equal(t, "sk-new", cfg.APIKey)
+}
+
+func TestLoad_BaseURLFromLegacyEnvVar(t *testing.T) {
+	// given
+	// ... env with only the legacy CLAUDECORD_BASE_URL set
+	env := map[string]string{
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"CLAUDECORD_BASE_URL": "https://legacy.example.com",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... the legacy key still populates BaseURL
+	require.NoError(t, err)
+	assert.Equal(t, "https://legacy.example.com", cfg.BaseURL)
+}
+
+func TestLoad_AgentCWDFromLegacyEnvVar(t *testing.T) {
+	// given
+	// ... env with only the legacy CLAUDE_CWD set
+	env := map[string]string{
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"CLAUDE_CWD":          "/legacy/path",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... the legacy key still populates AgentCWD
+	require.NoError(t, err)
+	assert.Equal(t, "/legacy/path", cfg.AgentCWD)
+}
+
+func TestLoad_NewAgentCWDTakesPrecedenceOverLegacy(t *testing.T) {
+	// given
+	// ... env with both the new AGENT_CWD and legacy CLAUDE_CWD set
+	env := map[string]string{
+		"DISCORD_TOKEN":       "mytoken",
+		"ALLOWED_DIRS":        "/home/user",
+		"ALLOWED_USERS":       "123",
+		"SWITCHBOARD_API_KEY": "sk-test",
+		"AGENT_CWD":           "/new/path",
+		"CLAUDE_CWD":          "/legacy/path",
+	}
+
+	// when
+	// ... config is loaded
+	cfg, err := Load(env)
+
+	// then
+	// ... the new var wins
+	require.NoError(t, err)
+	assert.Equal(t, "/new/path", cfg.AgentCWD)
 }

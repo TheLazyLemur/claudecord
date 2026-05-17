@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,12 +19,12 @@ type Config struct {
 	DiscordToken string
 	AllowedDirs  []string
 	AllowedUsers []string
-	ClaudeCWD    string
+	AgentCWD     string
 	WebhookPort  string
 
-	// API key for the Anthropic-compatible endpoint (CLAUDECORD_API_KEY)
+	// API key for the Anthropic-compatible endpoint (SWITCHBOARD_API_KEY)
 	APIKey string
-	// Optional base URL to point at a non-Anthropic endpoint (CLAUDECORD_BASE_URL)
+	// Optional base URL to point at a non-Anthropic endpoint (SWITCHBOARD_BASE_URL)
 	BaseURL string
 	// Resend API key for email skills
 	ResendAPIKey string
@@ -52,8 +53,8 @@ type Config struct {
 	// to <first AllowedDirs>/claudecord-memory. Must live under AllowedDirs.
 	MemoryDir string
 
-	// Path to the bundled default AGENTS.md, used to seed <ClaudeCWD>/AGENTS.md
-	// when missing. Defaults to /etc/claudecord/AGENTS.md.default.
+	// Path to the bundled default AGENTS.md, used to seed <AgentCWD>/AGENTS.md
+	// when missing. Defaults to /etc/switchboard/AGENTS.md.default.
 	AgentsDefaultPath string
 
 	// Token budget for extended thinking. 0 disables thinking. When >0, the
@@ -113,9 +114,9 @@ func Load(env map[string]string) (*Config, error) {
 		}
 	}
 
-	claudeCwd := env["CLAUDE_CWD"]
-	if claudeCwd == "" {
-		claudeCwd = allowedDirs[0]
+	agentCwd := envOrLegacy(env, "AGENT_CWD", "CLAUDE_CWD")
+	if agentCwd == "" {
+		agentCwd = allowedDirs[0]
 	}
 
 	webhookPort := env["WEBHOOK_PORT"]
@@ -123,12 +124,12 @@ func Load(env map[string]string) (*Config, error) {
 		webhookPort = "5005"
 	}
 
-	apiKey := env["CLAUDECORD_API_KEY"]
+	apiKey := envOrLegacy(env, "SWITCHBOARD_API_KEY", "CLAUDECORD_API_KEY")
 	if apiKey == "" {
-		return nil, errors.New("CLAUDECORD_API_KEY required")
+		return nil, errors.New("SWITCHBOARD_API_KEY required")
 	}
 
-	baseURL := env["CLAUDECORD_BASE_URL"]
+	baseURL := envOrLegacy(env, "SWITCHBOARD_BASE_URL", "CLAUDECORD_BASE_URL")
 	resendAPIKey := env["RESEND_API_KEY"]
 	dashboardPassword := env["DASHBOARD_PASSWORD"]
 	webSearchAPIKey := env["WEB_SEARCH_API_KEY"]
@@ -166,7 +167,7 @@ func Load(env map[string]string) (*Config, error) {
 
 	agentsDefaultPath := env["AGENTS_DEFAULT_PATH"]
 	if agentsDefaultPath == "" {
-		agentsDefaultPath = "/etc/claudecord/AGENTS.md.default"
+		agentsDefaultPath = "/etc/switchboard/AGENTS.md.default"
 	}
 
 	var thinkingBudget int
@@ -193,7 +194,7 @@ func Load(env map[string]string) (*Config, error) {
 		DiscordToken:           discordToken,
 		AllowedDirs:            allowedDirs,
 		AllowedUsers:           allowedUsers,
-		ClaudeCWD:              claudeCwd,
+		AgentCWD:               agentCwd,
 		WebhookPort:            webhookPort,
 		APIKey:                 apiKey,
 		BaseURL:                baseURL,
@@ -249,9 +250,12 @@ func LoadFromEnv() (*Config, error) {
 		"DISCORD_TOKEN":            os.Getenv("DISCORD_TOKEN"),
 		"ALLOWED_DIRS":             os.Getenv("ALLOWED_DIRS"),
 		"ALLOWED_USERS":            os.Getenv("ALLOWED_USERS"),
+		"AGENT_CWD":                os.Getenv("AGENT_CWD"),
 		"CLAUDE_CWD":               os.Getenv("CLAUDE_CWD"),
 		"WEBHOOK_PORT":             os.Getenv("WEBHOOK_PORT"),
+		"SWITCHBOARD_API_KEY":      os.Getenv("SWITCHBOARD_API_KEY"),
 		"CLAUDECORD_API_KEY":       os.Getenv("CLAUDECORD_API_KEY"),
+		"SWITCHBOARD_BASE_URL":     os.Getenv("SWITCHBOARD_BASE_URL"),
 		"CLAUDECORD_BASE_URL":      os.Getenv("CLAUDECORD_BASE_URL"),
 		"RESEND_API_KEY":           os.Getenv("RESEND_API_KEY"),
 		"DASHBOARD_PASSWORD":       os.Getenv("DASHBOARD_PASSWORD"),
@@ -266,6 +270,19 @@ func LoadFromEnv() (*Config, error) {
 		"THINKING_BUDGET_TOKENS":   os.Getenv("THINKING_BUDGET_TOKENS"),
 	}
 	return Load(env)
+}
+
+// envOrLegacy returns env[key], falling back to env[legacyKey] when key is
+// unset. Using the legacy key logs a one-line deprecation warning.
+func envOrLegacy(env map[string]string, key, legacyKey string) string {
+	if v := env[key]; v != "" {
+		return v
+	}
+	if v := env[legacyKey]; v != "" {
+		slog.Warn("deprecated env var; rename it", "deprecated", legacyKey, "use", key)
+		return v
+	}
+	return ""
 }
 
 func splitAndTrim(s string) []string {

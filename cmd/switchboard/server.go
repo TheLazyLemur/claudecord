@@ -27,7 +27,7 @@ func startHTTPServer(
 	skillStore skills.SkillStore,
 	skillsDir string,
 ) (func(), error) {
-	dashboardServer := dash.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.ClaudeCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword, nil)
+	dashboardServer := dash.NewServer(hub, sessionMgr, perms, skillStore, skillsDir, cfg.AgentCWD, cfg.AgentsDefaultPath, cfg.MemoryDir, cfg.DashboardPassword, nil)
 
 	plug := dashboard.New(dashboard.Config{Hub: hub, Server: dashboardServer})
 	if err := plug.Start(context.Background(), func(in core.Inbound) {
