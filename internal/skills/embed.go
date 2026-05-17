@@ -48,5 +48,5 @@ func DefaultSkillsDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".claudecord", "skills", "builtin"), nil
+	return filepath.Join(home, ".switchboard", "skills", "builtin"), nil
 }

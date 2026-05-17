@@ -36,7 +36,7 @@ func newTestPluginWithMedia(s sessionForPlugin, botID string, allowed []string, 
 	return p
 }
 
-func TestPlugin_AtClaudeInPlainChannel_OpensNewThread(t *testing.T) {
+func TestPlugin_AtMentionInPlainChannel_OpensNewThread(t *testing.T) {
 	// given
 	// ... a plugin bound to a fake discord session and an empty registry
 	s := &sessionFull{}
@@ -65,7 +65,7 @@ func TestPlugin_AtClaudeInPlainChannel_OpensNewThread(t *testing.T) {
 	s.AssertExpectations(t)
 }
 
-func TestPlugin_AtClaudeInOwnedThread_StaysInThread(t *testing.T) {
+func TestPlugin_AtMentionInOwnedThread_StaysInThread(t *testing.T) {
 	// given
 	// ... the plugin already owns thread-existing
 	s := &sessionFull{}
@@ -74,7 +74,7 @@ func TestPlugin_AtClaudeInOwnedThread_StaysInThread(t *testing.T) {
 	p.threads.markOwned("thread-existing")
 
 	// when
-	// ... an @claude message lands inside that thread
+	// ... an @switchboard message lands inside that thread
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "thread-existing",
@@ -92,7 +92,7 @@ func TestPlugin_AtClaudeInOwnedThread_StaysInThread(t *testing.T) {
 	}
 }
 
-func TestPlugin_AtClaudeInForeignThread_OpensSiblingThread(t *testing.T) {
+func TestPlugin_AtMentionInForeignThread_OpensSiblingThread(t *testing.T) {
 	// given
 	// ... the plugin does NOT own this thread
 	s := &sessionFull{}
@@ -101,7 +101,7 @@ func TestPlugin_AtClaudeInForeignThread_OpensSiblingThread(t *testing.T) {
 	p := newTestPlugin(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
 
 	// when
-	// ... an @claude message arrives in a foreign thread
+	// ... an @switchboard message arrives in a foreign thread
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "thread-foreign",
@@ -127,7 +127,7 @@ func TestPlugin_NoMention_Ignored(t *testing.T) {
 	p := newTestPlugin(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { called = true })
 
 	// when
-	// ... a message without @claude arrives
+	// ... a message without @switchboard arrives
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
@@ -138,7 +138,7 @@ func TestPlugin_NoMention_Ignored(t *testing.T) {
 	// then
 	// ... no inbound was delivered
 	if called {
-		t.Fatalf("expected handler not to deliver for non-@claude message")
+		t.Fatalf("expected handler not to deliver for non-@switchboard message")
 	}
 }
 
@@ -243,7 +243,7 @@ func TestPlugin_ThreadCreateError_DropsMessage(t *testing.T) {
 	p := newTestPlugin(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { delivered = true })
 
 	// when
-	// ... an @claude message arrives in a plain channel
+	// ... an @switchboard message arrives in a plain channel
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
@@ -275,7 +275,7 @@ func TestPlugin_HandleMessage_PopulatesAttachments(t *testing.T) {
 	p.threads.markOwned("thread-1")
 
 	// when
-	// ... an @claude message with an attachment arrives in an owned thread
+	// ... an @switchboard message with an attachment arrives in an owned thread
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "thread-1",
@@ -314,7 +314,7 @@ func TestPlugin_HandleMessage_SkippedAttachmentPrependedToText(t *testing.T) {
 	p.threads.markOwned("thread-1")
 
 	// when
-	// ... an @claude message with an oversized attachment arrives
+	// ... an @switchboard message with an oversized attachment arrives
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "thread-1",
@@ -348,7 +348,7 @@ func TestPlugin_HandleMessage_NoMediaDir_NoAttachmentsProcessed(t *testing.T) {
 	p := newTestPlugin(s, "bot-id", []string{"user-1"}, func(in core.Inbound) { got = in })
 
 	// when
-	// ... an @claude message with an attachment arrives (MediaDir is empty)
+	// ... an @switchboard message with an attachment arrives (MediaDir is empty)
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "channel-1",
@@ -406,11 +406,11 @@ func TestStripMention_AcceptsBangMention(t *testing.T) {
 	}
 }
 
-func TestStripMention_RejectsLiteralAtClaude(t *testing.T) {
+func TestStripMention_RejectsLiteralAtMention(t *testing.T) {
 	// given
-	// ... a bot ID and a literal @claude string (not a real Discord mention)
+	// ... a bot ID and a literal @switchboard string (not a real Discord mention)
 	botID := "123456789"
-	content := "@claude do the thing"
+	content := "@switchboard do the thing"
 
 	// when
 	// ... stripMention is called
@@ -419,7 +419,7 @@ func TestStripMention_RejectsLiteralAtClaude(t *testing.T) {
 	// then
 	// ... the check fails because the format is wrong
 	if ok {
-		t.Fatalf("expected ok=false for literal @claude")
+		t.Fatalf("expected ok=false for literal @switchboard")
 	}
 }
 
@@ -449,7 +449,7 @@ func TestPlugin_OwnedThread_StateCacheRace_StillStaysInThread(t *testing.T) {
 	p.threads.markOwned("thread-existing")
 
 	// when
-	// ... an @claude message arrives in that thread with IsThread=false due to State cache race
+	// ... an @switchboard message arrives in that thread with IsThread=false due to State cache race
 	p.handleMessage(messageEvent{
 		AuthorID:  "user-1",
 		ChannelID: "thread-existing",

@@ -24,10 +24,10 @@ const maxOutputLen = 50000
 // ImageSentinel marks a Read result as an image payload that the API backend
 // should turn into an anthropic.ImageBlockParam tool_result. Format:
 //
-//	__CLAUDECORD_IMAGE__\t<mime>\t<base64>
+//	__SWITCHBOARD_IMAGE__\t<mime>\t<base64>
 //
 // Tab-delimited so the second field can't collide with arbitrary MIME chars.
-const ImageSentinel = "__CLAUDECORD_IMAGE__"
+const ImageSentinel = "__SWITCHBOARD_IMAGE__"
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 var bashTimeout = 2 * time.Minute

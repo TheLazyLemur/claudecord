@@ -91,7 +91,7 @@ func TestServer_Index_WithValidSession(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Claudecord Dashboard")
+	assert.Contains(t, rec.Body.String(), "Switchboard Dashboard")
 }
 
 func TestServer_WS_Unauthenticated(t *testing.T) {

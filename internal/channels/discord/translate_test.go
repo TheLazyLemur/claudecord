@@ -15,7 +15,7 @@ func TestTranslate_BotsOwnMessage_Skipped(t *testing.T) {
 			Author:    &discordgo.User{ID: "bot-id"},
 			ChannelID: "ch-1",
 			ID:        "msg-1",
-			Content:   "@claude hello",
+			Content:   "@switchboard hello",
 		},
 	}
 
@@ -38,7 +38,7 @@ func TestTranslate_NoAuthor_Skipped(t *testing.T) {
 			Author:    nil,
 			ChannelID: "ch-1",
 			ID:        "msg-2",
-			Content:   "@claude hello",
+			Content:   "@switchboard hello",
 		},
 	}
 
@@ -61,7 +61,7 @@ func TestTranslate_DMHasIsDMTrue(t *testing.T) {
 			Author:    &discordgo.User{ID: "user-1"},
 			ChannelID: "dm-ch",
 			ID:        "msg-3",
-			Content:   "@claude hi",
+			Content:   "@switchboard hi",
 			GuildID:   "",
 		},
 	}
@@ -94,7 +94,7 @@ func TestTranslate_ThreadLookupSetsParentID(t *testing.T) {
 			Author:    &discordgo.User{ID: "user-1"},
 			ChannelID: "thread-ch",
 			ID:        "msg-4",
-			Content:   "@claude go",
+			Content:   "@switchboard go",
 			GuildID:   "guild-1",
 		},
 	}
@@ -131,7 +131,7 @@ func TestTranslate_NonThreadChannel_NoParent(t *testing.T) {
 			Author:    &discordgo.User{ID: "user-1"},
 			ChannelID: "plain-ch",
 			ID:        "msg-5",
-			Content:   "@claude hey",
+			Content:   "@switchboard hey",
 			GuildID:   "guild-1",
 		},
 	}

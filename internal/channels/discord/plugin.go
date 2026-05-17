@@ -245,7 +245,7 @@ func threadName(content string) string {
 		t = string(r[:50])
 	}
 	if t == "" {
-		t = "Claude"
+		t = "Switchboard"
 	}
 	return t
 }

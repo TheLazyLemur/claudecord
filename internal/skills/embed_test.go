@@ -74,7 +74,7 @@ func TestDefaultSkillsDir(t *testing.T) {
 		dir, err := DefaultSkillsDir()
 
 		require.NoError(t, err)
-		assert.Contains(t, dir, ".claudecord")
+		assert.Contains(t, dir, ".switchboard")
 		assert.Contains(t, dir, "skills")
 		assert.Contains(t, dir, "builtin")
 	})

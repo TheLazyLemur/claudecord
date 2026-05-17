@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const sessionCookieName = "claudecord_session"
+const sessionCookieName = "switchboard_session"
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
