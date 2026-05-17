@@ -196,14 +196,14 @@ tools need multimodal output.
     - On image: full read (already capped at 10 MiB upstream),
       `base64.StdEncoding.EncodeToString`, return:
       ```
-      __CLAUDECORD_IMAGE__\t<mime>\t<base64>
+      __SWITCHBOARD_IMAGE__\t<mime>\t<base64>
       ```
-      Sentinel prefix `__CLAUDECORD_IMAGE__` is unambiguous and tab-delimited
+      Sentinel prefix `__SWITCHBOARD_IMAGE__` is unambiguous and tab-delimited
       so the second field can't collide. The bool return stays `false` (not
       an error).
     - On non-image: existing `truncateOutput` text path, unchanged.
 20. In `internal/api/backend.go::executeTools`, after calling `Execute`:
-    - If the string starts with `__CLAUDECORD_IMAGE__`: parse out
+    - If the string starts with `__SWITCHBOARD_IMAGE__`: parse out
       `<mime>` and `<base64>`, build `anthropic.ToolResultBlockParam` with
       `Content` = `[ImageBlockParam{Source: Base64ImageSourceParam{...}}]`.
     - Else: existing `anthropic.NewToolResultBlock(id, text, isError)`.
@@ -231,7 +231,7 @@ in `internal/permission/permission.go`.
     Effectively unusable. The carve-out is safe: `WhatsAppMediaDir` is itself
     inside `AllowedDirs`, so the existing path-validator invariant holds.
 24. Construction site: thread `WhatsAppMediaDir` into the WhatsApp permission
-    checker via `cmd/claudecord/main.go`. Wrapper or new
+    checker via `cmd/switchboard/main.go`. Wrapper or new
     `MediaAwarePermissionChecker` that delegates to the underlying checker
     for everything except `Read` under the media dir.
 25. Tests:
@@ -241,7 +241,7 @@ in `internal/permission/permission.go`.
 
 ## Phase 7 — Wiring
 
-Files: `cmd/claudecord/main.go`.
+Files: `cmd/switchboard/main.go`.
 
 26. Plumb `cfg.WhatsAppMediaDir` and a download capability from the
     `whatsmeow.Client` into `NewWhatsAppClientWrapper` and

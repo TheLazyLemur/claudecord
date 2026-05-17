@@ -1,4 +1,4 @@
-# Claudecord
+# Switchboard
 
 Discord bot that integrates Claude Code CLI via the stdio protocol.
 
@@ -35,8 +35,8 @@ Uses direnv (`.envrc`) to auto-load `.env`.
 Build and run:
 
 ```
-go build -o claudecord ./cmd/claudecord
-./claudecord
+go build -o switchboard ./cmd/switchboard
+./switchboard
 ```
 
 In Discord:

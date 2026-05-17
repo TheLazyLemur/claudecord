@@ -78,7 +78,7 @@ type Config struct {
 ```
 
 New env vars:
-- `WORKTREE_BASE` - defaults to `~/.claudecord`
+- `WORKTREE_BASE` - defaults to `~/.switchboard`
 - `GITHUB_TOKEN` - optional, for private repos
 
 ## Handler Changes

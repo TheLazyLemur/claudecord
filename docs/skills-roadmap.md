@@ -66,10 +66,10 @@ These are higher-value but each adds real complexity. Each is opt-in.
 - **What:** addresses the "no long-term memory" gap. Per-chat-JID notes file the bot reads/writes; the model decides what's worth remembering.
 - **Trigger:** model invokes when the user says "remember X", "what did I tell you about Y", or proactively when committing useful facts.
 - **Implementation:**
-  - `scripts/append.sh <chat-jid> <text>` → appends to `~/.claudecord/memory/<chat-jid>.md` with a timestamp.
+  - `scripts/append.sh <chat-jid> <text>` → appends to `~/.switchboard/memory/<chat-jid>.md` with a timestamp.
   - `scripts/read.sh <chat-jid>` → cat the file.
   - `scripts/search.sh <chat-jid> <pattern>` → `grep -i <pattern>` over the file.
-- **Storage:** `~/.claudecord/memory/`. Should live on the Fly volume if persistence matters across deploys.
+- **Storage:** `~/.switchboard/memory/`. Should live on the Fly volume if persistence matters across deploys.
 - **System prompt addendum:** "If the user asks you to remember something, call the `memory` skill with the chat JID. At the start of a conversation, consider reading the chat's memory file for context."
 - **Debian pkg:** none.
 - **Cost:** small code, but real product decision — see "Open questions" below.
@@ -114,4 +114,4 @@ Documented so we don't keep re-evaluating them.
 - **Read trigger:** auto-prepend memory contents to every prompt (always-on context, costs tokens), or require the model to explicitly read it (cheaper, more variance)?
 - **Write policy:** model-decided ("commit this if useful") or user-explicit ("remember X")? Mix is fine but worth deciding the default.
 - **Eviction:** none (file grows forever), TTL, or summarize-and-truncate when over N lines?
-- **Where stored:** `~/.claudecord/memory/` on the container ephemeral disk (lost on redeploy) vs. on the Fly volume (persisted, has to be inside `ALLOWED_DIRS` for `Read` access).
+- **Where stored:** `~/.switchboard/memory/` on the container ephemeral disk (lost on redeploy) vs. on the Fly volume (persisted, has to be inside `ALLOWED_DIRS` for `Read` access).

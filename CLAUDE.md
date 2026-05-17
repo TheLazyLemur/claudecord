@@ -1,12 +1,13 @@
-# Claudecord
+# Switchboard
 
-Discord/WhatsApp bot that talks to any Anthropic-shaped `/v1/messages` endpoint via the Anthropic Go SDK. Tested against Anthropic, Moonshot/Kimi, Minimax, and Ollama; many other providers expose the same shape (often as an opt-in compatibility mode). It is NOT tied to Anthropic-the-company — Anthropic is just the wire format.
+Bot that bridges multiple messaging channels (Discord, WhatsApp, web dashboard) to swappable AI agents via any Anthropic-shaped `/v1/messages` endpoint. Tested against Anthropic, Moonshot/Kimi, Minimax, and Ollama; many other providers expose the same shape (often as an opt-in compatibility mode). It is NOT tied to Anthropic-the-company — Anthropic is just the wire format.
 
 ## What It Is
 
-- Single-user, single-server Discord bot (user-restricted via `ALLOWED_USERS` env var)
-- `@claude` as first word triggers bot
-- `/new-session` starts fresh session, subsequent `@claude` continues it
+- Single-user bot across channels (Discord, WhatsApp, web dashboard); no single primary channel
+- User-restricted via `ALLOWED_USERS` env var
+- `@claude` as first word triggers bot in Discord; other channels have their own entry points
+- `/new-session` starts fresh session, subsequent messages continue it
 - In-process session management; no disk persistence
 - Threads for long messages/responses
 - Fully autonomous: tools run without interactive prompts. The only safety net is path containment against `ALLOWED_DIRS`.
@@ -16,7 +17,7 @@ Discord/WhatsApp bot that talks to any Anthropic-shaped `/v1/messages` endpoint 
 
 Hexagonal with simplified layout:
 ```
-./cmd/claudecord
+./cmd/switchboard
 ./internal/core
 ./internal/core/interfaces.go
 ./internal/db
@@ -36,13 +37,13 @@ Env vars:
 - `DISCORD_TOKEN` - Discord bot token (required)
 - `ALLOWED_DIRS` - Comma-separated list of allowed directories (required)
 - `ALLOWED_USERS` - Comma-separated Discord user IDs allowed to use bot (required)
-- `CLAUDE_CWD` - Default working directory the agent runs in (optional, defaults to first allowed dir)
-- `CLAUDECORD_API_KEY` - API key for the upstream endpoint (required)
-- `CLAUDECORD_BASE_URL` - Optional base URL to point at a non-Anthropic endpoint (e.g. Moonshot/Kimi, Minimax, Ollama, or any other provider exposing an Anthropic-shaped `/v1/messages` API)
-- `MODEL` - Model id. Defaults to `Kimi-for-Coding` when `CLAUDECORD_BASE_URL` is set, otherwise to a recent Sonnet. Override to use any other model id supported by the endpoint.
+- `AGENT_CWD` - Default working directory the agent runs in (optional, defaults to first allowed dir). Old name `CLAUDE_CWD` still works but emits a deprecation warning.
+- `SWITCHBOARD_API_KEY` - API key for the upstream endpoint (required). Old name `CLAUDECORD_API_KEY` still works but emits a deprecation warning.
+- `SWITCHBOARD_BASE_URL` - Optional base URL to point at a non-Anthropic endpoint (e.g. Moonshot/Kimi, Minimax, Ollama, or any other provider exposing an Anthropic-shaped `/v1/messages` API). Old name `CLAUDECORD_BASE_URL` still works but emits a deprecation warning.
+- `MODEL` - Model id. Defaults to `Kimi-for-Coding` when `SWITCHBOARD_BASE_URL` is set, otherwise to a recent Sonnet. Override to use any other model id supported by the endpoint.
 - `WHATSAPP_MEDIA_DIR` - Directory inbound WhatsApp attachments are decrypted into. Defaults to `<first ALLOWED_DIR>/wa-media` when `WHATSAPP_ALLOWED_SENDERS` is set; must live under one of `ALLOWED_DIRS` if overridden.
 - `DISCORD_MEDIA_DIR` - Directory inbound Discord attachments are saved to. Defaults to `<first ALLOWED_DIR>/discord-media` when `DISCORD_TOKEN` is set; must live under one of `ALLOWED_DIRS` if overridden.
-- `MEMORY_DIR` - Where the `memory` skill stores `MEMORY.md` and `daily/YYYY-MM-DD.md` logs. Defaults to `<first ALLOWED_DIR>/claudecord-memory`. Must live under `ALLOWED_DIRS`. Exported into the bot process env at startup so the skill's bash scripts inherit it.
+- `MEMORY_DIR` - Where the `memory` skill stores `MEMORY.md` and `daily/YYYY-MM-DD.md` logs. Defaults to `<first ALLOWED_DIR>/switchboard-memory`; falls back to `<first ALLOWED_DIR>/claudecord-memory` if that directory already exists and `MEMORY_DIR` is unset. Must live under `ALLOWED_DIRS`. Exported into the bot process env at startup so the skill's bash scripts inherit it.
 - `THINKING_BUDGET_TOKENS` - Optional. When set to a positive integer, every API call enables extended thinking with that token budget (`thinking={type:enabled,budget_tokens:N}`). Anthropic requires N >= 1024. Confirmed working against Kimi's `api.kimi.com/coding/v1/messages` Anthropic-compatible endpoint with `kimi-for-coding`. Unset/empty disables thinking.
 - `WEB_SEARCH_API_KEY` - Optional. Brave Search API subscription token. When unset, the `WebSearch` tool returns a configuration error.
 
