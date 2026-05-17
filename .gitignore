@@ -1,5 +1,5 @@
 .env
-/claudecord
+/switchboard
 CLAUDE.local.md
 allowed_users.json
 .claude/worktrees/

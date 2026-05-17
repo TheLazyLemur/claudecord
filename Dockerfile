@@ -6,7 +6,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /claudecord ./cmd/claudecord
+RUN CGO_ENABLED=0 GOOS=linux go build -o /switchboard ./cmd/switchboard
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -42,10 +42,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 RUN curl -L https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
 
 # Copy Go binary
-COPY --from=builder /claudecord /usr/local/bin/claudecord
+COPY --from=builder /switchboard /usr/local/bin/switchboard
 
 # Bundle the canonical AGENTS.md so the bot can seed empty workspaces.
-COPY AGENTS.md /etc/claudecord/AGENTS.md.default
+COPY AGENTS.md /etc/switchboard/AGENTS.md.default
 
 WORKDIR /root
 
@@ -69,7 +69,7 @@ if [ -n "$GIT_USER_EMAIL" ]; then
   git config --global user.email "$GIT_USER_EMAIL"
 fi
 
-exec claudecord
+exec switchboard
 ENTRYPOINT
 RUN chmod +x /entrypoint.sh
 

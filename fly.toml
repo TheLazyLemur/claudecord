@@ -1,4 +1,4 @@
-# fly.toml app configuration file generated for claudecord on 2026-01-30T17:55:04+02:00
+# fly.toml app configuration file generated for switchboard on 2026-01-30T17:55:04+02:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
@@ -10,7 +10,7 @@ primary_region = 'jnb'
 
 [env]
   ALLOWED_DIRS = '/root/workspace,/root/claudecord-memory'
-  CLAUDE_CWD = '/root/workspace'
+  AGENT_CWD = '/root/workspace'
   MEMORY_DIR = '/root/claudecord-memory'
   WEBHOOK_PORT = '8080'
   WHATSAPP_DB_PATH = '/root/whatsapp.db'

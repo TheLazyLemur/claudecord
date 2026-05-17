@@ -1,11 +1,11 @@
 run:
-	go run ./cmd/claudecord
+	go run ./cmd/switchboard
 
 test:
 	go test -v ./...
 
-IMAGE_NAME := claudecord
-CONTAINER_NAME := claudecord
+IMAGE_NAME := switchboard
+CONTAINER_NAME := switchboard
 
 podman-build:
 	podman build -t $(IMAGE_NAME) .
