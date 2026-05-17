@@ -1,6 +1,6 @@
 package core
 
-import "github.com/TheLazyLemur/claudecord/internal/skills"
+import "github.com/TheLazyLemur/switchboard/internal/skills"
 
 // BuildSystemPrompt appends skill XML to a base prompt.
 func BuildSystemPrompt(base string, store skills.SkillStore) string {

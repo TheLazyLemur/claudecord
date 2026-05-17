@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

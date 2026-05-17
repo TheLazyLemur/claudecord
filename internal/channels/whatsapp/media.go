@@ -3,7 +3,7 @@ package whatsapp
 import (
 	"context"
 
-	"github.com/TheLazyLemur/claudecord/internal/media"
+	"github.com/TheLazyLemur/switchboard/internal/media"
 	"github.com/pkg/errors"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"

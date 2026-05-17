@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/media"
+	"github.com/TheLazyLemur/switchboard/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/media"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 )

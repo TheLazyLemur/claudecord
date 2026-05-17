@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/media"
+	"github.com/TheLazyLemur/switchboard/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/media"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )

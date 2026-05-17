@@ -3,7 +3,7 @@ package dashboard
 import (
 	"log/slog"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/core"
 )
 
 func (s *Server) handleMessage(client *Client, msg Message) {

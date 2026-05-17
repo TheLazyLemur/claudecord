@@ -8,12 +8,12 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/TheLazyLemur/claudecord/internal/api"
-	"github.com/TheLazyLemur/claudecord/internal/config"
-	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/dashboard"
-	"github.com/TheLazyLemur/claudecord/internal/permission"
-	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/TheLazyLemur/switchboard/internal/api"
+	"github.com/TheLazyLemur/switchboard/internal/config"
+	"github.com/TheLazyLemur/switchboard/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/dashboard"
+	"github.com/TheLazyLemur/switchboard/internal/permission"
+	"github.com/TheLazyLemur/switchboard/internal/skills"
 	"github.com/pkg/errors"
 )
 

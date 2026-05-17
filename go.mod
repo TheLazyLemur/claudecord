@@ -1,4 +1,4 @@
-module github.com/TheLazyLemur/claudecord
+module github.com/TheLazyLemur/switchboard
 
 go 1.24.0
 

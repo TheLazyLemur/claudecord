@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/core"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 )

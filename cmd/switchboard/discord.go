@@ -4,9 +4,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/TheLazyLemur/claudecord/internal/channels/discord"
-	"github.com/TheLazyLemur/claudecord/internal/config"
-	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/channels/discord"
+	"github.com/TheLazyLemur/switchboard/internal/config"
+	"github.com/TheLazyLemur/switchboard/internal/core"
 	"github.com/pkg/errors"
 )
 

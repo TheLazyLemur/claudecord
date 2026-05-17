@@ -1,7 +1,7 @@
 package discord
 
 import (
-	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/core"
 	"github.com/pkg/errors"
 )
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	dash "github.com/TheLazyLemur/claudecord/internal/dashboard"
+	dash "github.com/TheLazyLemur/switchboard/internal/dashboard"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/core"
 )
 
 // stubChatCallbackSetter records the callback passed to it.

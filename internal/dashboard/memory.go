@@ -3,7 +3,7 @@ package dashboard
 import (
 	"log/slog"
 
-	"github.com/TheLazyLemur/claudecord/internal/memory"
+	"github.com/TheLazyLemur/switchboard/internal/memory"
 )
 
 func (s *Server) handleListMemory(client *Client) {

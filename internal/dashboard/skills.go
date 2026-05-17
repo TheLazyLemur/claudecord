@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/TheLazyLemur/switchboard/internal/skills"
 )
 
 func (s *Server) handleGetSkills(client *Client) {

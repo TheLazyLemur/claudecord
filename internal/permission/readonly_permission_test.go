@@ -3,7 +3,7 @@ package permission
 import (
 	"testing"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/core"
 	"github.com/stretchr/testify/assert"
 )
 

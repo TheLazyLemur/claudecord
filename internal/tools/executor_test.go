@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/TheLazyLemur/switchboard/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/skills"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

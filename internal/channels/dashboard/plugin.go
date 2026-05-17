@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
-	dash "github.com/TheLazyLemur/claudecord/internal/dashboard"
+	"github.com/TheLazyLemur/switchboard/internal/core"
+	dash "github.com/TheLazyLemur/switchboard/internal/dashboard"
 )
 
 // ChatCallbackSetter is implemented by any server that accepts a chat

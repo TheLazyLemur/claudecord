@@ -1,6 +1,6 @@
 package whatsapp
 
-import "github.com/TheLazyLemur/claudecord/internal/core"
+import "github.com/TheLazyLemur/switchboard/internal/core"
 
 const maxMessageLen = 65536
 

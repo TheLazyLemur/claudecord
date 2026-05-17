@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheLazyLemur/claudecord/internal/core"
-	"github.com/TheLazyLemur/claudecord/internal/skills"
+	"github.com/TheLazyLemur/switchboard/internal/core"
+	"github.com/TheLazyLemur/switchboard/internal/skills"
 	"github.com/gorilla/websocket"
 )
 
